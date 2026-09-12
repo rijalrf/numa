@@ -15,7 +15,7 @@ export default defineConfig({
     allowedHosts: ['pakeai.mrijal.my.id'],
     proxy: {
       '/api': {
-        target: 'http://localhost:6655',
+        target: process.env.VITE_PROXY_API_URL || 'http://localhost:6655',
         changeOrigin: true,
       },
     },
