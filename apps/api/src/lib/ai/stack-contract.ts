@@ -101,6 +101,20 @@ export function resolveStackContract(
         backendFramework = 'Hono';
       } else if (combined.includes('nest')) {
         backendFramework = 'NestJS';
+      } else if (combined.includes('laravel') || combined.includes('php')) {
+        backendFramework = 'Laravel';
+      } else if (combined.includes('django')) {
+        backendFramework = 'Django';
+      } else if (combined.includes('fastapi')) {
+        backendFramework = 'FastAPI';
+      } else if (combined.includes('flask')) {
+        backendFramework = 'Flask';
+      } else if (combined.includes('go') || combined.includes('gin') || combined.includes('fiber')) {
+        backendFramework = 'Go';
+      } else if (combined.includes('spring')) {
+        backendFramework = 'Spring Boot';
+      } else if (combined.includes('rails')) {
+        backendFramework = 'Ruby on Rails';
       } else if (combined.includes('express')) {
         backendFramework = 'Express';
       } else if (!legacyName) {
@@ -111,6 +125,22 @@ export function resolveStackContract(
       backendFramework = 'Fastify';
     } else if (combined.includes('hono')) {
       backendFramework = 'Hono';
+    } else if (combined.includes('nest')) {
+      backendFramework = 'NestJS';
+    } else if (combined.includes('laravel') || combined.includes('php')) {
+      backendFramework = 'Laravel';
+    } else if (combined.includes('django')) {
+      backendFramework = 'Django';
+    } else if (combined.includes('fastapi')) {
+      backendFramework = 'FastAPI';
+    } else if (combined.includes('flask')) {
+      backendFramework = 'Flask';
+    } else if (combined.includes('go') || combined.includes('gin') || combined.includes('fiber')) {
+      backendFramework = 'Go';
+    } else if (combined.includes('spring')) {
+      backendFramework = 'Spring Boot';
+    } else if (combined.includes('rails')) {
+      backendFramework = 'Ruby on Rails';
     }
 
     // 3. Database & ORM
@@ -131,6 +161,8 @@ export function resolveStackContract(
         dbOrm = 'TypeORM';
       } else if (combined.includes('prisma')) {
         dbOrm = 'Prisma';
+      } else if (combined.includes('eloquent')) {
+        dbOrm = 'Eloquent';
       }
     }
 
@@ -155,6 +187,18 @@ export function resolveStackContract(
         testing = 'Vitest';
       }
     }
+  }
+
+  // Otomatis sesuaikan ORM default sesuai framework backend jika ORM masih default Prisma
+  const beLower = backendFramework.toLowerCase();
+  if (beLower.includes('laravel') || beLower.includes('php')) {
+    if (dbOrm === 'Prisma' || !dbOrm) dbOrm = 'Eloquent';
+  } else if (beLower.includes('django')) {
+    if (dbOrm === 'Prisma' || !dbOrm) dbOrm = 'Django ORM';
+  } else if (beLower.includes('rails')) {
+    if (dbOrm === 'Prisma' || !dbOrm) dbOrm = 'ActiveRecord';
+  } else if (beLower.includes('go')) {
+    if (dbOrm === 'Prisma' || !dbOrm) dbOrm = 'GORM';
   }
 
   return {

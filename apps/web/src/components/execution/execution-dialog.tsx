@@ -1,9 +1,8 @@
 // Dialog Popup Panduan Eksekusi: Download BRD, Download Paket ZIP, dan Master Prompt Coding Agent
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { api, downloadFile } from '@/lib/http';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   FileText,
@@ -13,11 +12,9 @@ import {
   X,
   Clipboard,
   Check,
-  KeyRound,
   ShieldAlert,
   Sparkles,
   Loader2,
-  CheckCircle2,
   Download,
 } from 'lucide-react';
 
@@ -51,6 +48,12 @@ export function ExecutionDialog({ projectId, projectName, isOpen, onClose }: Exe
       setInputToken(res.token);
     },
   });
+
+  useEffect(() => {
+    if (isOpen && !inputToken && !generateTokenMut.isPending) {
+      generateTokenMut.mutate();
+    }
+  }, [isOpen, inputToken]);
 
   if (!isOpen) return null;
 
@@ -143,7 +146,7 @@ ${executionLoopText}
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto no-scrollbar">
       <div className="bg-card border border-border rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-5 my-8 text-foreground transition-all">
         {/* Header Modal */}
         <div className="flex items-center justify-between border-b border-border/80 pb-3">
@@ -352,69 +355,6 @@ ${executionLoopText}
               </div>
             </div>
 
-            {/* Pengaturan Token PAT */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-medium text-foreground flex items-center gap-1.5">
-                  <KeyRound className="h-3.5 w-3.5 text-primary" />
-                  Personal Access Token (PAT):
-                </span>
-                {!inputToken && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => generateTokenMut.mutate()}
-                    disabled={generateTokenMut.isPending}
-                    className="h-6 text-[11px] px-2 text-primary hover:text-primary gap-1"
-                  >
-                    {generateTokenMut.isPending ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-3 w-3" />
-                    )}
-                    <span>Generate Otomatis</span>
-                  </Button>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Input
-                  type="text"
-                  placeholder="pak_... (Tempel token Anda di sini)"
-                  value={inputToken}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setInputToken(val);
-                    if (val.trim()) {
-                      localStorage.setItem('pakeai_active_pat', val.trim());
-                    }
-                  }}
-                  className="font-mono text-xs h-8 bg-background border-border"
-                />
-                {inputToken && (
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-500/30 shrink-0">
-                      <CheckCircle2 className="h-3 w-3 mr-1" />
-                      Terpasang
-                    </Badge>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        localStorage.removeItem('pakeai_active_pat');
-                        setInputToken('');
-                      }}
-                      className="h-8 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 px-2"
-                    >
-                      Lepas Token
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-
             {/* Master Prompt Code Block */}
             <div className="rounded-xl border border-border overflow-hidden space-y-0">
               <div className="bg-muted/70 px-3 py-2 border-b flex items-center justify-between gap-2">
@@ -440,7 +380,7 @@ ${executionLoopText}
                   )}
                 </Button>
               </div>
-              <pre className="p-3 bg-muted/20 text-[11px] font-mono max-h-56 overflow-y-auto overflow-x-auto text-foreground/90 leading-relaxed">
+              <pre className="p-3 bg-muted/20 text-[11px] font-mono max-h-64 overflow-y-auto no-scrollbar whitespace-pre-wrap break-words text-foreground/90 leading-relaxed">
 {masterPromptText}
               </pre>
             </div>

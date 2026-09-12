@@ -28,7 +28,6 @@ import { generateUiSpec, UiSpecSchema } from './lib/ai/ui-spec.js';
 import { validateAndNormalizeDAG } from './lib/ai/dag-validator.js';
 import { validateApiCoverage } from './lib/ai/api-coverage-validator.js';
 import { validateCleanup } from './lib/ai/cleanup-validator.js';
-import { auditTasksSecurity } from './lib/ai/security-audit.js';
 import { replyChat, finalizeChatSession, recommendTechStack, generateTreeFromBrd } from './lib/ai/chat.js';
 import { buildZip } from './lib/zip.js';
 import { parseStackEntry, resolveStackContract } from './lib/ai/stack-contract.js';
@@ -1496,32 +1495,10 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
       stack: stackContract,
     });
 
-    // Validasi coverage API ke UI: pastikan seluruh mutasi punya pemanggil di frontend
-    let coverage = validateApiCoverage(generated, brdData?.apiEndpoints ?? []);
+    // Validasi coverage API ke UI: catat jika ada endpoint mutasi tanpa pemanggil di frontend
+    const coverage = validateApiCoverage(generated, brdData?.apiEndpoints ?? []);
     if (coverage.uncovered.length > 0) {
-      console.warn(`[API-COVERAGE] Ditemukan ${coverage.uncovered.length} endpoint mutasi tanpa UI pemanggil, melakukan auto-retry perbaikan...`);
-      const feedback = `Endpoint mutasi berikut BELUM memiliki antarmuka pemanggil di task FRONTEND:\n` +
-        coverage.uncovered.map((ep) => `- ${ep.method} ${ep.path}: ${ep.description || 'aksi'}`).join('\n') +
-        `\nPastikan Anda membuat task FRONTEND khusus (atau menyertakan komponen modal/dialog seperti InviteMemberDialog, ConfirmModal, dll di 'files_to_create' dan 'consumesApis') agar endpoint di atas memiliki antarmuka di UI.`;
-
-      try {
-        const retryGenerated = await generateTasksFromRoadmap({
-          roadmap: { phases: phasesForAI },
-          projectName: project.name,
-          brd: brdData,
-          uiSpec: uiSpecData,
-          projectId: project.id,
-          feedback,
-          stack: stackContract,
-        });
-        generated = retryGenerated;
-        coverage = validateApiCoverage(generated, brdData?.apiEndpoints ?? []);
-        if (coverage.uncovered.length > 0) {
-          console.warn(`[API-COVERAGE] Masih ada ${coverage.uncovered.length} endpoint tanpa UI setelah retry, tetap lanjut menyimpan.`);
-        }
-      } catch (retryErr) {
-        console.warn('[API-COVERAGE] Retry perbaikan task gagal, gunakan hasil pertama:', (retryErr as Error).message);
-      }
+      console.warn(`[API-COVERAGE] Catatan: Ditemukan ${coverage.uncovered.length} endpoint mutasi tanpa UI pemanggil.`);
     }
 
     // Validasi DAG Deterministik (Bab 35 & 36): deteksi siklus, buang self-dep, dan urutkan topologis
@@ -1534,33 +1511,6 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
     const cleanupResult = validateCleanup(validTasks);
     if (cleanupResult.warnings.length > 0) {
       console.log(`[CLEANUP-VALIDATOR] Peringatan kebersihan task (${cleanupResult.warnings.length}):\n${cleanupResult.warnings.map((w) => '  - ' + w).join('\n')}`);
-    }
-
-    // Security Audit Sub-pipeline (AppSec Post-Task Analysis)
-    try {
-      const parsedBrdForAudit = project.brd ? BrdSchema.safeParse(project.brd.content) : null;
-      const securityAudit = await auditTasksSecurity({
-        tasks: validTasks,
-        brd: parsedBrdForAudit?.success ? parsedBrdForAudit.data : null,
-        projectId: project.id,
-      });
-
-      if (securityAudit.additionalAcceptanceCriteria.length > 0) {
-        for (const item of securityAudit.additionalAcceptanceCriteria) {
-          const matchedTask = validTasks.find(
-            (t) => t.taskId?.toLowerCase() === item.taskId.toLowerCase()
-          );
-          if (matchedTask && item.criteria.length > 0) {
-            matchedTask.acceptanceCriteria.push(...item.criteria);
-          }
-        }
-      }
-
-      if (securityAudit.findings.length > 0) {
-        console.log(`[SECURITY-AUDIT] ${securityAudit.findings.length} temuan AppSec teridentifikasi untuk project ${project.id}`);
-      }
-    } catch (auditErr) {
-      console.warn('[SECURITY-AUDIT] Warning: Security audit pass terlewati:', (auditErr as Error).message);
     }
 
     // Hapus tasks lama, tulis ulang.
