@@ -318,7 +318,7 @@ export function BoardPage() {
                       </p>
                       <div className="pt-1 flex items-center justify-start border-t border-border/40">
                         <span className="font-mono text-[10px] text-muted-foreground font-semibold">
-                          ({doneCount}/{storyTasks.length})
+                          {doneCount}/{storyTasks.length} tasks
                         </span>
                       </div>
                     </CardHeader>
