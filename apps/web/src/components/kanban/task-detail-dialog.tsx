@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { api } from '@/lib/http';
 import {
   X,
   Copy,
@@ -14,7 +13,6 @@ import {
   Ban,
   Layers,
   Link,
-  Loader2,
   BookOpen,
 } from 'lucide-react';
 
@@ -75,17 +73,8 @@ interface TaskDetailDialogProps {
   userStories?: UserStory[];
 }
 
-const STATUS_OPTIONS: Array<{ value: TaskDetail['status']; label: string }> = [
-  { value: 'TODO', label: 'To Do' },
-  { value: 'IN_PROGRESS', label: 'In Progress' },
-  { value: 'REVIEW', label: 'Review' },
-  { value: 'DONE', label: 'Done' },
-  { value: 'BLOCKED', label: 'Blocked' },
-];
-
-export function TaskDetailDialog({ task, isOpen, onClose, onStatusChange, userStories }: TaskDetailDialogProps) {
+export function TaskDetailDialog({ task, isOpen, onClose, userStories }: TaskDetailDialogProps) {
   const [copiedCmd, setCopiedCmd] = useState(false);
-  const [updatingStatus, setUpdatingStatus] = useState(false);
 
   if (!isOpen || !task) return null;
 
@@ -101,26 +90,8 @@ export function TaskDetailDialog({ task, isOpen, onClose, onStatusChange, userSt
     setTimeout(() => setCopiedCmd(false), 2000);
   };
 
-  const handleChangeStatus = async (newStatus: TaskDetail['status']) => {
-    if (newStatus === task.status) return;
-    setUpdatingStatus(true);
-    try {
-      await api(`/api/tasks/${task.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (onStatusChange) {
-        onStatusChange(task.id, newStatus);
-      }
-    } catch (err) {
-      console.error('Gagal memperbarui status task:', err);
-    } finally {
-      setUpdatingStatus(false);
-    }
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto no-scrollbar">
       <div className="bg-card border border-border rounded-2xl shadow-2xl max-w-3xl w-full p-6 space-y-5 my-8 text-foreground transition-all">
         {/* Header Dialog */}
         <div className="flex items-start justify-between gap-4 border-b border-border/80 pb-4">
@@ -133,15 +104,13 @@ export function TaskDetailDialog({ task, isOpen, onClose, onStatusChange, userSt
                 <Layers className="h-3 w-3 mr-1" />
                 {task.layer}
               </Badge>
+              <Badge variant="outline" className="text-xs font-semibold bg-muted/50">
+                {task.status}
+              </Badge>
               {ctx?.userStoryId && (
                 <Badge variant="outline" className="text-xs font-semibold bg-primary/10 text-primary border-primary/20">
                   <BookOpen className="h-3 w-3 mr-1" />
                   {ctx.userStoryId}
-                </Badge>
-              )}
-              {ctx?.requirement_ids && ctx.requirement_ids.length > 0 && (
-                <Badge variant="outline" className="text-xs font-mono text-primary border-primary/30">
-                  {ctx.requirement_ids.join(', ')}
                 </Badge>
               )}
             </div>
@@ -157,60 +126,47 @@ export function TaskDetailDialog({ task, isOpen, onClose, onStatusChange, userSt
           </button>
         </div>
 
-        {/* Status Selector */}
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-muted/30 border border-border/70 rounded-xl p-3">
-          <div className="text-xs font-medium text-muted-foreground">Status Task:</div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {STATUS_OPTIONS.map((opt) => (
-              <Button
-                key={opt.value}
-                size="sm"
-                variant={task.status === opt.value ? 'default' : 'outline'}
-                disabled={updatingStatus}
-                onClick={() => handleChangeStatus(opt.value)}
-                className="text-xs h-7 px-2.5"
-              >
-                {task.status === opt.value && updatingStatus ? (
-                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                ) : null}
-                {opt.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-
         {/* Konten Scrollable */}
-        <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1 text-sm">
+        <div className="space-y-5 max-h-[60vh] overflow-y-auto no-scrollbar text-sm">
           {/* User Story */}
           {parentStory ? (
-            <div className="space-y-2 bg-primary/5 border border-primary/20 rounded-xl p-3.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold text-primary uppercase tracking-wider flex items-center gap-1.5">
-                  <BookOpen className="h-3.5 w-3.5" /> User Story: {parentStory.id}
-                </span>
-                <Badge variant="outline" className="text-[11px] bg-background">
-                  Sebagai {parentStory.persona}
-                </Badge>
-              </div>
-              <p className="text-xs text-foreground/90 font-medium">
-                Saya ingin {parentStory.action}, sehingga {parentStory.benefit}.
-              </p>
-              {parentStory.gherkin && parentStory.gherkin.length > 0 && (
-                <div className="mt-2 pt-2 border-t border-primary/10 space-y-1">
-                  <span className="text-[11px] font-semibold text-muted-foreground">Skenario Gherkin:</span>
-                  <div className="bg-background/80 p-2.5 rounded text-[11px] font-mono space-y-0.5 border border-border/60">
-                    <div className="font-semibold text-primary">Skenario: {parentStory.gherkin[0].scenario}</div>
-                    <div className="text-muted-foreground"><span className="text-emerald-600 dark:text-emerald-400 font-semibold">Given</span> {parentStory.gherkin[0].given}</div>
-                    <div className="text-muted-foreground"><span className="text-blue-600 dark:text-blue-400 font-semibold">When</span> {parentStory.gherkin[0].when}</div>
-                    <div className="text-muted-foreground"><span className="text-purple-600 dark:text-purple-400 font-semibold">Then</span> {parentStory.gherkin[0].then}</div>
+            <div className="space-y-1.5">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <BookOpen className="h-3.5 w-3.5" /> User Story ({parentStory.id})
+              </h3>
+              <div className="p-3 rounded-lg border border-border bg-muted/20 space-y-2">
+                <p className="text-xs text-foreground/90 font-medium leading-relaxed">
+                  Saya ingin {parentStory.action.replace(/^saya\s+ingin\s+/i, '')}, sehingga {parentStory.benefit.replace(/^sehingga\s+/i, '')}.
+                </p>
+                {parentStory.gherkin && parentStory.gherkin.length > 0 && (
+                  <div className="pt-2 border-t border-border/60 space-y-1">
+                    <span className="text-[11px] font-semibold text-muted-foreground block">Skenario Gherkin:</span>
+                    <div className="bg-background/80 p-2.5 rounded text-[11px] font-mono space-y-0.5 border border-border/60">
+                      {parentStory.gherkin[0].scenario && (
+                        <div className="font-semibold text-primary">Skenario: {parentStory.gherkin[0].scenario}</div>
+                      )}
+                      <div className="text-muted-foreground">
+                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Given</span> {parentStory.gherkin[0].given}
+                      </div>
+                      <div className="text-muted-foreground">
+                        <span className="text-blue-600 dark:text-blue-400 font-semibold">When</span> {parentStory.gherkin[0].when}
+                      </div>
+                      <div className="text-muted-foreground">
+                        <span className="text-purple-600 dark:text-purple-400 font-semibold">Then</span> {parentStory.gherkin[0].then}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           ) : ctx?.userStoryId ? (
-            <div className="space-y-1 bg-muted/20 border border-border p-3 rounded-lg text-xs">
-              <span className="font-semibold text-muted-foreground">User Story:</span>
-              <span className="ml-2 font-mono font-bold text-primary">{ctx.userStoryId}</span>
+            <div className="space-y-1.5">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <BookOpen className="h-3.5 w-3.5" /> User Story
+              </h3>
+              <div className="p-3 rounded-lg border border-border bg-muted/20 text-xs">
+                <span className="font-mono font-bold text-primary">{ctx.userStoryId}</span>
+              </div>
             </div>
           ) : null}
 

@@ -174,7 +174,7 @@ export async function generateTasksFromRoadmap(args: {
 PRINSIP ATOMIC & LOW-COST COMPATIBILITY:
 1. Satu task fokus pada 1 tanggung jawab spesifik (Single Responsibility Principle).
 2. Lingkup tanggung jawab yang jelas: field files_to_create, files_to_modify, files_readonly, dan forbidden adalah panduan arsitektur (rekomendasi, non-blocking). Jangan memaksakan struktur monorepo Node jika stack yang dipilih adalah framework lain (seperti Laravel, Django, Go, dll).
-3. Berikan 'implementation_steps' yang konkret dan instruktif. WAJIB sertakan potongan kode contoh konkret (code snippets) jika membuat konfigurasi, skema, atau route agar agent tidak menebak-nebak nama field/fungsi.
+3. Berikan 'implementation_steps' yang ringkas, instruktif, dan to-the-point (1-3 butir langkah inti arsitektural). JANGAN menulis ulang dump kode lengkap agar respon cepat dan efisien. AI coding agent akan mengimplementasikan detail kode berdasarkan Acceptance Criteria dan API Contracts.
 4. HIERARKI USER STORY KE TASK (WAJIB):
    Setiap task adalah TURUNAN LANGSUNG dari User Story yang ada di BRD. Setiap task WAJIB mencantumkan 'userStoryId' (misal: 'US-001', 'US-002', dst) yang mereferensikan User Story induknya. Jika task berupa BOOTSTRAP umum yang menopang seluruh aplikasi, kaitkan dengan User Story pertama (misal 'US-001'). Satu User Story dapat menurunkan beberapa atomic task (seperti model database, backend API, dan antarmuka UI frontend). Kaitkan juga dengan ID kebutuhan ('requirement_ids', misal FR-001, BR-001).
 5. Berikan 'validation_commands' otomatis sesuai ekosistem stack pilihan (misal: Node: "npm test", "npm run build"; Laravel: "php artisan test"; Python: "pytest" / "python manage.py test"; Go: "go test ./...").
@@ -257,24 +257,23 @@ Schema JSON (WAJIB):
       "order": number,
       "requirement_ids": ["FR-001", "BR-001"],
       "depends_on": ["ID task sebelumnya yang menjadi prasyarat"],
-      "files_to_create": ["path/file.ts"],
-      "files_to_modify": ["path/existing.ts"],
-      "files_readonly": ["apps/api/prisma/schema.prisma"],
-      "forbidden": ["apps/web/**"],
+      "files_to_create": ["path/file"],
+      "files_to_modify": ["path/existing"],
+      "files_readonly": ["path/reference"],
+      "forbidden": ["path/forbidden/**"],
       "implementation_steps": [
-        "1. Langkah satu disertai cuplikan kode contoh konkret",
-        "2. Langkah dua verifikasi"
+        "1. Langkah utama implementasi modul sesuai arsitektur",
+        "2. Verifikasi dan pengujian"
       ],
       "acceptanceCriteria": [
         "Kriteria penerimaan measurable dan testable"
       ],
       "validation_commands": [
-        "npm run typecheck",
-        "npm run build"
+        "perintah_test_atau_build_sesuai_stack"
       ],
       "definition_of_done": [
         "Implementasi selesai",
-        "Typecheck lolos",
+        "Validasi command lolos",
         "Tidak ada file forbidden berubah"
       ],
       "out_of_scope": [
@@ -299,6 +298,12 @@ Schema JSON (WAJIB):
     }
   ]
 }
+
+Aturan efisiensi & atomisitas respon:
+- Fokus pada esensi: batasi 'files_to_create' dan 'files_to_modify' maksimal 3-5 berkas utama per task (hanya file kunci, bukan puluhan).
+- 'forbidden' dan 'files_readonly' diisi hanya jika benar-benar ada pantangan spesifik (cukup array kosong [] jika tidak ada).
+- 'implementation_steps' cukup 2-3 butir langkah inti ringkas.
+- 'acceptanceCriteria' cukup 2-4 butir terukur dan testable.
 
 Aturan lingkup task (Stack-Aware & Fleksibel):
 - Selaraskan path file di 'files_to_create' dan 'files_to_modify' dengan arsitektur framework yang dipilih di TECH STACK CONTRACT:

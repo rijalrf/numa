@@ -219,14 +219,21 @@ export function BrdPage() {
               <CardTitle className="text-lg">Fitur Utama</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                 {brd.features.map((f, i) => (
-                  <Badge key={i} variant="outline" className="p-3 text-left">
-                    {f.name}
+                  <div
+                    key={i}
+                    className="p-3.5 rounded-xl border border-border bg-card/60 space-y-1.5 hover:border-primary/40 transition-colors"
+                  >
+                    <div className="text-sm font-semibold text-foreground leading-snug">
+                      {f.name}
+                    </div>
                     {f.description && (
-                      <p className="text-xs text-muted-foreground mt-1">{f.description}</p>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {f.description}
+                      </p>
                     )}
-                  </Badge>
+                  </div>
                 ))}
               </div>
             </CardContent>
