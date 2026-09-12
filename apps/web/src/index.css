@@ -61,3 +61,14 @@
     font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
   }
 }
+
+@layer utilities {
+  /* Sembunyikan scrollbar visual tapi tetap dapat di-scroll */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}

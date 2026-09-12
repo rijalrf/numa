@@ -280,11 +280,11 @@ export function BoardPage() {
       )}
 
       {/* Layout Utama: Kolom User Story & Kolom Card Kanban */}
-      <div className="flex flex-col xl:flex-row gap-4 items-start">
+      <div className="flex flex-col xl:flex-row gap-4 items-stretch xl:h-[calc(100vh-210px)] xl:min-h-[600px]">
         {/* Kolom User Story (Sisi Kiri) */}
-        <div className="w-full xl:w-80 shrink-0 space-y-3">
-          <Card className="border-border shadow-xs">
-            <CardHeader className="pb-3 border-b border-border/60">
+        <div className="w-full xl:w-80 shrink-0 h-full">
+          <Card className="border-border shadow-xs flex flex-col h-full">
+            <CardHeader className="pb-3 border-b border-border/60 shrink-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <BookOpen className="h-4 w-4 text-primary" />
@@ -298,13 +298,14 @@ export function BoardPage() {
                 Induk kebutuhan. Klik story untuk melihat daftar task.
               </p>
             </CardHeader>
-            <CardContent className="p-3 space-y-2.5 max-h-[calc(100vh-280px)] overflow-y-auto">
+            <CardContent className="p-3 space-y-2.5 flex-1 min-h-0 overflow-y-auto no-scrollbar">
               {/* Daftar User Story */}
               {userStories.map((story) => {
                 const storyTasks = tasks.filter((t) => t.aiContext?.userStoryId === story.id);
                 const doneCount = storyTasks.filter((t) => t.status === 'DONE').length;
                 const percent =
                   storyTasks.length > 0 ? Math.round((doneCount / storyTasks.length) * 100) : 0;
+                const cleanAction = story.action.replace(/^saya\s+ingin\s+/i, '');
 
                 return (
                   <div
@@ -321,7 +322,7 @@ export function BoardPage() {
                       </Badge>
                     </div>
                     <p className="text-xs text-foreground/90 font-medium leading-snug line-clamp-2">
-                      Saya ingin {story.action}, sehingga {story.benefit}.
+                      Saya ingin {cleanAction}, sehingga {story.benefit}.
                     </p>
                     <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/50">
                       <span className="text-primary font-medium text-[11px] group-hover:underline">
@@ -351,14 +352,14 @@ export function BoardPage() {
         </div>
 
         {/* Kolom Card (Papan Kanban di Sebelah Kanan Kolom User Story) */}
-        <div className="flex-1 min-w-0 space-y-3 w-full">
+        <div className="flex-1 min-w-0 w-full h-full">
           {/* Kolom Card Status Kanban */}
-          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-3.5">
+          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-3.5 h-full">
             {columns.map((col) => {
               const colTasks = displayedTasks.filter((t) => t.status === col.status);
               return (
                 <Card key={col.status} className="border-border flex flex-col h-full">
-                  <CardHeader className="pb-2 pt-3 px-3.5 border-b border-border/50">
+                  <CardHeader className="pb-2 pt-3 px-3.5 border-b border-border/50 shrink-0">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                         {col.label}
@@ -368,7 +369,7 @@ export function BoardPage() {
                       </Badge>
                     </div>
                   </CardHeader>
-                  <CardContent className="p-2.5 space-y-2.5 flex-1 overflow-y-auto">
+                  <CardContent className="p-2.5 space-y-2.5 flex-1 min-h-0 overflow-y-auto no-scrollbar">
                     {colTasks.map((task) => {
                       const pendingDeps = (task.dependsOn ?? []).filter((d) => d.dependsOn.status !== 'DONE');
                       const isBlocked = pendingDeps.length > 0;
