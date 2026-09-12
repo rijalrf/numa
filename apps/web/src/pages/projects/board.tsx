@@ -13,8 +13,6 @@ import {
   Clock,
   CheckCircle2,
   BookOpen,
-  Filter,
-  X,
 } from 'lucide-react';
 import { useWizardNav } from '@/components/layout/wizard-nav';
 import { ExecutionDialog } from '@/components/execution/execution-dialog';
@@ -23,6 +21,7 @@ import {
   type TaskDetail,
   type UserStory,
 } from '@/components/kanban/task-detail-dialog';
+import { UserStoryTasksDialog } from '@/components/kanban/user-story-tasks-dialog';
 
 type AiMetricsSummary = {
   totalCalls: number;
@@ -40,7 +39,7 @@ export function BoardPage() {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [userStories, setUserStories] = useState<UserStory[]>([]);
-  const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null);
+  const [selectedStoryForModal, setSelectedStoryForModal] = useState<UserStory | null>(null);
   const [metrics, setMetrics] = useState<AiMetricsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -169,11 +168,7 @@ export function BoardPage() {
     { status: 'BLOCKED', label: 'Blocked' },
   ];
 
-  const displayedTasks = selectedStoryId
-    ? tasks.filter((t) => t.aiContext?.userStoryId === selectedStoryId)
-    : tasks;
-
-  const selectedStory = userStories.find((s) => s.id === selectedStoryId);
+  const displayedTasks = tasks;
 
   if (loading || generating) {
     return (
@@ -300,50 +295,27 @@ export function BoardPage() {
                 </Badge>
               </div>
               <p className="text-[11px] text-muted-foreground mt-1">
-                Induk kebutuhan. Klik kartu untuk memfilter task.
+                Induk kebutuhan. Klik story untuk melihat daftar task.
               </p>
             </CardHeader>
             <CardContent className="p-3 space-y-2.5 max-h-[calc(100vh-280px)] overflow-y-auto">
-              {/* Opsi: Tampilkan Semua Task */}
-              <div
-                onClick={() => setSelectedStoryId(null)}
-                className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                  selectedStoryId === null
-                    ? 'bg-primary/10 border-primary text-foreground shadow-xs'
-                    : 'bg-muted/30 border-border hover:bg-muted/60 text-muted-foreground'
-                }`}
-              >
-                <div className="flex items-center justify-between font-semibold text-xs text-foreground mb-1">
-                  <span>Semua User Story</span>
-                  <Badge variant="outline" className="text-[10px] bg-muted/50">
-                    {tasks.length} task
-                  </Badge>
-                </div>
-                <div className="text-[11px] text-muted-foreground">
-                  Tampilkan seluruh task tanpa filter
-                </div>
-              </div>
-
               {/* Daftar User Story */}
               {userStories.map((story) => {
                 const storyTasks = tasks.filter((t) => t.aiContext?.userStoryId === story.id);
                 const doneCount = storyTasks.filter((t) => t.status === 'DONE').length;
-                const isSelected = selectedStoryId === story.id;
                 const percent =
                   storyTasks.length > 0 ? Math.round((doneCount / storyTasks.length) * 100) : 0;
 
                 return (
                   <div
                     key={story.id}
-                    onClick={() => setSelectedStoryId(isSelected ? null : story.id)}
-                    className={`p-3 rounded-xl border cursor-pointer transition-all space-y-2 ${
-                      isSelected
-                        ? 'bg-primary/10 border-primary text-foreground shadow-sm'
-                        : 'bg-card border-border hover:border-primary/40 text-foreground'
-                    }`}
+                    onClick={() => setSelectedStoryForModal(story)}
+                    className="p-3 rounded-xl border border-border bg-card hover:border-primary/50 hover:bg-muted/20 cursor-pointer transition-all space-y-2 group shadow-2xs"
                   >
                     <div className="flex items-center justify-between gap-1">
-                      <span className="font-mono text-xs font-bold text-primary">{story.id}</span>
+                      <span className="font-mono text-xs font-bold text-primary group-hover:underline">
+                        {story.id}
+                      </span>
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-muted/40">
                         {story.persona}
                       </Badge>
@@ -352,8 +324,8 @@ export function BoardPage() {
                       Saya ingin {story.action}, sehingga {story.benefit}.
                     </p>
                     <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/50">
-                      <span>
-                        <strong className="text-foreground">{storyTasks.length} task</strong>
+                      <span className="text-primary font-medium text-[11px] group-hover:underline">
+                        Lihat {storyTasks.length} task &rarr;
                       </span>
                       <span>
                         {doneCount}/{storyTasks.length} ({percent}%)
@@ -380,31 +352,6 @@ export function BoardPage() {
 
         {/* Kolom Card (Papan Kanban di Sebelah Kanan Kolom User Story) */}
         <div className="flex-1 min-w-0 space-y-3 w-full">
-          {/* Banner Filter Story Aktif */}
-          {selectedStory && (
-            <div className="flex items-center justify-between p-3 rounded-xl bg-primary/10 border border-primary/20 text-xs">
-              <div className="flex items-center gap-2 truncate">
-                <Filter className="h-3.5 w-3.5 text-primary shrink-0" />
-                <span className="font-bold text-primary">{selectedStory.id}:</span>
-                <span className="text-foreground truncate font-medium">
-                  Sebagai {selectedStory.persona} — {selectedStory.action}
-                </span>
-                <Badge variant="outline" className="text-[10px] shrink-0 ml-1 bg-background">
-                  {displayedTasks.length} task
-                </Badge>
-              </div>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setSelectedStoryId(null)}
-                className="h-6 text-xs px-2 text-muted-foreground hover:text-foreground shrink-0 gap-1"
-              >
-                <X className="h-3 w-3" />
-                <span>Reset</span>
-              </Button>
-            </div>
-          )}
-
           {/* Kolom Card Status Kanban */}
           <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-3.5">
             {columns.map((col) => {
@@ -445,10 +392,10 @@ export function BoardPage() {
                                 {storyId && (
                                   <Badge
                                     variant="outline"
-                                    className="font-mono text-[9px] px-1 py-0 bg-primary/10 text-primary border border-primary/20 font-semibold"
+                                    className="font-mono text-[9px] px-1.5 py-0.5 bg-primary/10 text-primary border border-primary/25 font-bold flex items-center gap-1"
                                   >
-                                    <BookOpen className="h-2.5 w-2.5 mr-0.5" />
-                                    {storyId}
+                                    <BookOpen className="h-2.5 w-2.5 shrink-0" />
+                                    <span>US: {storyId}</span>
                                   </Badge>
                                 )}
                               </div>
@@ -511,6 +458,21 @@ export function BoardPage() {
         onClose={() => setSelectedTask(null)}
         onStatusChange={handleTaskStatusChange}
         userStories={userStories}
+      />
+
+      <UserStoryTasksDialog
+        story={selectedStoryForModal}
+        tasks={
+          selectedStoryForModal
+            ? tasks.filter((t) => t.aiContext?.userStoryId === selectedStoryForModal.id)
+            : []
+        }
+        isOpen={!!selectedStoryForModal}
+        onClose={() => setSelectedStoryForModal(null)}
+        onSelectTask={(task) => {
+          setSelectedStoryForModal(null);
+          setSelectedTask(task);
+        }}
       />
     </div>
   );
