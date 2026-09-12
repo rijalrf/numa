@@ -9,6 +9,7 @@ export interface WizardNavAction {
   disabled?: boolean;
   loading?: boolean;
   variant?: 'default' | 'outline' | 'ghost' | 'destructive';
+  hideIcon?: boolean;
 }
 
 export interface WizardNavConfig {
@@ -90,9 +91,9 @@ export function WizardNav() {
           >
             {config.back.loading ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
+            ) : !config.back.hideIcon ? (
               <ArrowLeft className="h-3.5 w-3.5" />
-            )}
+            ) : null}
             <span>{config.back.label || 'Kembali'}</span>
           </Button>
         ) : <div />}
@@ -113,7 +114,9 @@ export function WizardNav() {
           >
             {config.next.loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             <span>{config.next.label || 'Lanjut'}</span>
-            {!config.next.loading && <ArrowRight className="h-3.5 w-3.5" />}
+            {!config.next.loading && !config.next.hideIcon && (
+              <ArrowRight className="h-3.5 w-3.5" />
+            )}
           </Button>
         ) : null}
       </div>

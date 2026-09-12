@@ -12,7 +12,6 @@ import {
   Zap,
   Clock,
   CheckCircle2,
-  BookOpen,
 } from 'lucide-react';
 import { useWizardNav } from '@/components/layout/wizard-nav';
 import { ExecutionDialog } from '@/components/execution/execution-dialog';
@@ -86,8 +85,9 @@ export function BoardPage() {
       onClick: handleBackToTree,
     },
     next: {
-      label: 'Panduan Eksekusi',
+      label: 'Perintah Eksekusi',
       onClick: () => setExecutionDialogOpen(true),
+      hideIcon: true,
     },
   });
 
@@ -173,9 +173,9 @@ export function BoardPage() {
   if (loading || generating) {
     return (
       <div className="space-y-6">
-        <div className="flex flex-col lg:flex-row gap-4 items-start">
-          <div className="w-full lg:w-80 shrink-0">
-            <Card>
+        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
+          {[1, 2, 3, 4, 5, 6].map((colIdx) => (
+            <Card key={colIdx}>
               <CardHeader>
                 <div className="h-5 bg-muted w-2/3 rounded animate-pulse" />
               </CardHeader>
@@ -185,21 +185,7 @@ export function BoardPage() {
                 ))}
               </CardContent>
             </Card>
-          </div>
-          <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-4 w-full">
-            {columns.map((col) => (
-              <Card key={col.status}>
-                <CardHeader>
-                  <div className="h-5 bg-muted w-1/2 rounded animate-pulse" />
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="h-20 bg-muted rounded animate-pulse" />
-                  ))}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          ))}
         </div>
       </div>
     );
@@ -217,27 +203,33 @@ export function BoardPage() {
           <div />
         )}
 
-        <div className="flex items-center gap-2 ml-auto">
-          <Button
-            size="sm"
-            variant={autoRefresh ? 'default' : 'outline'}
-            onClick={() => setAutoRefresh((prev) => !prev)}
-            className="gap-1.5 font-medium"
-          >
-            <span
-              className={`h-2 w-2 rounded-full ${
-                autoRefresh ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground'
+        <div className="flex items-center gap-3 ml-auto">
+          {/* Toggle Auto Refresh */}
+          <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <span>Auto Refresh</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoRefresh}
+              onClick={() => setAutoRefresh((prev) => !prev)}
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                autoRefresh ? 'bg-primary' : 'bg-muted'
               }`}
-            />
-            <span>Auto Refresh: {autoRefresh ? 'Aktif (5s)' : 'Mati'}</span>
-          </Button>
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-background shadow-md ring-0 transition duration-200 ease-in-out ${
+                  autoRefresh ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </label>
 
           <Button
             size="sm"
             variant="outline"
             onClick={() => loadTasks('manual')}
             disabled={refreshing || loading}
-            className="gap-1.5 font-medium"
+            className="gap-1.5 font-medium h-8"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
             <span>{refreshing ? 'Memuat...' : 'Refresh'}</span>
@@ -279,170 +271,127 @@ export function BoardPage() {
         </div>
       )}
 
-      {/* Layout Utama: Kolom User Story & Kolom Card Kanban */}
-      <div className="flex flex-col xl:flex-row gap-4 items-stretch xl:h-[calc(100vh-210px)] xl:min-h-[600px]">
-        {/* Kolom User Story (Sisi Kiri) */}
-        <div className="w-full xl:w-80 shrink-0 h-full">
-          <Card className="border-border shadow-xs flex flex-col h-full">
-            <CardHeader className="pb-3 border-b border-border/60 shrink-0">
+      {/* Papan Kanban Terpadu (User Story + Status Task) */}
+      <div className="w-full xl:h-[calc(100vh-210px)] xl:min-h-[600px] overflow-x-auto no-scrollbar">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5 h-full min-w-0 xl:min-w-[1200px]">
+          {/* Kolom 1: User Story */}
+          <Card className="border-border flex flex-col h-full">
+            <CardHeader className="pb-2 pt-3 px-3.5 border-b border-border/50 shrink-0">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <BookOpen className="h-4 w-4 text-primary" />
-                  <CardTitle className="text-sm font-bold">User Story</CardTitle>
-                </div>
-                <Badge variant="outline" className="text-[11px] font-mono">
-                  {userStories.length} story
+                <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  USER STORY
+                </CardTitle>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">
+                  {userStories.length}
                 </Badge>
               </div>
-              <p className="text-[11px] text-muted-foreground mt-1">
-                Induk kebutuhan. Klik story untuk melihat daftar task.
-              </p>
             </CardHeader>
-            <CardContent className="p-3 space-y-2.5 flex-1 min-h-0 overflow-y-auto no-scrollbar">
+            <CardContent className="p-2.5 space-y-2.5 flex-1 min-h-0 overflow-y-auto no-scrollbar">
               {/* Daftar User Story */}
               {userStories.map((story) => {
                 const storyTasks = tasks.filter((t) => t.aiContext?.userStoryId === story.id);
                 const doneCount = storyTasks.filter((t) => t.status === 'DONE').length;
-                const percent =
-                  storyTasks.length > 0 ? Math.round((doneCount / storyTasks.length) * 100) : 0;
                 const cleanAction = story.action.replace(/^saya\s+ingin\s+/i, '');
 
                 return (
-                  <div
+                  <Card
                     key={story.id}
                     onClick={() => setSelectedStoryForModal(story)}
-                    className="p-3 rounded-xl border border-border bg-card hover:border-primary/50 hover:bg-muted/20 cursor-pointer transition-all space-y-2 group shadow-2xs"
+                    className="cursor-pointer hover:shadow-md hover:border-primary/50 transition-all border-border bg-card"
                   >
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="font-mono text-xs font-bold text-primary group-hover:underline">
-                        {story.id}
-                      </span>
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-muted/40">
-                        {story.persona}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-foreground/90 font-medium leading-snug line-clamp-2">
-                      Saya ingin {cleanAction}, sehingga {story.benefit}.
-                    </p>
-                    <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/50">
-                      <span className="text-primary font-medium text-[11px] group-hover:underline">
-                        Lihat {storyTasks.length} task &rarr;
-                      </span>
-                      <span>
-                        {doneCount}/{storyTasks.length} ({percent}%)
-                      </span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className="bg-emerald-500 h-full transition-all duration-300"
-                        style={{ width: `${percent}%` }}
-                      />
-                    </div>
-                  </div>
+                    <CardHeader className="p-2.5 space-y-1">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-mono text-[10px] font-bold text-primary">
+                          {story.id}
+                        </span>
+                        <span className="font-mono text-[10px] text-muted-foreground font-semibold">
+                          ({doneCount}/{storyTasks.length})
+                        </span>
+                      </div>
+                      <p className="text-xs text-foreground/90 font-medium leading-snug line-clamp-3">
+                        Saya ingin {cleanAction}, sehingga {story.benefit}.
+                      </p>
+                    </CardHeader>
+                  </Card>
                 );
               })}
 
               {userStories.length === 0 && (
-                <div className="p-4 text-center text-xs text-muted-foreground border border-dashed rounded-xl">
-                  Belum ada data User Story di BRD.
-                </div>
+                <p className="text-xs text-muted-foreground text-center py-6 italic select-none">
+                  Kosong
+                </p>
               )}
             </CardContent>
           </Card>
-        </div>
 
-        {/* Kolom Card (Papan Kanban di Sebelah Kanan Kolom User Story) */}
-        <div className="flex-1 min-w-0 w-full h-full">
-          {/* Kolom Card Status Kanban */}
-          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-3.5 h-full">
-            {columns.map((col) => {
-              const colTasks = displayedTasks.filter((t) => t.status === col.status);
-              return (
-                <Card key={col.status} className="border-border flex flex-col h-full">
-                  <CardHeader className="pb-2 pt-3 px-3.5 border-b border-border/50 shrink-0">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                        {col.label}
-                      </CardTitle>
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">
-                        {colTasks.length}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-2.5 space-y-2.5 flex-1 min-h-0 overflow-y-auto no-scrollbar">
-                    {colTasks.map((task) => {
-                      const pendingDeps = (task.dependsOn ?? []).filter((d) => d.dependsOn.status !== 'DONE');
-                      const isBlocked = pendingDeps.length > 0;
-                      const taskIdLabel = task.aiContext?.taskId || (task.order ? `#${task.order}` : undefined);
-                      const storyId = task.aiContext?.userStoryId;
+          {/* Kolom 2-6: Status Kanban */}
+          {columns.map((col) => {
+            const colTasks = displayedTasks.filter((t) => t.status === col.status);
+            return (
+              <Card key={col.status} className="border-border flex flex-col h-full">
+                <CardHeader className="pb-2 pt-3 px-3.5 border-b border-border/50 shrink-0">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      {col.label}
+                    </CardTitle>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">
+                      {colTasks.length}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-2.5 space-y-2.5 flex-1 min-h-0 overflow-y-auto no-scrollbar">
+                  {colTasks.map((task) => {
+                    const taskIdLabel = task.aiContext?.taskId || (task.order ? `#${task.order}` : undefined);
+                    const storyId = task.aiContext?.userStoryId;
 
-                      return (
-                        <Card
-                          key={task.id}
-                          onClick={() => setSelectedTask(task)}
-                          className="cursor-pointer hover:shadow-md hover:border-primary/50 transition-all border-border bg-card"
-                        >
-                          <CardHeader className="pb-1.5 pt-2.5 px-3">
-                            <div className="flex items-center justify-between gap-1 mb-1">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                {taskIdLabel && (
-                                  <span className="font-mono text-[10px] text-muted-foreground font-semibold">
-                                    {taskIdLabel}
-                                  </span>
-                                )}
-                                {storyId && (
-                                  <Badge
-                                    variant="outline"
-                                    className="font-mono text-[9px] px-1.5 py-0.5 bg-primary/10 text-primary border border-primary/25 font-bold flex items-center gap-1"
-                                  >
-                                    <BookOpen className="h-2.5 w-2.5 shrink-0" />
-                                    <span>US: {storyId}</span>
-                                  </Badge>
-                                )}
-                              </div>
-                              {task.aiContext?.requirement_ids && task.aiContext.requirement_ids.length > 0 && (
-                                <span className="font-mono text-[9px] text-primary">
-                                  {task.aiContext.requirement_ids[0]}
-                                </span>
-                              )}
-                            </div>
-                            <CardTitle className="text-xs font-semibold leading-snug">{task.title}</CardTitle>
-                          </CardHeader>
-                          <CardContent className="px-3 pb-2.5 pt-0">
-                            {task.description && (
-                              <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
-                                {task.description}
-                              </p>
+                    return (
+                      <Card
+                        key={task.id}
+                        onClick={() => setSelectedTask(task)}
+                        className="cursor-pointer hover:shadow-md hover:border-primary/50 transition-all border-border bg-card"
+                      >
+                        <CardHeader className="pb-1.5 pt-2.5 px-3">
+                          <div className="flex items-center justify-between gap-1.5 mb-1">
+                            {taskIdLabel && (
+                              <span className="font-mono text-[10px] text-muted-foreground font-semibold">
+                                {taskIdLabel}
+                              </span>
                             )}
-                            <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                              <Badge variant="outline" className="text-[9px] px-1.5 py-0">
-                                {task.layer}
+                            {storyId && (
+                              <Badge
+                                variant="outline"
+                                className="font-mono text-[9px] px-1.5 py-0.5 bg-primary/10 text-primary border border-primary/25 font-bold"
+                              >
+                                {storyId}
                               </Badge>
-                              {col.status === 'TODO' && isBlocked && (
-                                <Badge variant="warning" className="text-[9px] px-1.5 py-0">
-                                  Tunggu #{pendingDeps.map((d) => d.dependsOn.order).join(', ')}
-                                </Badge>
-                              )}
-                              {col.status === 'TODO' && !isBlocked && (task.dependsOn ?? []).length > 0 && (
-                                <Badge variant="success" className="text-[9px] px-1.5 py-0">
-                                  Siap
-                                </Badge>
-                              )}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                    {colTasks.length === 0 && (
-                      <p className="text-xs text-muted-foreground text-center py-6 italic select-none">
-                        Kosong
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
+                            )}
+                          </div>
+                          <CardTitle className="text-xs font-semibold leading-snug">{task.title}</CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-3 pb-2.5 pt-0">
+                          {task.description && (
+                            <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
+                              {task.description}
+                            </p>
+                          )}
+                          <div className="mt-2">
+                            <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                              {task.layer}
+                            </Badge>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                  {colTasks.length === 0 && (
+                    <p className="text-xs text-muted-foreground text-center py-6 italic select-none">
+                      Kosong
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       </div>
 
