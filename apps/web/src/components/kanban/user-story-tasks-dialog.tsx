@@ -62,7 +62,7 @@ export function UserStoryTasksDialog({
               </Badge>
             </div>
             <h2 className="text-base font-bold leading-snug">
-              Saya ingin {story.action}, sehingga {story.benefit}.
+              Saya ingin {story.action.replace(/^saya\s+ingin\s+/i, '')}, sehingga {story.benefit}.
             </h2>
           </div>
           <button
@@ -132,7 +132,7 @@ export function UserStoryTasksDialog({
             </span>
           </div>
 
-          <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-1">
+          <div className="space-y-2 max-h-[45vh] overflow-y-auto no-scrollbar pr-1">
             {tasks.length === 0 ? (
               <div className="p-6 text-center text-xs text-muted-foreground border border-dashed rounded-xl">
                 Belum ada task yang dikaitkan ke User Story ini.
