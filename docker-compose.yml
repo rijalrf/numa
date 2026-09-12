@@ -4,6 +4,7 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
     container_name: pakeai-api
+    command: ["npx", "tsx", "watch", "src/index.ts"]
     ports:
       - "6655:6655"
     env_file:
@@ -11,13 +12,14 @@ services:
         required: false
     environment:
       - PORT=6655
-      - NODE_ENV=production
+      - NODE_ENV=development
       - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:admin123@host.docker.internal:5432/project_ai_planner}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-http://host.docker.internal:20128/v1}
       - FE_URL=${FE_URL:-http://localhost:3455,https://pakeai.mrijal.my.id}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
+      - ./apps/api/src:/app/apps/api/src
       - ./packages/cli:/app/packages/cli:ro
     restart: unless-stopped
 
@@ -25,11 +27,17 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-      args:
-        VITE_API_URL: ${VITE_API_URL:-https://pakeai.mrijal.my.id}
+      target: dev
     container_name: pakeai-web
     ports:
       - "3455:3455"
+    environment:
+      - VITE_PROXY_API_URL=http://api:6655
+    volumes:
+      - ./apps/web/src:/app/apps/web/src
+      - ./apps/web/public:/app/apps/web/public
+      - ./apps/web/index.html:/app/apps/web/index.html
+      - ./apps/web/vite.config.ts:/app/apps/web/vite.config.ts
     depends_on:
       - api
     restart: unless-stopped

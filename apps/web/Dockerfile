@@ -1,5 +1,5 @@
-# Build stage untuk pakeai Web (Vite + React + Tailwind)
-FROM node:22-slim AS builder
+# Base dependencies untuk monorepo pakeai
+FROM node:22-slim AS deps
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -10,6 +10,17 @@ COPY packages/cli/package.json ./packages/cli/
 RUN npm ci
 
 COPY tsconfig.base.json ./
+
+# Development stage (Vite HMR dev server)
+FROM deps AS dev
+WORKDIR /app/apps/web
+COPY apps/web ./
+EXPOSE 3455
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3455"]
+
+# Build stage untuk pakeai Web (Vite + React + Tailwind)
+FROM deps AS builder
+WORKDIR /app
 COPY apps/web ./apps/web
 
 ARG VITE_API_URL=http://localhost:6655
