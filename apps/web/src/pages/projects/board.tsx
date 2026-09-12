@@ -173,19 +173,21 @@ export function BoardPage() {
   if (loading || generating) {
     return (
       <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
-          {[1, 2, 3, 4, 5, 6].map((colIdx) => (
-            <Card key={colIdx}>
-              <CardHeader>
-                <div className="h-5 bg-muted w-2/3 rounded animate-pulse" />
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-20 bg-muted rounded animate-pulse" />
-                ))}
-              </CardContent>
-            </Card>
-          ))}
+        <div className="w-full h-[calc(100vh-230px)] min-h-[560px] overflow-x-auto no-scrollbar">
+          <div className="grid grid-cols-6 gap-3.5 h-full min-w-[1150px]">
+            {[1, 2, 3, 4, 5, 6].map((colIdx) => (
+              <Card key={colIdx} className="h-full flex flex-col">
+                <CardHeader className="shrink-0">
+                  <div className="h-5 bg-muted w-2/3 rounded animate-pulse" />
+                </CardHeader>
+                <CardContent className="space-y-3 flex-1 overflow-hidden">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-20 bg-muted rounded animate-pulse" />
+                  ))}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -272,10 +274,16 @@ export function BoardPage() {
       )}
 
       {/* Papan Kanban Terpadu (User Story + Status Task) */}
-      <div className="w-full xl:h-[calc(100vh-210px)] xl:min-h-[600px] overflow-x-auto no-scrollbar">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5 h-full min-w-0 xl:min-w-[1200px]">
+      <div
+        className={`w-full overflow-x-auto no-scrollbar ${
+          metrics && metrics.totalCalls > 0
+            ? 'h-[calc(100vh-320px)] min-h-[520px]'
+            : 'h-[calc(100vh-230px)] min-h-[560px]'
+        }`}
+      >
+        <div className="grid grid-cols-6 gap-3.5 h-full min-w-[1150px]">
           {/* Kolom 1: User Story */}
-          <Card className="border-border flex flex-col h-full">
+          <Card className="border-border flex flex-col h-full overflow-hidden">
             <CardHeader className="pb-2 pt-3 px-3.5 border-b border-border/50 shrink-0">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
@@ -299,18 +307,20 @@ export function BoardPage() {
                     onClick={() => setSelectedStoryForModal(story)}
                     className="cursor-pointer hover:shadow-md hover:border-primary/50 transition-all border-border bg-card"
                   >
-                    <CardHeader className="p-2.5 space-y-1">
+                    <CardHeader className="p-2.5 space-y-1.5">
                       <div className="flex items-center justify-between gap-1">
                         <span className="font-mono text-[10px] font-bold text-primary">
                           {story.id}
-                        </span>
-                        <span className="font-mono text-[10px] text-muted-foreground font-semibold">
-                          ({doneCount}/{storyTasks.length})
                         </span>
                       </div>
                       <p className="text-xs text-foreground/90 font-medium leading-snug line-clamp-3">
                         Saya ingin {cleanAction}, sehingga {story.benefit}.
                       </p>
+                      <div className="pt-1 flex items-center justify-start border-t border-border/40">
+                        <span className="font-mono text-[10px] text-muted-foreground font-semibold">
+                          ({doneCount}/{storyTasks.length})
+                        </span>
+                      </div>
                     </CardHeader>
                   </Card>
                 );
@@ -328,7 +338,7 @@ export function BoardPage() {
           {columns.map((col) => {
             const colTasks = displayedTasks.filter((t) => t.status === col.status);
             return (
-              <Card key={col.status} className="border-border flex flex-col h-full">
+              <Card key={col.status} className="border-border flex flex-col h-full overflow-hidden">
                 <CardHeader className="pb-2 pt-3 px-3.5 border-b border-border/50 shrink-0">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
