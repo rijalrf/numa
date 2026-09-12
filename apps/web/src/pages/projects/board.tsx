@@ -361,21 +361,13 @@ export function BoardPage() {
                         className="cursor-pointer hover:shadow-md hover:border-primary/50 transition-all border-border bg-card"
                       >
                         <CardHeader className="pb-1.5 pt-2.5 px-3">
-                          <div className="flex items-center justify-between gap-1.5 mb-1">
-                            {taskIdLabel && (
+                          {taskIdLabel && (
+                            <div className="mb-1">
                               <span className="font-mono text-[10px] text-muted-foreground font-semibold">
                                 {taskIdLabel}
                               </span>
-                            )}
-                            {storyId && (
-                              <Badge
-                                variant="outline"
-                                className="font-mono text-[9px] px-1.5 py-0.5 bg-primary/10 text-primary border border-primary/25 font-bold"
-                              >
-                                {storyId}
-                              </Badge>
-                            )}
-                          </div>
+                            </div>
+                          )}
                           <CardTitle className="text-xs font-semibold leading-snug">{task.title}</CardTitle>
                         </CardHeader>
                         <CardContent className="px-3 pb-2.5 pt-0">
@@ -384,10 +376,15 @@ export function BoardPage() {
                               {task.description}
                             </p>
                           )}
-                          <div className="mt-2">
+                          <div className="flex items-center gap-2 mt-2">
                             <Badge variant="outline" className="text-[9px] px-1.5 py-0">
                               {task.layer}
                             </Badge>
+                            {storyId && (
+                              <span className="font-mono text-[10px] font-bold text-primary">
+                                {storyId}
+                              </span>
+                            )}
                           </div>
                         </CardContent>
                       </Card>
