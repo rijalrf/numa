@@ -1674,7 +1674,43 @@ app.get('/api/projects/:id/tasks', requireUser, async (req: AuthedRequest, res) 
     orderBy: { order: 'asc' },
   });
   const userStories = (project.brd?.content as any)?.userStories ?? [];
-  res.json({ tasks, userStories });
+
+  // Normalisasi backwards compatibility untuk task lama yang belum punya userStoryId
+  let needPersist = false;
+  const normalizedTasks = tasks.map((t, idx) => {
+    const ctx = ((t.aiContext as any) || {}) as Record<string, any>;
+    if (!ctx.userStoryId && userStories.length > 0) {
+      needPersist = true;
+      let matchedStoryId = userStories[0]?.id || 'US-001';
+      const titleLower = t.title.toLowerCase();
+      const matched = userStories.find((s: any) => {
+        const words = `${s.action} ${s.persona}`.toLowerCase().split(/\s+/).filter((w: string) => w.length >= 4);
+        return words.some((w: string) => titleLower.includes(w));
+      });
+      if (matched) {
+        matchedStoryId = matched.id;
+      } else {
+        const storyIdx = Math.min(Math.floor((idx / tasks.length) * userStories.length), userStories.length - 1);
+        matchedStoryId = userStories[storyIdx]?.id || matchedStoryId;
+      }
+      ctx.userStoryId = matchedStoryId;
+      return { ...t, aiContext: ctx };
+    }
+    return t;
+  });
+
+  if (needPersist) {
+    Promise.all(
+      normalizedTasks.map((t) =>
+        prisma.task.update({
+          where: { id: t.id },
+          data: { aiContext: t.aiContext as any },
+        }).catch(() => {})
+      )
+    ).catch(() => {});
+  }
+
+  res.json({ tasks: normalizedTasks, userStories });
 });
 
 app.patch('/api/tasks/:taskId', requireUser, async (req: AuthedRequest, res) => {
