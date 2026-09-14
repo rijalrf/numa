@@ -59,7 +59,16 @@ const app = express();
 app.set('trust proxy', true);
 const PORT = Number(process.env.PORT ?? 6655);
 // FE_URL boleh berisi beberapa origin dipisah koma (lokal + domain publik).
-const FE_ORIGINS = (process.env.FE_URL ?? 'http://localhost:3455').split(',').map((o) => o.trim());
+const defaultOrigins = [
+  'http://localhost:3455',
+  'https://pakeai.mrijal.my.id',
+  'https://pakeai.opendv.xyz',
+];
+const customOrigins = (process.env.FE_URL ?? '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+const FE_ORIGINS = Array.from(new Set([...defaultOrigins, ...customOrigins]));
 
 // 1) CORS HARUS paling awal — agar preflight dari browser (OPTIONS) ke /api/auth/* pun kena.
 app.use(
