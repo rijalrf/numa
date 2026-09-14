@@ -1133,6 +1133,12 @@ app.get('/api/projects/:id/master-prompt', requireUser, async (req: AuthedReques
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
 
+  const host = req.get('host');
+  const protocol = req.protocol || (req.secure ? 'https' : 'http');
+  const serverUrl = host
+    ? `${protocol}://${host}`
+    : (process.env.BETTER_AUTH_URL ?? 'https://pakeai.opendv.xyz');
+
   const md = `# Master Prompt — AI Agent Loop untuk "${project.name}"
 
 Anda adalah AI Coding Agent otonom. Tugas Anda: mengeksekusi task-task project ini secara berurutan menggunakan CLI \`pakeai\`.
@@ -1143,13 +1149,13 @@ Anda adalah AI Coding Agent otonom. Tugas Anda: mengeksekusi task-task project i
 ${project.brd ? `- BRD: SEDIA — fetch via \`pakeai brd\` atau download manual` : `- BRD: BELUM dibuat — minta user membuatnya lewat tool BRD Generator`}
 
 ## Setup (jalankan 1x di awal)
-1. Install CLI dari tarball (minta file \`pakeai-<versi>.tgz\` ke user jika belum ada):
+1. Install CLI dari tarball:
    \`\`\`
-   npm install -g ./pakeai-<versi>.tgz
+   npm install -g ${serverUrl}/api/download/pakeai.tgz
    \`\`\`
 2. Login dengan token di bawah ini sekaligus arahkan ke server (tersimpan di ~/.pakeai/config.json):
    \`\`\`
-   pakeai login {{TOKEN}} --api-url https://pakeai.mrijal.my.id
+   pakeai login {{TOKEN}} --api-url ${serverUrl}
    \`\`\`
 
 ## Fetch BRD (lakukan sekali, sebelum loop task)

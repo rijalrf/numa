@@ -61,7 +61,7 @@ export function ExecutionDialog({ projectId, projectName, isOpen, onClose }: Exe
   const apiUrl =
     typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
       ? window.location.origin
-      : 'https://pakeai.mrijal.my.id';
+      : (import.meta.env.VITE_API_URL ?? 'http://localhost:6655');
 
   const installCommand = `npm install -g ${apiUrl}/api/download/pakeai.tgz`;
   const loginCommand = `pakeai login ${activeToken} --api-url ${apiUrl}`;
