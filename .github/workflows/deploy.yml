@@ -1,9 +1,6 @@
 name: Deploy PakeAI to VPS
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 concurrency:
