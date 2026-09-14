@@ -1,0 +1,84 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: pakeai-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin123}
+      POSTGRES_DB: ${POSTGRES_DB:-project_ai_planner}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-project_ai_planner}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - pakeai-net
+
+  api:
+    build:
+      context: .
+      dockerfile: .docker/api/Dockerfile
+      target: runner
+    container_name: pakeai-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - NODE_ENV=production
+      - PORT=6655
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-admin123}@db:5432/${POSTGRES_DB:-project_ai_planner}?schema=public
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-https://pakeai.mrijal.my.id}
+      - FE_URL=${FE_URL:-https://pakeai.mrijal.my.id}
+      - AI_PROVIDER=${AI_PROVIDER:-openai}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-http://host.docker.internal:20128/v1}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-ai-builder}
+      - OPENAI_MODEL_REASONING=${OPENAI_MODEL_REASONING:-ai-builder}
+      - OPENAI_MODEL_CHEAP=${OPENAI_MODEL_CHEAP:-ai-builder}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - CLI_DIR=/app/packages/cli
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:6655/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - pakeai-net
+
+  web:
+    build:
+      context: .
+      dockerfile: .docker/web/Dockerfile
+      target: runner
+      args:
+        VITE_API_URL: ${VITE_API_URL:-https://pakeai.mrijal.my.id}
+    container_name: pakeai-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3455:3455"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - pakeai-net
+
+volumes:
+  pgdata:
+    name: pakeai_pgdata
+
+networks:
+  pakeai-net:
+    name: pakeai-net
+    driver: bridge
