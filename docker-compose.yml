@@ -2,7 +2,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: apps/api/Dockerfile
+      dockerfile: .docker/api/Dockerfile
     container_name: pakeai-api
     command: ["npx", "tsx", "watch", "src/index.ts"]
     ports:
@@ -26,7 +26,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: apps/web/Dockerfile
+      dockerfile: .docker/web/Dockerfile
       target: dev
     container_name: pakeai-web
     ports:
