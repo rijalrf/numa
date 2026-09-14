@@ -6,17 +6,58 @@ import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { prisma } from './prisma.js';
 
+// Ambil host dinamis dari BETTER_AUTH_URL jika ada
+const dynamicHosts: string[] = [];
+if (process.env.BETTER_AUTH_URL) {
+  try {
+    const host = new URL(process.env.BETTER_AUTH_URL).host;
+    if (host) dynamicHosts.push(host);
+  } catch {
+    // Abaikan jika format URL tidak valid
+  }
+}
+
+// Host yang diizinkan untuk multi-host (lokal, domain VPS lama & baru)
+const allowedHosts = Array.from(
+  new Set([
+    'localhost:6655',
+    'localhost:3455',
+    '127.0.0.1:6655',
+    '127.0.0.1:3455',
+    'pakeai.mrijal.my.id',
+    'pakeai.opendv.xyz',
+    ...dynamicHosts,
+  ]),
+);
+
+const isProd = process.env.NODE_ENV === 'production';
+const fallbackBaseUrl =
+  process.env.BETTER_AUTH_URL ??
+  (isProd ? 'https://pakeai.opendv.xyz' : 'http://localhost:6655');
+
+const defaultOrigins = [
+  'http://localhost:3455',
+  'https://pakeai.mrijal.my.id',
+  'https://pakeai.opendv.xyz',
+];
+const customOrigins = (process.env.FE_URL ?? '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+const trustedOrigins = Array.from(new Set([...defaultOrigins, ...customOrigins]));
+
 export const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: 'postgresql' }),
   secret: process.env.BETTER_AUTH_SECRET,
-  // Mendukung multi-host (akses via localhost:6655 atau via tunnel domain publik)
+  // Mendukung multi-host (akses via localhost:6655 atau via tunnel/domain publik)
   baseURL: {
-    allowedHosts: ['localhost:6655', 'pakeai.mrijal.my.id'],
-    fallback: process.env.BETTER_AUTH_URL ?? 'http://localhost:6655',
+    ...(isProd ? { protocol: 'https' as const } : {}),
+    allowedHosts,
+    fallback: fallbackBaseUrl,
   },
   trustedProxyHeaders: true,
   // FE_URL boleh berisi beberapa origin dipisah koma (lokal + domain publik).
-  trustedOrigins: (process.env.FE_URL ?? 'http://localhost:3455').split(',').map((o) => o.trim()),
+  trustedOrigins,
   emailAndPassword: {
     enabled: true,
     autoSignIn: true,
