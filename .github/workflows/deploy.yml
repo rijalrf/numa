@@ -8,10 +8,74 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Deploy to Production VPS
+  build-and-push:
+    name: Build & Push Image ke Docker Hub
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login ke Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build dan Push API Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: .docker/api/Dockerfile
+          target: runner
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/pakeai-api:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build dan Push Web Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: .docker/web/Dockerfile
+          target: runner
+          build-args: |
+            VITE_API_URL=${{ secrets.VITE_API_URL || 'https://pakeai.mrijal.my.id' }}
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/pakeai-web:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy ke Production VPS
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Pastikan direktori target di VPS tersedia
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: mkdir -p "${{ secrets.VPS_APP_DIR || '/var/www/pakeai' }}"
+
+      - name: Salin docker-compose.prod.yml ke VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          source: "docker-compose.prod.yml"
+          target: ${{ secrets.VPS_APP_DIR || '/var/www/pakeai' }}
+          overwrite: true
+
       - name: Eksekusi deployment remote via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -28,26 +92,31 @@ jobs:
             echo "=== 1. Berpindah ke direktori project ==="
             cd "$APP_DIR"
 
-            echo "=== 2. Mengambil commit terbaru dari branch main ==="
-            git fetch origin main
-            git reset --hard origin/main
-
-            echo "=== 3. Memverifikasi keberadaan file .env produksi ==="
+            echo "=== 2. Memverifikasi keberadaan file .env produksi ==="
             if [ ! -f .env ]; then
               echo "Error: File .env produksi tidak ditemukan di $APP_DIR. Buat file .env dari .env.production.example terlebih dahulu."
               exit 1
             fi
 
-            echo "=== 4. Build dan restart container produksi ==="
-            docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
+            echo "=== 3. Login ke Docker Hub di VPS ==="
+            if [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+              echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+            fi
 
-            echo "=== 5. Menjalankan migrasi database Prisma ==="
+            echo "=== 4. Mengambil (Pull) Image Terbaru dari Docker Hub ==="
+            export DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
+            docker compose -f docker-compose.prod.yml pull
+
+            echo "=== 5. Menjalankan Container Produksi ==="
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+            echo "=== 6. Menjalankan Migrasi Database Prisma ==="
             docker compose -f docker-compose.prod.yml exec -T api npx prisma migrate deploy --schema=./prisma/schema.prisma
 
-            echo "=== 6. Membersihkan image Docker yang tidak terpakai ==="
+            echo "=== 7. Membersihkan Image Docker Lama ==="
             docker image prune -f
 
-            echo "=== 7. Verifikasi kesehatan backend ==="
+            echo "=== 8. Verifikasi Kesehatan Backend ==="
             sleep 5
             HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3455/health || true)
             if [ "$HEALTH_STATUS" != "200" ]; then
