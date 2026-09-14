@@ -11,8 +11,8 @@ export default defineConfig({
     port: 3455,
     strictPort: true,
     host: true,
-    // Izinkan akses lewat domain tunnel Cloudflare (selain localhost).
-    allowedHosts: ['pakeai.mrijal.my.id'],
+    // Izinkan akses lewat domain tunnel Cloudflare / reverse proxy (selain localhost).
+    allowedHosts: ['pakeai.mrijal.my.id', 'pakeai.opendv.xyz'],
     proxy: {
       '/api': {
         target: process.env.VITE_PROXY_API_URL || 'http://localhost:6655',
