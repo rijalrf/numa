@@ -41,8 +41,6 @@ jobs:
           context: .
           file: .docker/web/Dockerfile
           target: runner
-          build-args: |
-            VITE_API_URL=${{ secrets.VITE_API_URL || 'https://pakeai.mrijal.my.id' }}
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/pakeai-web:latest
           cache-from: type=gha
@@ -62,8 +60,8 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_SSH_PORT || secrets.VPS_PORT || 22 }}
-          script: mkdir -p "${{ secrets.VPS_TARGET_DIR || secrets.VPS_APP_DIR || '/var/www/pakeai' }}"
+          port: ${{ secrets.VPS_SSH_PORT }}
+          script: mkdir -p "${{ secrets.VPS_TARGET_DIR }}"
 
       - name: Salin docker-compose.prod.yml ke VPS
         uses: appleboy/scp-action@v0.1.7
@@ -71,9 +69,9 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_SSH_PORT || secrets.VPS_PORT || 22 }}
+          port: ${{ secrets.VPS_SSH_PORT }}
           source: "docker-compose.prod.yml"
-          target: ${{ secrets.VPS_TARGET_DIR || secrets.VPS_APP_DIR || '/var/www/pakeai' }}
+          target: ${{ secrets.VPS_TARGET_DIR }}
           overwrite: true
 
       - name: Eksekusi deployment remote via SSH
@@ -82,12 +80,12 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_SSH_PORT || secrets.VPS_PORT || 22 }}
+          port: ${{ secrets.VPS_SSH_PORT }}
           script_stop: true
           timeout: 600s
           script: |
             set -e
-            APP_DIR="${{ secrets.VPS_TARGET_DIR || secrets.VPS_APP_DIR || '/var/www/pakeai' }}"
+            APP_DIR="${{ secrets.VPS_TARGET_DIR }}"
 
             echo "=== 1. Berpindah ke direktori project ==="
             cd "$APP_DIR"
