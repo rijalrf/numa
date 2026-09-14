@@ -20,6 +20,7 @@ services:
       - pakeai-net
 
   api:
+    image: ${DOCKERHUB_USERNAME}/pakeai-api:latest
     build:
       context: .
       dockerfile: .docker/api/Dockerfile
@@ -58,6 +59,7 @@ services:
       - pakeai-net
 
   web:
+    image: ${DOCKERHUB_USERNAME}/pakeai-web:latest
     build:
       context: .
       dockerfile: .docker/web/Dockerfile
