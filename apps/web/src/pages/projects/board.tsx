@@ -12,6 +12,10 @@ import {
   Zap,
   Clock,
   CheckCircle2,
+  AlertCircle,
+  Sparkles,
+  Layers,
+  X,
 } from 'lucide-react';
 import { useWizardNav } from '@/components/layout/wizard-nav';
 import { ExecutionDialog } from '@/components/execution/execution-dialog';
@@ -47,6 +51,8 @@ export function BoardPage() {
   const [executionDialogOpen, setExecutionDialogOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [projectName, setProjectName] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handleTaskStatusChange = (taskId: string, newStatus: Task['status']) => {
     setTasks((prev) =>
@@ -99,6 +105,65 @@ export function BoardPage() {
     } catch {}
   }, [projectId]);
 
+  const generateTasks = useCallback(async () => {
+    if (!projectId) return;
+    setGenerating(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const res = await api<{
+        ok: boolean;
+        count?: number;
+        tasks?: Task[];
+        userStories?: UserStory[];
+        error?: string;
+      }>(`/api/projects/${projectId}/tasks/generate`, {
+        method: 'POST',
+      });
+
+      if (res.tasks && res.tasks.length > 0) {
+        setTasks(res.tasks);
+        if (res.userStories) setUserStories(res.userStories);
+        setSuccessMessage(`${res.tasks.length} task berhasil dirancang.`);
+        setError(null);
+      } else {
+        const refreshJson = await api<{ tasks: Task[]; userStories?: UserStory[] }>(
+          `/api/projects/${projectId}/tasks`
+        );
+        const fetchedTasks = refreshJson.tasks || [];
+        setTasks(fetchedTasks);
+        if (refreshJson.userStories) setUserStories(refreshJson.userStories);
+        if (fetchedTasks.length > 0) {
+          setSuccessMessage(`${fetchedTasks.length} task berhasil dirancang.`);
+          setError(null);
+        }
+      }
+    } catch (err) {
+      console.error('Error generating tasks:', err);
+      // Auto-recovery: periksa apakah backend sebenarnya sudah selesai menyimpan task ke DB
+      try {
+        const recoveryJson = await api<{ tasks: Task[]; userStories?: UserStory[] }>(
+          `/api/projects/${projectId}/tasks`
+        );
+        if (recoveryJson.tasks && recoveryJson.tasks.length > 0) {
+          setTasks(recoveryJson.tasks);
+          if (recoveryJson.userStories) setUserStories(recoveryJson.userStories);
+          setSuccessMessage(`${recoveryJson.tasks.length} task berhasil dimuat.`);
+          setError(null);
+          return;
+        }
+      } catch {}
+
+      const msg = err instanceof Error ? err.message : 'Gagal menghasilkan task.';
+      setError(`Gagal merancang task: ${msg}`);
+    } finally {
+      setGenerating(false);
+      setLoading(false);
+      loadMetrics();
+    }
+  }, [projectId, loadMetrics]);
+
   const loadTasks = useCallback(
     async (mode: 'initial' | 'manual' | 'silent' = 'initial') => {
       if (!projectId) return;
@@ -111,18 +176,23 @@ export function BoardPage() {
         if (json.tasks && json.tasks.length > 0) {
           setTasks(json.tasks);
           if (json.userStories) setUserStories(json.userStories);
+          setError(null);
         } else if (mode === 'initial') {
           await generateTasks();
         }
         loadMetrics();
       } catch (err) {
         console.error('Gagal load tasks:', err);
+        if (mode !== 'silent') {
+          const msg = err instanceof Error ? err.message : 'Gagal memuat task.';
+          setError(`Gagal memuat task: ${msg}`);
+        }
       } finally {
         if (mode === 'initial') setLoading(false);
         if (mode === 'manual') setRefreshing(false);
       }
     },
-    [projectId, loadMetrics]
+    [projectId, loadMetrics, generateTasks]
   );
 
   // Load tasks on mount
@@ -139,27 +209,6 @@ export function BoardPage() {
     return () => clearInterval(timer);
   }, [autoRefresh, projectId, loadTasks]);
 
-  const generateTasks = async () => {
-    if (!projectId) return;
-    setGenerating(true);
-
-    try {
-      await api(`/api/projects/${projectId}/tasks/generate`, {
-        method: 'POST',
-      });
-      const refreshJson = await api<{ tasks: Task[]; userStories?: UserStory[] }>(
-        `/api/projects/${projectId}/tasks`
-      );
-      setTasks(refreshJson.tasks || []);
-      if (refreshJson.userStories) setUserStories(refreshJson.userStories);
-    } catch (err) {
-      console.error('Error generating tasks:', err);
-    } finally {
-      setGenerating(false);
-      setLoading(false);
-    }
-  };
-
   const columns: Array<{ status: string; label: string }> = [
     { status: 'TODO', label: 'To Do' },
     { status: 'IN_PROGRESS', label: 'In Progress' },
@@ -169,7 +218,30 @@ export function BoardPage() {
 
   const displayedTasks = tasks;
 
-  if (loading || generating) {
+  if (generating) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] px-4">
+        <Card className="max-w-md w-full p-6 text-center space-y-4 border-primary/30 shadow-md">
+          <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center mx-auto">
+            <Loader2 className="h-6 w-6 animate-spin" />
+          </div>
+          <div className="space-y-1.5">
+            <h2 className="text-base font-semibold text-foreground">
+              Merancang Atomic Tasks dengan AI
+            </h2>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              AI Numa sedang menganalisis arsitektur dan memecah kebutuhan menjadi atomic tasks lengkap dengan bounded context, validation commands, dan acceptance criteria.
+            </p>
+          </div>
+          <div className="rounded-lg bg-muted/60 p-2.5 text-[11px] text-muted-foreground">
+            Waktu estimasi: 30–60 detik. Mohon jangan menutup halaman.
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (loading) {
     return (
       <div className="space-y-6">
         <div className="w-full h-[calc(100vh-230px)] min-h-[560px] overflow-x-auto no-scrollbar">
@@ -194,11 +266,58 @@ export function BoardPage() {
 
   return (
     <div className="space-y-4">
+      {/* Banner Error jika terjadi kesalahan */}
+      {error && (
+        <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-destructive/30 bg-destructive/10 text-xs text-destructive">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span className="truncate">{error}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => loadTasks('manual')}
+              className="h-7 text-xs gap-1 border-destructive/30 hover:bg-destructive/10 text-destructive"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Periksa Ulang
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={generateTasks}
+              className="h-7 text-xs"
+            >
+              Coba Lagi
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Banner Sukses saat task berhasil dirancang */}
+      {successMessage && (
+        <div className="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-xs text-emerald-700 dark:text-emerald-400">
+          <div className="flex items-center gap-2 min-w-0">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+            <span>{successMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSuccessMessage(null)}
+            className="text-muted-foreground hover:text-foreground p-0.5 rounded transition-colors"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Action Bar Atas */}
       <div className="flex items-center justify-between gap-3">
-        {!tasks.length && !generating ? (
-          <Button onClick={generateTasks} size="sm" className="gap-2">
-            Generate Tasks
+        {tasks.length > 0 ? (
+          <Button onClick={generateTasks} variant="outline" size="sm" className="gap-1.5 font-medium h-8">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            <span>Generate Ulang Tasks</span>
           </Button>
         ) : (
           <div />
@@ -272,134 +391,153 @@ export function BoardPage() {
         </div>
       )}
 
-      {/* Papan Kanban Terpadu (User Story + Status Task) */}
-      <div
-        className={`w-full overflow-x-auto no-scrollbar ${
-          metrics && metrics.totalCalls > 0
-            ? 'h-[calc(100vh-320px)] min-h-[520px]'
-            : 'h-[calc(100vh-230px)] min-h-[560px]'
-        }`}
-      >
-        <div className="grid grid-cols-5 gap-3.5 h-full min-w-[1000px]">
-          {/* Kolom 1: User Story */}
-          <Card className="border-border flex flex-col h-full overflow-hidden">
-            <CardHeader className="pb-2 pt-3 px-3.5 border-b border-border/50 shrink-0">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  USER STORY
-                </CardTitle>
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">
-                  {userStories.length}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="p-2.5 space-y-2.5 flex-1 min-h-0 overflow-y-auto no-scrollbar">
-              {/* Daftar User Story */}
-              {userStories.map((story) => {
-                const storyTasks = tasks.filter((t) => t.aiContext?.userStoryId === story.id);
-                const doneCount = storyTasks.filter((t) => t.status === 'DONE').length;
-                const cleanAction = story.action.replace(/^saya\s+ingin\s+/i, '');
-
-                return (
-                  <Card
-                    key={story.id}
-                    onClick={() => setSelectedStoryForModal(story)}
-                    className="cursor-pointer hover:shadow-md hover:border-primary/50 transition-all border-border bg-card"
-                  >
-                    <CardHeader className="p-2.5 space-y-1.5">
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="font-mono text-[10px] font-bold text-primary">
-                          {story.id}
-                        </span>
-                      </div>
-                      <p className="text-xs text-foreground/90 font-medium leading-snug line-clamp-3">
-                        Saya ingin {cleanAction}, sehingga {story.benefit}.
-                      </p>
-                      <div className="pt-1 flex items-center justify-start border-t border-border/40">
-                        <span className="font-mono text-[10px] text-muted-foreground font-semibold">
-                          {doneCount}/{storyTasks.length} tasks
-                        </span>
-                      </div>
-                    </CardHeader>
-                  </Card>
-                );
-              })}
-
-              {userStories.length === 0 && (
-                <p className="text-xs text-muted-foreground text-center py-6 italic select-none">
-                  Kosong
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Kolom 2-6: Status Kanban */}
-          {columns.map((col) => {
-            const colTasks = displayedTasks.filter((t) => t.status === col.status);
-            return (
-              <Card key={col.status} className="border-border flex flex-col h-full overflow-hidden">
-                <CardHeader className="pb-2 pt-3 px-3.5 border-b border-border/50 shrink-0">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      {col.label}
-                    </CardTitle>
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">
-                      {colTasks.length}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-2.5 space-y-2.5 flex-1 min-h-0 overflow-y-auto no-scrollbar">
-                  {colTasks.map((task) => {
-                    const taskIdLabel = task.aiContext?.taskId || (task.order ? `#${task.order}` : undefined);
-                    const storyId = task.aiContext?.userStoryId;
-
-                    return (
-                      <Card
-                        key={task.id}
-                        onClick={() => setSelectedTask(task)}
-                        className="cursor-pointer hover:shadow-md hover:border-primary/50 transition-all border-border bg-card"
-                      >
-                        <CardHeader className="pb-1.5 pt-2.5 px-3">
-                          {taskIdLabel && (
-                            <div className="mb-1">
-                              <span className="font-mono text-[10px] text-muted-foreground font-semibold">
-                                {taskIdLabel}
-                              </span>
-                            </div>
-                          )}
-                          <CardTitle className="text-xs font-semibold leading-snug">{task.title}</CardTitle>
-                        </CardHeader>
-                        <CardContent className="px-3 pb-2.5 pt-0">
-                          {task.description && (
-                            <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
-                              {task.description}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-2 mt-2">
-                            <Badge variant="outline" className="text-[9px] px-1.5 py-0">
-                              {task.layer}
-                            </Badge>
-                            {storyId && (
-                              <span className="font-mono text-[10px] font-bold text-primary">
-                                {storyId}
-                              </span>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                  {colTasks.length === 0 && (
-                    <p className="text-xs text-muted-foreground text-center py-6 italic select-none">
-                      Kosong
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
+      {/* Tampilan Empty State jika tasks kosong */}
+      {!tasks.length ? (
+        <div className="flex flex-col items-center justify-center p-12 text-center border border-dashed rounded-xl bg-card/50 space-y-4 min-h-[420px]">
+          <div className="h-12 w-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center mx-auto">
+            <Layers className="h-6 w-6" />
+          </div>
+          <div className="space-y-1.5 max-w-md mx-auto">
+            <h3 className="text-base font-semibold text-foreground">Belum Ada Task yang Dirancang</h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Task implementasi belum tersedia untuk proyek ini. Klik tombol di bawah agar AI Numa menyusun daftar task dengan bounded context dan acceptance criteria berdasarkan dokumen BRD & diagram arsitektur.
+            </p>
+          </div>
+          <Button onClick={generateTasks} className="gap-2">
+            <Sparkles className="h-4 w-4" />
+            Generate Tasks Sekarang
+          </Button>
         </div>
-      </div>
+      ) : (
+        /* Papan Kanban Terpadu (User Story + Status Task) */
+        <div
+          className={`w-full overflow-x-auto no-scrollbar ${
+            metrics && metrics.totalCalls > 0
+              ? 'h-[calc(100vh-320px)] min-h-[520px]'
+              : 'h-[calc(100vh-230px)] min-h-[560px]'
+          }`}
+        >
+          <div className="grid grid-cols-5 gap-3.5 h-full min-w-[1000px]">
+            {/* Kolom 1: User Story */}
+            <Card className="border-border flex flex-col h-full overflow-hidden">
+              <CardHeader className="pb-2 pt-3 px-3.5 border-b border-border/50 shrink-0">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    USER STORY
+                  </CardTitle>
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">
+                    {userStories.length}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="p-2.5 space-y-2.5 flex-1 min-h-0 overflow-y-auto no-scrollbar">
+                {/* Daftar User Story */}
+                {userStories.map((story) => {
+                  const storyTasks = tasks.filter((t) => t.aiContext?.userStoryId === story.id);
+                  const doneCount = storyTasks.filter((t) => t.status === 'DONE').length;
+                  const cleanAction = story.action.replace(/^saya\s+ingin\s+/i, '');
+
+                  return (
+                    <Card
+                      key={story.id}
+                      onClick={() => setSelectedStoryForModal(story)}
+                      className="cursor-pointer hover:shadow-md hover:border-primary/50 transition-all border-border bg-card"
+                    >
+                      <CardHeader className="p-2.5 space-y-1.5">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-mono text-[10px] font-bold text-primary">
+                            {story.id}
+                          </span>
+                        </div>
+                        <p className="text-xs text-foreground/90 font-medium leading-snug line-clamp-3">
+                          Saya ingin {cleanAction}, sehingga {story.benefit}.
+                        </p>
+                        <div className="pt-1 flex items-center justify-start border-t border-border/40">
+                          <span className="font-mono text-[10px] text-muted-foreground font-semibold">
+                            {doneCount}/{storyTasks.length} tasks
+                          </span>
+                        </div>
+                      </CardHeader>
+                    </Card>
+                  );
+                })}
+
+                {userStories.length === 0 && (
+                  <p className="text-xs text-muted-foreground text-center py-6 italic select-none">
+                    Kosong
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Kolom 2-6: Status Kanban */}
+            {columns.map((col) => {
+              const colTasks = displayedTasks.filter((t) => t.status === col.status);
+              return (
+                <Card key={col.status} className="border-border flex flex-col h-full overflow-hidden">
+                  <CardHeader className="pb-2 pt-3 px-3.5 border-b border-border/50 shrink-0">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        {col.label}
+                      </CardTitle>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">
+                        {colTasks.length}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-2.5 space-y-2.5 flex-1 min-h-0 overflow-y-auto no-scrollbar">
+                    {colTasks.map((task) => {
+                      const taskIdLabel = task.aiContext?.taskId || (task.order ? `#${task.order}` : undefined);
+                      const storyId = task.aiContext?.userStoryId;
+
+                      return (
+                        <Card
+                          key={task.id}
+                          onClick={() => setSelectedTask(task)}
+                          className="cursor-pointer hover:shadow-md hover:border-primary/50 transition-all border-border bg-card"
+                        >
+                          <CardHeader className="pb-1.5 pt-2.5 px-3">
+                            {taskIdLabel && (
+                              <div className="mb-1">
+                                <span className="font-mono text-[10px] text-muted-foreground font-semibold">
+                                  {taskIdLabel}
+                                </span>
+                              </div>
+                            )}
+                            <CardTitle className="text-xs font-semibold leading-snug">{task.title}</CardTitle>
+                          </CardHeader>
+                          <CardContent className="px-3 pb-2.5 pt-0">
+                            {task.description && (
+                              <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
+                                {task.description}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-2 mt-2">
+                              <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                                {task.layer}
+                              </Badge>
+                              {storyId && (
+                                <span className="font-mono text-[10px] font-bold text-primary">
+                                  {storyId}
+                                </span>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                    {colTasks.length === 0 && (
+                      <p className="text-xs text-muted-foreground text-center py-6 italic select-none">
+                        Kosong
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <ExecutionDialog
         projectId={projectId!}

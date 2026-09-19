@@ -30,9 +30,9 @@ export function TerminalSection() {
     <section id="workflow" className="py-28">
       <div className="mx-auto max-w-4xl px-6">
         <div className="mb-12 text-center">
-          <p className="font-mono text-xs tracking-[0.3em] uppercase text-numa-primary mb-4">AI Agent di Terminalmu</p>
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Kamu copy prompt. Agent yang kerja.</h2>
-          <p className="mt-4 text-numa-muted-light text-base max-w-lg mx-auto">Paste master prompt ke AI coding agent favoritmu. Agent menjalankan CLI Numa secara otomatis -- ambil task, baca context, tulis kode, selesaikan.</p>
+          <p className="font-mono text-xs tracking-[0.3em] uppercase text-numa-primary mb-4">Numa Agent di Terminal Lokal</p>
+          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Tinjau arsitektur. Agent mengeksekusi.</h2>
+          <p className="mt-4 text-numa-muted-light text-base max-w-lg mx-auto">Master prompt terstruktur memandu AI coding agent menjalankan CLI numa secara otonom: mengambil task terisolasi, menghormati batas bounded context, dan memvalidasi hasil.</p>
         </div>
 
         <div className="rounded-2xl border border-white/[.08] bg-[#080C0C] overflow-hidden shadow-2xl shadow-black/40">

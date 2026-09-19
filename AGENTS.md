@@ -8,20 +8,20 @@ Numa adalah **AI Software Factory** — platform SaaS yang mengubah ide aplikasi
 
 **Masalah yang diselesaikan**: gap antara ide mentah dan kode — biasanya butuh manual planning, BRD writing, task breakdown. Numa mengotomasi seluruh pipeline ini.
 
-## Alur Wizard (Tahap Sekuensial)
+## Alur Wizard & Keluarga Fitur Numa
 
-Setiap project melewati 8 tahap berurutan. Tahap yang sudah dilewati terkunci read-only (HTTP 403 via `isStageLocked`).
+Setiap project melewati 8 tahap berurutan di bawah keluarga fitur Numa (lihat panduan lengkap di [BRAND.md](BRAND.md)). Tahap yang sudah dilewati terkunci read-only (HTTP 403 via `isStageLocked`).
 
-| # | Tahap | Halaman | Fungsi |
-|---|-------|---------|--------|
-| 1 | `chat` | `/chat/:sessionId` | Brainstorming ide awal dengan AI. |
-| 2 | `interview` | `/projects/:id/interview` | AI generate pertanyaan discovery. User jawab atau pakai rekomendasi AI. |
-| 3 | `techstack` | `/projects/:id/techstack` | Rekomendasi AI (default, langsung lanjut) atau pilih manual per kategori. |
-| 4 | `brd` | `/projects/:id/brd` | AI generate BRD terstruktur (functional requirements, business rules, constraints). |
-| 5 | `tree` | `/projects/:id/tree` | AI generate hierarki dekomposisi aplikasi (App -> Fitur -> Sub-fitur). |
-| 6 | `board` | `/projects/:id/board` | AI generate atomic tasks dengan bounded context. Kanban board. |
-| 7 | `guide` | `/projects/:id/guide` | Generate Master Prompt + PAT token. User copy ke AI coding agent. |
-| 8 | `done` | - | AI coding agent eksekusi via CLI `numa next/start/context/done`. |
+| # | Fitur | Tahap | Halaman | Fungsi |
+|---|-------|-------|---------|--------|
+| 1 | Numa Brief | `chat` | `/chat/:sessionId` | Brainstorming ide awal dengan AI. |
+| 2 | Numa Brief | `interview` | `/projects/:id/interview` | AI generate pertanyaan discovery. User jawab atau pakai rekomendasi AI. |
+| 3 | Numa Blueprint | `techstack` | `/projects/:id/techstack` | Rekomendasi AI (default, langsung lanjut) atau pilih manual per kategori. |
+| 4 | Numa Blueprint | `brd` | `/projects/:id/brd` | AI generate BRD terstruktur (functional requirements, business rules, constraints). |
+| 5 | Numa Flow | `tree` | `/projects/:id/tree` | AI generate hierarki dekomposisi aplikasi (App -> Fitur -> Sub-fitur). |
+| 6 | Numa Forge | `board` | `/projects/:id/board` | AI generate atomic tasks dengan bounded context. Kanban board. |
+| 7 | Numa Agent | `guide` | `/projects/:id/guide` | Generate Master Prompt + PAT token. User copy ke AI coding agent. |
+| 8 | Numa Agent | `done` | - | AI coding agent eksekusi via CLI `numa next/start/context/done`. |
 
 ## Arsitektur AI Engine (`apps/api/src/lib/ai/`)
 

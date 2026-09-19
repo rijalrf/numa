@@ -51,7 +51,7 @@ function getPageHeaderInfo(pathname: string): { title: string; subtitle?: string
       subtitle: 'Pengaturan konfigurasi dan token akses proyek',
     };
   }
-  if (pathname.startsWith('/chat/')) {
+  if (pathname === '/dashboard' || pathname.startsWith('/chat/')) {
     return {
       title: 'Brainstorming Ide',
       subtitle: 'Diskusi ide aplikasi untuk menyusun kebutuhan awal',
@@ -87,12 +87,13 @@ export function Header() {
 
   const { data: projectData } = useQuery({
     queryKey: ['project', projectId],
-    queryFn: () => api<{ project: { id: string; name: string } }>(`/api/projects/${projectId}`),
+    queryFn: () => api<{ project: { id: string; name: string; description?: string | null; idea?: string } }>(`/api/projects/${projectId}`),
     enabled: !!projectId,
     staleTime: 1000 * 60 * 5,
   });
 
   const projectName = projectData?.project?.name;
+  const projectDescription = projectData?.project?.description || projectData?.project?.idea;
 
   return (
     <header className="border-b bg-background/95 backdrop-blur-xs">
@@ -124,14 +125,17 @@ export function Header() {
         </div>
 
         {/* Kanan: Nama Project Aktif + Toggle Tema + Menu Pengguna */}
-        <div className="flex items-center gap-2.5 shrink-0 justify-end">
+        <div className="flex items-center gap-3 shrink-0 justify-end">
           {projectName && (
-            <div
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/60 border border-border/80 text-xs font-medium text-foreground max-w-[180px] sm:max-w-[240px] truncate shadow-2xs"
-              title={`Proyek Aktif: ${projectName}`}
-            >
-              <FolderGit2 className="h-3.5 w-3.5 text-primary shrink-0" />
-              <span className="truncate">{projectName}</span>
+            <div className="flex flex-col text-right max-w-[180px] sm:max-w-[280px] min-w-0">
+              <span className="text-xs sm:text-sm font-semibold text-foreground truncate leading-tight">
+                {projectName}
+              </span>
+              {projectDescription && (
+                <span className="text-[11px] text-muted-foreground truncate leading-tight mt-0.5">
+                  {projectDescription}
+                </span>
+              )}
             </div>
           )}
 

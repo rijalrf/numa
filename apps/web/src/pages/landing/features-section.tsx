@@ -4,9 +4,9 @@ const CARDS = [
   {
     span: 'md:col-span-7',
     step: '01',
-    label: 'Brainstorm',
-    title: 'Ngobrol, bukan nulis brief',
-    desc: 'Ceritakan ide di chat biasa. AI bertanya balik hal-hal yang kamu belum pikirkan -- target user, edge case, skala. Hasilnya: requirements yang lengkap tanpa template dokumen.',
+    label: 'Numa Brief',
+    title: 'Discovery terarah, bukan prompt mentah',
+    desc: 'Wawancara kebutuhan interaktif untuk memetakan arsitektur, edge case, dan skala target sebelum baris kode pertama ditulis.',
     mockup: (
       <div className="mt-6 space-y-2 max-w-sm">
         <div className="flex gap-2 items-end">
@@ -22,9 +22,9 @@ const CARDS = [
   {
     span: 'md:col-span-5',
     step: '02',
-    label: 'Dokumen',
-    title: 'BRD yang bukan basa-basi',
-    desc: 'Functional requirements, business rules, constraints -- dihasilkan dari jawaban interviewmu. Bukan template kosong yang kamu isi sendiri.',
+    label: 'Numa Blueprint',
+    title: 'Dokumen kebutuhan bisnis presisi',
+    desc: 'Functional requirements, business rules, dan batasan teknis (BRD) dihasilkan otomatis dari jawaban interview, bukan template kosong.',
     mockup: (
       <div className="mt-6 space-y-1.5">
         <div className="h-2 w-full rounded-full bg-white/[.04]"></div>
@@ -39,9 +39,9 @@ const CARDS = [
   {
     span: 'md:col-span-5',
     step: '03',
-    label: 'Arsitektur',
-    title: 'Pohon fitur, bukan spreadsheet',
-    desc: 'Hierarki visual dari app ke fitur ke sub-fitur. Kamu lihat struktur keseluruhan sebelum satu baris kode ditulis.',
+    label: 'Numa Flow',
+    title: 'Dekomposisi hierarki dan relasi DAG',
+    desc: 'Hierarki visual dari aplikasi ke fitur hingga sub-fitur dengan dependensi terarah dan validasi bebas siklus sirkular.',
     mockup: (
       <div className="mt-6 font-mono text-[11px] text-numa-muted space-y-1 leading-relaxed">
         <p className="text-numa-accent">app/</p>
@@ -58,9 +58,9 @@ const CARDS = [
   {
     span: 'md:col-span-7',
     step: '04',
-    label: 'Eksekusi',
-    title: 'Agent kerja, kamu review',
-    desc: 'Setiap task punya daftar file yang boleh disentuh dan yang dilarang. AI agent ambil task, tulis kode, validasi, selesai. Kamu approve di checkpoint.',
+    label: 'Numa Forge',
+    title: 'Bounded context task graph',
+    desc: 'Pemecahan arsitektur menjadi atomic tasks dengan batas file terisolasi (create, modify, forbid). Developer mengontrol checkpoint persetujuan.',
     mockup: (
       <div className="mt-6 grid grid-cols-3 gap-2 max-w-sm">
         <div>

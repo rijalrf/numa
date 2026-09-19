@@ -9,14 +9,17 @@ export function CtaSection() {
       </div>
       <div className="relative z-10 mx-auto max-w-3xl px-6 text-center">
         <h2 className="text-3xl font-bold tracking-tight sm:text-5xl cta-fade">
-          Stop planning.<br />Start shipping.
+          Turn clarity into progress.
         </h2>
+        <p className="mt-4 text-numa-muted-light text-base max-w-md mx-auto cta-fade">
+          Fondasi produk Anda sudah siap. Mulai perencanaan arsitektur dan eksekusi sekarang.
+        </p>
         <div className="mt-8 cta-fade">
           <Link
             to="/login"
             className="group inline-flex items-center gap-2 rounded-full bg-numa-primary px-8 py-4 text-sm font-semibold text-white transition-all hover:shadow-[0_0_40px_rgba(45,126,121,.4)]"
           >
-            Mulai Gratis
+            Mulai Sekarang
             <ArrowUpRight size={16} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
           </Link>
         </div>
