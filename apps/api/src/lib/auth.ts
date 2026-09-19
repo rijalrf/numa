@@ -58,8 +58,10 @@ export const auth = betterAuth({
   trustedProxyHeaders: true,
   // FE_URL boleh berisi beberapa origin dipisah koma (lokal + domain publik).
   trustedOrigins,
+  // Registrasi & login email dinonaktifkan secara default untuk mencegah user enumeration
+  // dan unverified account creation. Hanya aktifkan jika ENABLE_EMAIL_AUTH=true (mis. untuk pengujian internal).
   emailAndPassword: {
-    enabled: true,
+    enabled: process.env.ENABLE_EMAIL_AUTH === 'true',
     autoSignIn: true,
   },
   // Login Google: satu-satunya metode yang ditampilkan di UI.

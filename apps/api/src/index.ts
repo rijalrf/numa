@@ -3,9 +3,12 @@
 // - CORS dengan credentials agar cookie session dari web terbaca.
 // - Endpoint agent diproteksi requireAgent (PAT) + isolasi per project.
 import 'dotenv/config';
-import express, { type Request, type Response } from 'express';
+import 'express-async-errors';
+import express, { type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { toNodeHandler } from 'better-auth/node';
 import { auth } from './lib/auth.js';
 import { requireUser, type AuthedRequest } from './middleware/require-user.js';
@@ -56,7 +59,17 @@ function isStageLocked(currentStep: string | undefined | null, targetStage: stri
 }
 
 const app = express();
+app.disable('x-powered-by');
 app.set('trust proxy', true);
+
+// Pertahanan mendalam HTTP Headers via Helmet
+app.use(
+  helmet({
+    contentSecurityPolicy: false, // CSP ditangani secara terpusat oleh Nginx reverse proxy
+    crossOriginEmbedderPolicy: false,
+  }),
+);
+
 const PORT = Number(process.env.PORT ?? 6655);
 // FE_URL boleh berisi beberapa origin dipisah koma (lokal + domain publik).
 const defaultOrigins = [
@@ -81,11 +94,44 @@ app.use(
 );
 app.use(cookieParser());
 
+// Rate limiter untuk endpoint autentikasi (obs-3.1: mitigasi user enumeration & credential stuffing)
+const authRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30, // 30 req/menit per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Terlalu banyak percobaan autentikasi. Silakan tunggu beberapa saat.' },
+});
+
+// Rate limiter untuk AI chat & generation endpoints (obs-3.1: mitigasi resource exhaustion & cost inflation)
+const aiRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30, // 30 req/menit per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Terlalu banyak permintaan AI. Silakan tunggu beberapa saat.' },
+});
+
+// Rate limiter untuk pembuatan token PAT (obs-3.1)
+const tokenRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 15, // 15 req/menit per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Terlalu banyak pembuatan token. Silakan tunggu beberapa saat.' },
+});
+
 // 2) Better Auth handler (raw body) — sebelum express.json().
+app.use('/api/auth', authRateLimiter);
 app.all('/api/auth/*', toNodeHandler(auth));
 
 // 3) JSON parser untuk route di bawah.
 app.use(express.json({ limit: '1mb' }));
+
+// Terapkan rate limiters ke endpoint AI dan token
+app.use('/api/chat/sessions', aiRateLimiter);
+app.use('/api/agent-tokens', tokenRateLimiter);
+app.use('/api/projects/:id/agent-tokens', tokenRateLimiter);
 
 // ============================================================
 // Health & meta
@@ -2012,6 +2058,25 @@ app.get('/api/projects/:id/tree', requireUser, async (req: AuthedRequest, res) =
     orderBy: { order: 'asc' },
   });
   res.json({ nodes });
+});
+
+// ============================================================
+// Global Error Handler Middleware (vuln-0001: pencegahan crash DoS)
+// Menangkap semua unhandled error & async rejection agar proses tidak keluar
+// ============================================================
+app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
+  console.error(`[numa-api] Unhandled error pada ${req.method} ${req.originalUrl}:`, err);
+  if (res.headersSent) {
+    return;
+  }
+  const status = typeof (err as { status?: number })?.status === 'number'
+    ? (err as { status?: number }).status!
+    : 500;
+  const message = err instanceof Error ? err.message : 'Terjadi kesalahan pada server.';
+  res.status(status).json({
+    error: 'Terjadi kesalahan internal server.',
+    detail: process.env.NODE_ENV === 'production' ? undefined : message,
+  });
 });
 
 // ============================================================
