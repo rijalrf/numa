@@ -1,10 +1,21 @@
 // Seed data demo: 1 user, 1 project, BRD, roadmap, tasks, dan 1 PAT demo.
 import { PrismaClient } from '@prisma/client';
+import { hashPassword } from 'better-auth/crypto';
 import crypto from 'node:crypto';
 
 const prisma = new PrismaClient();
 
+const SEED_EMAIL = process.env.SEED_USER_EMAIL ?? 'demo@numa.dev';
+const SEED_NAME = process.env.SEED_USER_NAME ?? 'User Demo';
+const SEED_PASSWORD = process.env.SEED_USER_PASSWORD ?? 'password123';
+const SEED_CLI_TOKEN = process.env.SEED_CLI_TOKEN ?? 'numa_demo_seed_token_replace_in_app';
+
 async function main() {
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PRODUCTION_SEED !== 'true') {
+    console.error('Seed dibatalkan: Database seeding tidak diizinkan pada lingkungan produksi tanpa ALLOW_PRODUCTION_SEED=true.');
+    process.exit(1);
+  }
+
   console.log('Resetting tables...');
   await prisma.taskDependency.deleteMany();
   await prisma.task.deleteMany();
@@ -26,19 +37,21 @@ async function main() {
 
   const user = await prisma.user.create({
     data: {
-      email: 'demo@pakeai.dev',
-      name: 'User Demo',
+      email: SEED_EMAIL,
+      name: SEED_NAME,
       emailVerified: true,
     },
   });
 
-  // Password demo: password123 (format Better Auth salt:hash)
+  const passwordHash = await hashPassword(SEED_PASSWORD);
+
+  // Simpan akun kredensial dengan password hash terenkripsi dinamis
   await prisma.account.create({
     data: {
       userId: user.id,
       accountId: user.id,
       providerId: 'credential',
-      password: 'f0aa9b0cff3746cb99e7522e49c1618e:7ee8d18a2b65dacc161973e38a3a415dc4423d256d5e7b4daef9d4f82849be4d4ab2e628fc007275a45e10b5df8e44b17a2d2c066cd0fc6c937f102d6d353077',
+      password: passwordHash,
     },
   });
 
@@ -168,7 +181,7 @@ async function main() {
   });
 
   // Token demo untuk pengujian CLI — Universal PAT dengan multi-project scope.
-  const demoToken = 'pak_demo_seed_token_replace_in_app';
+  const demoToken = SEED_CLI_TOKEN;
   const tokenHash = crypto.createHash('sha256').update(demoToken).digest('hex');
   await prisma.agentToken.create({
     data: {

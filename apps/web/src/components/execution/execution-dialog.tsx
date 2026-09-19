@@ -34,7 +34,7 @@ export function ExecutionDialog({ projectId, projectName, isOpen, onClose }: Exe
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const [inputToken, setInputToken] = useState(() => {
-    return localStorage.getItem('pakeai_active_pat') || '';
+    return localStorage.getItem('numa_active_pat') || '';
   });
 
   const generateTokenMut = useMutation<{ token: string }>({
@@ -44,7 +44,7 @@ export function ExecutionDialog({ projectId, projectName, isOpen, onClose }: Exe
         body: JSON.stringify({ name: 'Token CLI Guide' }),
       }),
     onSuccess: (res) => {
-      localStorage.setItem('pakeai_active_pat', res.token);
+      localStorage.setItem('numa_active_pat', res.token);
       setInputToken(res.token);
     },
   });
@@ -63,49 +63,49 @@ export function ExecutionDialog({ projectId, projectName, isOpen, onClose }: Exe
       ? window.location.origin
       : (import.meta.env.VITE_API_URL ?? 'http://localhost:6655');
 
-  const installCommand = `npm install -g ${apiUrl}/api/download/pakeai.tgz`;
-  const loginCommand = `pakeai login ${activeToken} --api-url ${apiUrl}`;
+  const installCommand = `npm install -g ${apiUrl}/api/download/numa.tgz`;
+  const loginCommand = `numa login ${activeToken} --api-url ${apiUrl}`;
 
   const executionLoopText =
     approvalMode === 'approval'
       ? `## 2. Loop Eksekusi (Wajib Persetujuan Pengguna Tiap Task)
 Untuk setiap task yang dikerjakan:
-1. Jalankan \`pakeai next\` untuk mengambil task aktif berikutnya. Jika sudah tidak ada task lagi, hentikan loop.
-2. Jalankan \`pakeai start\` untuk mengunci task menjadi status IN_PROGRESS.
-3. Jalankan \`pakeai context\` untuk membaca batasan Bounded Context (file yang boleh/dilarang diubah serta kriteria penerimaan).
+1. Jalankan \`numa next\` untuk mengambil task aktif berikutnya. Jika sudah tidak ada task lagi, hentikan loop.
+2. Jalankan \`numa start\` untuk mengunci task menjadi status IN_PROGRESS.
+3. Jalankan \`numa context\` untuk membaca batasan Bounded Context (file yang boleh/dilarang diubah serta kriteria penerimaan).
 4. Implementasikan kode sesuai kriteria penerimaan dan batasan file.
 5. Verifikasi bahwa kode berjalan dengan baik dan bebas error.
 6. PENTING: Tampilkan hasil pekerjaan dan MINTA PERSETUJUAN PENGGUNA sebelum menandai selesai.
-7. Setelah disetujui pengguna, jalankan \`pakeai done\` untuk menyelesaikan task.
+7. Setelah disetujui pengguna, jalankan \`numa done\` untuk menyelesaikan task.
 8. PENTING (Checkpoint Gate): Jika sistem meminta verifikasi checkpoint setelah \`done\`, berhenti dan minta konfirmasi pengguna sebelum lanjut.`
       : `## 2. Loop Eksekusi Otonom (Full Sampai Selesai Tanpa Persetujuan)
 Jalankan loop berikut secara otonom tanpa henti hingga seluruh task berstatus DONE:
-1. Jalankan \`pakeai next\` untuk mengambil task aktif berikutnya. Jika sudah tidak ada task lagi, hentikan loop.
-2. Jalankan \`pakeai start\` untuk mengunci task menjadi status IN_PROGRESS.
-3. Jalankan \`pakeai context\` untuk membaca batasan Bounded Context (file yang boleh/dilarang diubah serta kriteria penerimaan).
+1. Jalankan \`numa next\` untuk mengambil task aktif berikutnya. Jika sudah tidak ada task lagi, hentikan loop.
+2. Jalankan \`numa start\` untuk mengunci task menjadi status IN_PROGRESS.
+3. Jalankan \`numa context\` untuk membaca batasan Bounded Context (file yang boleh/dilarang diubah serta kriteria penerimaan).
 4. Implementasikan kode sesuai kriteria penerimaan dan batasan file secara tuntas.
 5. Verifikasi bahwa kode berjalan dengan baik dan bebas error sintaks.
-6. Langsung jalankan \`pakeai done\` untuk menyelesaikan task.
+6. Langsung jalankan \`numa done\` untuk menyelesaikan task.
 7. PENTING (Checkpoint Gate): Jika sistem meminta verifikasi checkpoint setelah \`done\`, berhenti dan minta konfirmasi pengguna sebelum melanjutkan ke task berikutnya.
 8. Otomatis ulangi dari langkah 1.`;
 
   const masterPromptText = `# Master Prompt — AI Agent Loop untuk Proyek "${projectName || projectId}"
 
-Anda adalah AI Coding Agent otonom. Tugas Anda: mengeksekusi task-task implementasi proyek secara berurutan menggunakan CLI \`pakeai\`.
+Anda adalah AI Coding Agent otonom. Tugas Anda: mengeksekusi task-task implementasi proyek secara berurutan menggunakan CLI \`numa\`.
 
 ## 0. Persiapan Instalasi CLI (Cukup Sekali)
-Jika perintah \`pakeai\` belum terpasang di lingkungan terminal ini, jalankan:
+Jika perintah \`numa\` belum terpasang di lingkungan terminal ini, jalankan:
 \`${installCommand}\`
 
 ## 1. Identitas & Autentikasi
 - Project ID: ${projectId}
 - Login CLI: \`${loginCommand}\`
-- Switch Project (jika diperlukan): \`pakeai switch ${projectId}\`
+- Switch Project (jika diperlukan): \`numa switch ${projectId}\`
 
 ${executionLoopText}
 
 ## 3. Batasan & Keamanan Bounded Context
-- Hanya ubah file yang diizinkan pada \`pakeai context\`.
+- Hanya ubah file yang diizinkan pada \`numa context\`.
 - Jangan pernah menyentuh file yang berada pada daftar forbidden.
 - Pastikan kode berjalan dan lolos validasi sebelum menandai task selesai.`;
 
@@ -281,7 +281,7 @@ ${executionLoopText}
                     <Sparkles className="h-3.5 w-3.5 text-primary" />
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">
-                    Jalankan loop otomatis via Claude Code, Cursor, Windsurf, atau Copilot dengan CLI pakeai
+                    Jalankan loop otomatis via Claude Code, Cursor, Windsurf, atau Copilot dengan CLI numa
                   </div>
                 </div>
               </div>

@@ -1,12 +1,12 @@
-# AGENTS.md — pakeai
+# AGENTS.md — numa
 
-## Apa Itu pakeai
+## Apa Itu Numa
 
-pakeai adalah **AI Software Factory** — platform SaaS yang mengubah ide aplikasi menjadi project siap eksekusi secara otomatis. User mendeskripsikan ide, lalu AI memandu melalui wizard bertahap: wawancara kebutuhan, pemilihan tech stack, pembuatan dokumen bisnis (BRD), perancangan arsitektur, dan pemecahan menjadi atomic tasks. Hasil akhirnya: task-task granular dengan bounded context ketat yang dieksekusi oleh AI coding agent di komputer user via CLI `pakeai`.
+Numa adalah **AI Software Factory** — platform SaaS yang mengubah ide aplikasi menjadi project siap eksekusi secara otomatis. User mendeskripsikan ide, lalu AI memandu melalui wizard bertahap: wawancara kebutuhan, pemilihan tech stack, pembuatan dokumen bisnis (BRD), perancangan arsitektur, dan pemecahan menjadi atomic tasks. Hasil akhirnya: task-task granular dengan bounded context ketat yang dieksekusi oleh AI coding agent di komputer user via CLI `numa`.
 
 **Target pengguna**: developer yang ingin mempercepat fase planning dan bootstrapping project baru menggunakan AI.
 
-**Masalah yang diselesaikan**: gap antara ide mentah dan kode — biasanya butuh manual planning, BRD writing, task breakdown. pakeai mengotomasi seluruh pipeline ini.
+**Masalah yang diselesaikan**: gap antara ide mentah dan kode — biasanya butuh manual planning, BRD writing, task breakdown. Numa mengotomasi seluruh pipeline ini.
 
 ## Alur Wizard (Tahap Sekuensial)
 
@@ -21,7 +21,7 @@ Setiap project melewati 8 tahap berurutan. Tahap yang sudah dilewati terkunci re
 | 5 | `tree` | `/projects/:id/tree` | AI generate hierarki dekomposisi aplikasi (App -> Fitur -> Sub-fitur). |
 | 6 | `board` | `/projects/:id/board` | AI generate atomic tasks dengan bounded context. Kanban board. |
 | 7 | `guide` | `/projects/:id/guide` | Generate Master Prompt + PAT token. User copy ke AI coding agent. |
-| 8 | `done` | - | AI coding agent eksekusi via CLI `pakeai next/start/context/done`. |
+| 8 | `done` | - | AI coding agent eksekusi via CLI `numa next/start/context/done`. |
 
 ## Arsitektur AI Engine (`apps/api/src/lib/ai/`)
 
@@ -73,7 +73,7 @@ Setiap project melewati 8 tahap berurutan. Tahap yang sudah dilewati terkunci re
 │           ├── components/{ui,layout,chat,wizard,kanban}/
 │           ├── lib/{utils,http,auth-client}.ts
 │           └── pages/{login,home,profile,chat,projects/*}.tsx
-├── packages/cli/     # pakeai (commander)
+├── packages/cli/     # numa (commander)
 │   └── src/{index,config,api-client,guard}.ts
 ├── scripts/          # test-e2e-wizard.ts (E2E integration test)
 └── .legacy_archive/  # kode lama — untuk referensi/rollback
@@ -87,12 +87,12 @@ Setiap project melewati 8 tahap berurutan. Tahap yang sudah dilewati terkunci re
 - **Tanpa mock fallback** di CLI/API. Error AI harus eksplisit (HTTP 502 + pesan).
 - **PAT**: disimpan sebagai `sha256` di DB. Plaintext dikembalikan SEKALI saat generate.
 - **Isolasi project**: `requireAgent` middleware attach `projectId`. Agent hanya akses task project sendiri.
-- **Akses publik**: tunnel Cloudflare di `https://pakeai.mrijal.my.id` (ingress `/api/*` -> 6655, sisanya -> 3455).
-- **CLI remote**: `npm i -g https://pakeai.mrijal.my.id/api/download/pakeai.tgz`, set `PAKEAI_API_URL`.
+- **Akses publik**: tunnel Cloudflare di `https://numa.mrijal.my.id` (ingress `/api/*` -> 6655, sisanya -> 3455).
+- **CLI remote**: `npm i -g https://numa.mrijal.my.id/api/download/numa.tgz`, set `NUMA_API_URL`.
 - **Semua route** dideklarasikan flat di `apps/api/src/index.ts`. Pakai `requireUser` (cookie) atau `requireAgent` (PAT). Validasi body dengan Zod.
 - **Tool registry**: edit `apps/api/src/tools/registry.ts`, otomatis muncul di dashboard via `/api/tools`.
 
-## CLI Commands (`pakeai`)
+## CLI Commands (`numa`)
 
 | Command | Fungsi |
 |---------|--------|

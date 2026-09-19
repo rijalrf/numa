@@ -1,4 +1,4 @@
-// Bootstrap Express untuk pakeai API (port 6655).
+// Bootstrap Express untuk numa API (port 6655).
 // - Mount Better Auth handler SEBELUM express.json() (raw body).
 // - CORS dengan credentials agar cookie session dari web terbaca.
 // - Endpoint agent diproteksi requireAgent (PAT) + isolasi per project.
@@ -61,8 +61,8 @@ const PORT = Number(process.env.PORT ?? 6655);
 // FE_URL boleh berisi beberapa origin dipisah koma (lokal + domain publik).
 const defaultOrigins = [
   'http://localhost:3455',
-  'https://pakeai.mrijal.my.id',
-  'https://pakeai.opendv.xyz',
+  'https://numa.mrijal.my.id',
+  'https://numa.opendv.xyz',
 ];
 const customOrigins = (process.env.FE_URL ?? '')
   .split(',')
@@ -91,7 +91,7 @@ app.use(express.json({ limit: '1mb' }));
 // Health & meta
 // ============================================================
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, service: 'pakeai-api', port: PORT, time: new Date().toISOString() });
+  res.json({ ok: true, service: 'numa-api', port: PORT, time: new Date().toISOString() });
 });
 
 app.get('/api/tools', (_req, res) => {
@@ -99,7 +99,7 @@ app.get('/api/tools', (_req, res) => {
 });
 
 // Endpoint download CLI tarball untuk instalasi di laptop/komputer lain tanpa publish ke npm
-app.get('/api/download/pakeai.tgz', (_req, res) => {
+app.get('/api/download/numa.tgz', (_req, res) => {
   const candidateDirs = [
     process.env.CLI_DIR,
     path.resolve(__dirname, '../../../packages/cli'),
@@ -113,13 +113,13 @@ app.get('/api/download/pakeai.tgz', (_req, res) => {
     if (!cliDir) {
       return res.status(404).json({ error: 'Direktori CLI tidak ditemukan' });
     }
-    const files = fs.readdirSync(cliDir).filter((f) => f.startsWith('pakeai-') && f.endsWith('.tgz'));
+    const files = fs.readdirSync(cliDir).filter((f) => f.startsWith('numa-') && f.endsWith('.tgz'));
     if (files.length === 0) {
       return res.status(404).json({ error: 'Paket CLI belum tersedia' });
     }
     files.sort().reverse();
     const targetFile = path.join(cliDir, files[0]);
-    res.download(targetFile, 'pakeai.tgz');
+    res.download(targetFile, 'numa.tgz');
   } catch (err) {
     res.status(500).json({ error: 'Gagal mengunduh file CLI' });
   }
@@ -169,7 +169,7 @@ app.get('/api/projects/:id', requireUser, async (req: AuthedRequest, res) => {
 
 app.post('/api/agent-tokens', requireUser, async (req: AuthedRequest, res) => {
   const name = ((req.body?.name as string) || 'Token CLI').trim();
-  const token = 'pak_' + crypto.randomBytes(24).toString('hex');
+  const token = 'numa_' + crypto.randomBytes(24).toString('hex');
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
   const tokenRecord = await prisma.agentToken.create({
@@ -194,7 +194,7 @@ app.post('/api/projects/:id/agent-tokens', requireUser, async (req: AuthedReques
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
 
-  const token = 'pak_' + crypto.randomBytes(24).toString('hex');
+  const token = 'numa_' + crypto.randomBytes(24).toString('hex');
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
   const tokenRecord = await prisma.agentToken.create({
@@ -818,7 +818,7 @@ app.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentRequest, 
 
   if (ctx.validation_commands && ctx.validation_commands.length > 0) {
     mdParts.push(
-      `#### Perintah Verifikasi Mandiri (Jalankan sebelum pakeai done)`,
+      `#### Perintah Verifikasi Mandiri (Jalankan sebelum numa done)`,
       '```bash',
       ...ctx.validation_commands,
       '```',
@@ -1137,32 +1137,32 @@ app.get('/api/projects/:id/master-prompt', requireUser, async (req: AuthedReques
   const protocol = req.protocol || (req.secure ? 'https' : 'http');
   const serverUrl = host
     ? `${protocol}://${host}`
-    : (process.env.BETTER_AUTH_URL ?? 'https://pakeai.opendv.xyz');
+    : (process.env.BETTER_AUTH_URL ?? 'https://numa.opendv.xyz');
 
   const md = `# Master Prompt — AI Agent Loop untuk "${project.name}"
 
-Anda adalah AI Coding Agent otonom. Tugas Anda: mengeksekusi task-task project ini secara berurutan menggunakan CLI \`pakeai\`.
+Anda adalah AI Coding Agent otonom. Tugas Anda: mengeksekusi task-task project ini secara berurutan menggunakan CLI \`numa\`.
 
 ## Identitas Project
 - Nama: ${project.name}
 - Ide: ${project.idea}
-${project.brd ? `- BRD: SEDIA — fetch via \`pakeai brd\` atau download manual` : `- BRD: BELUM dibuat — minta user membuatnya lewat tool BRD Generator`}
+${project.brd ? `- BRD: SEDIA — fetch via \`numa brd\` atau download manual` : `- BRD: BELUM dibuat — minta user membuatnya lewat tool BRD Generator`}
 
 ## Setup (jalankan 1x di awal)
 1. Install CLI dari tarball:
    \`\`\`
-   npm install -g ${serverUrl}/api/download/pakeai.tgz
+   npm install -g ${serverUrl}/api/download/numa.tgz
    \`\`\`
-2. Login dengan token di bawah ini sekaligus arahkan ke server (tersimpan di ~/.pakeai/config.json):
+2. Login dengan token di bawah ini sekaligus arahkan ke server (tersimpan di ~/.numa/config.json):
    \`\`\`
-   pakeai login {{TOKEN}} --api-url ${serverUrl}
+   numa login {{TOKEN}} --api-url ${serverUrl}
    \`\`\`
 
 ## Fetch BRD (lakukan sekali, sebelum loop task)
 Pilih SALAH SATU:
 - **Via CLI** (direkomendasikan):
   \`\`\`
-  pakeai brd
+  numa brd
   \`\`\`
 - **Manual**: download BRD.md dari web UI → save ke disk → paste isi BRD sebagai konteks
 
@@ -1170,12 +1170,12 @@ Pilih SALAH SATU:
 Untuk SETIAP task, kerjakan langkah ini PERSIS:
 
 \`\`\`
-pakeai next        # ambil task berikutnya
-pakeai start       # tandai IN_PROGRESS
-pakeai context     # baca detail kebutuhan dan kriteria penerimaan task aktif
+numa next        # ambil task berikutnya
+numa start       # tandai IN_PROGRESS
+numa context     # baca detail kebutuhan dan kriteria penerimaan task aktif
 # >>> kerjakan task fokus pada Acceptance Criteria dan implementasi kode <<<
 # >>> jalankan perintah verifikasi mandiri sebelum menyelesaikan task <<<
-pakeai done        # tandai selesai
+numa done        # tandai selesai
 \`\`\`
 
 ## Setelah Semua Task Selesai
@@ -1190,17 +1190,17 @@ Setelah semua task DONE, aplikasi siap dijalankan di komputer lokal user:
 3. Akses aplikasi di browser: **http://localhost:9999**
 4. Proyek siap dipakai!
 
-**Catatan penting**: Gunakan port **9999** agar tidak bertabrakan dengan pakeai platform yang jalan di port 3455.
+**Catatan penting**: Gunakan port **9999** agar tidak bertabrakan dengan numa platform yang jalan di port 3455.
 
 ## Aturan Penting
 - **Isolasi project**: agent HANYA boleh membaca task/BRD dari project ini (server menegakkan via token).
 - **Fokus Task**: penuhi Acceptance Criteria dan loloskan Validation Commands. Struktur file adalah panduan arsitektur.
 - **Checkpoint gate**: jika setelah \`done\` ada pesan checkpoint, BERHENTI dan minta approval user sebelum lanjut.
 - **Layer transition**: jika layer (DATABASE/BACKEND/FRONTEND) sudah selesai, minta approval user.
-- **Testing**: sebelum panggil \`pakeai done\`, pastikan kode jalan lancar lokal dan test acceptance criteria terpenuhi.
+- **Testing**: sebelum panggil \`numa done\`, pastikan kode jalan lancar lokal dan test acceptance criteria terpenuhi.
 - **Jika gagal**: laporkan error apa adanya ke user. JANGAN diam-diam fallback.
 
-## Checklist Kualitas (verifikasi sebelum \`pakeai done\` di setiap task)
+## Checklist Kualitas (verifikasi sebelum \`numa done\` di setiap task)
 - [ ] Tidak ada hardcoded secret/credential (dilarang fallback default seperti "|| 'secret'")
 - [ ] Semua controller async dibungkus try-catch atau asyncHandler agar tidak crash server
 - [ ] Endpoint POST/PUT/PATCH memvalidasi input (Zod schema)
@@ -2018,7 +2018,7 @@ app.get('/api/projects/:id/tree', requireUser, async (req: AuthedRequest, res) =
 // Start
 // ============================================================
 app.listen(PORT, () => {
-  console.log(`[pakeai-api] listening on http://localhost:${PORT}`);
-  console.log(`[pakeai-api] CORS origins: ${FE_ORIGINS.join(', ')}`);
-  console.log(`[pakeai-api] Better Auth baseURL: ${process.env.BETTER_AUTH_URL}`);
+  console.log(`[numa-api] listening on http://localhost:${PORT}`);
+  console.log(`[numa-api] CORS origins: ${FE_ORIGINS.join(', ')}`);
+  console.log(`[numa-api] Better Auth baseURL: ${process.env.BETTER_AUTH_URL}`);
 });

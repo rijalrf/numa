@@ -1,6 +1,6 @@
 # AI Software Factory — Final Architecture & AI Calls Report
 
-**Project:** pake.ai  
+**Project:** Numa  
 **Document Type:** Architecture, Business Analysis, AI Agent & Task Generation Specification  
 **Status:** Optimized Final Report  
 **Scope:** Backend AI orchestration, product discovery, requirements engineering, UX specification, architecture planning, task generation, coding-agent execution, and validation
@@ -9,7 +9,7 @@
 
 ## 1. Executive Summary
 
-`pake.ai` menggunakan AI untuk mengubah ide aplikasi dari user menjadi spesifikasi dan task implementasi yang dapat dikonsumsi oleh coding agent seperti Claude Code, Cursor, Aider, atau Roo Code.
+`Numa` menggunakan AI untuk mengubah ide aplikasi dari user menjadi spesifikasi dan task implementasi yang dapat dikonsumsi oleh coding agent seperti Claude Code, Cursor, Aider, atau Roo Code.
 
 Arsitektur awal sudah memiliki fondasi yang baik:
 
@@ -355,7 +355,7 @@ Agent tidak boleh langsung mendesain database, memilih framework, atau menentuka
 ## System Prompt yang direkomendasikan
 
 ```text
-Anda adalah Product Discovery Specialist untuk pake.ai.
+Anda adalah Product Discovery Specialist untuk Numa.
 
 Tugas utama Anda adalah membantu user non-teknis menjelaskan ide aplikasi secara jelas sebelum keputusan teknis dibuat.
 
@@ -1092,15 +1092,15 @@ AI hanya digunakan untuk reasoning ketika memang diperlukan.
 CLI tetap dapat menggunakan workflow:
 
 ```text
-pakeai next
+numa next
       ↓
 GET /api/agent/tasks/next
       ↓
-pakeai start
+numa start
       ↓
 POST /api/agent/tasks/:id/start
       ↓
-pakeai context
+numa context
       ↓
 GET /api/agent/tasks/:id/context
       ↓
@@ -1112,7 +1112,7 @@ Tests
       ↓
 Validation
       ↓
-pakeai done
+numa done
 ```
 
 Tetapi `done` tidak boleh hanya berarti agent mengklaim selesai.
@@ -2035,7 +2035,7 @@ DETERMINISTIC SYSTEM
 
 # 50. Final Architecture Principle
 
-Tujuan `pake.ai` bukan membuat AI yang bisa menulis kode sebanyak mungkin.
+Tujuan `Numa` bukan membuat AI yang bisa menulis kode sebanyak mungkin.
 
 Tujuan sebenarnya adalah membuat:
 
@@ -2070,7 +2070,7 @@ Code
 Arsitektur final yang direkomendasikan:
 
 ```text
-                    PAKE.AI
+                      NUMA
 
               ┌─────────────────┐
               │      USER       │
@@ -2126,4 +2126,4 @@ Arsitektur final yang direkomendasikan:
 
 ```
 
-**Kesimpulan:** arsitektur awal `pake.ai` sudah memiliki fondasi yang tepat, terutama centralized AI service, structured JSON output, roadmap, atomic tasks, dan bounded context. Perbaikan terbesar yang diperlukan adalah menjadikan requirement sebagai canonical source of truth, memperkenalkan dependency graph, memperkuat task contract, menambahkan UX/UI specification, memindahkan enforcement scope dari prompt ke runtime, serta memisahkan pekerjaan reasoning AI dari pekerjaan deterministic. Dengan perubahan tersebut, output AI lebih cocok untuk junior programmer maupun low-cost coding agent dan sistem memiliki jalur yang lebih jelas menuju AI-assisted software engineering yang dapat diukur dan dikontrol.
+**Kesimpulan:** arsitektur awal `Numa` sudah memiliki fondasi yang tepat, terutama centralized AI service, structured JSON output, roadmap, atomic tasks, dan bounded context. Perbaikan terbesar yang diperlukan adalah menjadikan requirement sebagai canonical source of truth, memperkenalkan dependency graph, memperkuat task contract, menambahkan UX/UI specification, memindahkan enforcement scope dari prompt ke runtime, serta memisahkan pekerjaan reasoning AI dari pekerjaan deterministic. Dengan perubahan tersebut, output AI lebih cocok untuk junior programmer maupun low-cost coding agent dan sistem memiliki jalur yang lebih jelas menuju AI-assisted software engineering yang dapat diukur dan dikontrol.

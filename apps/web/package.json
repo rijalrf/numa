@@ -1,5 +1,5 @@
 {
-  "name": "@pakeai/web",
+  "name": "@numa/web",
   "version": "0.1.0",
   "private": true,
   "type": "module",

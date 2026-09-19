@@ -13,7 +13,7 @@ export async function requireAgentSimple(req: Request, res: Response, next: Next
   }
 
   const token = match[1].trim();
-  if (!token.startsWith('pak_')) {
+  if (!token.startsWith('numa_')) {
     return res.status(401).json({ error: 'Format token tidak valid.' });
   }
 

@@ -31,7 +31,7 @@ export async function requireAgent(req: Request, res: Response, next: NextFuncti
     return res.status(401).json({ error: 'Header Authorization: Bearer <token> wajib.' });
   }
   const token = match[1].trim();
-  if (!token.startsWith('pak_')) {
+  if (!token.startsWith('numa_')) {
     return res.status(401).json({ error: 'Format token tidak valid.' });
   }
 

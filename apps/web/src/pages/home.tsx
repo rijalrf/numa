@@ -44,7 +44,7 @@ export function HomePage() {
             Susun BRD & Rencana Aplikasi
           </CardTitle>
           <CardDescription>
-            Ceritakan ide aplikasi Anda ke AI pake.ai. AI akan membantu memperjelas tujuan, fitur, dan kebutuhan aplikasi sebelum disusun menjadi BRD yang lengkap.
+            Ceritakan ide aplikasi Anda ke AI Numa. AI akan membantu memperjelas tujuan, fitur, dan kebutuhan aplikasi sebelum disusun menjadi BRD yang lengkap.
           </CardDescription>
         </CardHeader>
         <CardContent>

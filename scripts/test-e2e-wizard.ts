@@ -5,7 +5,7 @@ const API_BASE = 'http://localhost:6655';
 
 async function runTest() {
   console.log('--- 1. TEST REGISTER & LOGIN ---');
-  const uniqueEmail = `test-wizard-${Date.now()}@pakeai.dev`;
+  const uniqueEmail = `test-wizard-${Date.now()}@numa.dev`;
   const password = 'password123';
 
   // Register
@@ -228,7 +228,7 @@ async function runTest() {
   const promptRes = await authedFetch(`/api/projects/${projectId}/master-prompt`);
   assert.strictEqual(promptRes.status, 200, 'Master prompt status harus 200');
   const promptJson = await promptRes.json();
-  assert(promptJson.prompt.includes('pakeai next'), 'Prompt harus memuat loop instruksi CLI');
+  assert(promptJson.prompt.includes('numa next'), 'Prompt harus memuat loop instruksi CLI');
   console.log('Master prompt berhasil diambil.');
 
   // Test CLI agent loop API dengan Bearer token

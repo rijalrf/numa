@@ -1,4 +1,4 @@
-// HTTP client ke pakeai API (port 6655). TIDAK ADA mock fallback — semua error eksplisit.
+// HTTP client ke numa API (port 6655). TIDAK ADA mock fallback — semua error eksplisit.
 import type { Config } from './config.js';
 
 export class ApiError extends Error {
@@ -13,7 +13,7 @@ export class ApiError extends Error {
 
 async function request<T>(cfg: Config, path: string, init: RequestInit = {}): Promise<T> {
   if (!cfg.token) {
-    throw new ApiError('Belum login. Jalankan: pakeai login <token>', 401);
+    throw new ApiError('Belum login. Jalankan: numa login <token>', 401);
   }
   const url = `${cfg.apiUrl.replace(/\/$/, '')}${path}`;
 

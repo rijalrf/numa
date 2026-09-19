@@ -2,12 +2,12 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const API_BASE = process.env.PAKEAI_API_URL || 'http://localhost:6655';
+const API_BASE = process.env.NUMA_API_URL || 'http://localhost:6655';
 const TARGET_DIR = process.env.TARGET_DIR || process.argv[2] || path.resolve(process.cwd(), 'tmp/invtrack');
 
 async function run() {
   console.log('=== 1. REGISTER & LOGIN USER BARU ===');
-  const email = `test-invtrack-${Date.now()}@pakeai.dev`;
+  const email = `test-invtrack-${Date.now()}@numa.dev`;
   const password = 'PasswordAman123!';
 
   const regRes = await fetch(`${API_BASE}/api/auth/sign-up/email`, {

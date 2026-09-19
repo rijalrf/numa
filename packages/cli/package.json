@@ -1,5 +1,5 @@
 {
-  "name": "pakeai",
+  "name": "numa",
   "version": "0.2.2",
   "description": "CLI agent loop untuk AI coding agent - autonomous task execution via bounded context isolation",
   "keywords": [
@@ -9,16 +9,16 @@
     "autonomous",
     "task-execution"
   ],
-  "homepage": "https://github.com/rijalrf/pakeai#readme",
+  "homepage": "https://github.com/rijalrf/numa#readme",
   "bugs": {
-    "url": "https://github.com/rijalrf/pakeai/issues",
-    "email": "support@pakeai.dev"
+    "url": "https://github.com/rijalrf/numa/issues",
+    "email": "support@numa.dev"
   },
   "license": "MIT",
-  "author": "Rijal RF <support@pakeai.dev>",
+  "author": "Rijal RF <support@numa.dev>",
   "type": "module",
   "bin": {
-    "pakeai": "./dist/index.js"
+    "numa": "./dist/index.js"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -40,6 +40,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/rijalrf/pakeai.git"
+    "url": "https://github.com/rijalrf/numa.git"
   }
 }

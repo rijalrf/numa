@@ -97,7 +97,7 @@ export function Header() {
   return (
     <header className="border-b bg-background/95 backdrop-blur-xs">
       <div className="px-6 py-2.5 flex items-center justify-between gap-4">
-        {/* Kiri: Logo pake.ai + Pemisah + Judul & Subjudul Halaman */}
+        {/* Kiri: Logo Numa + Pemisah + Judul & Subjudul Halaman */}
         <div className="flex items-center gap-3.5 min-w-0">
           <Link to="/dashboard" className="flex items-center gap-2 shrink-0">
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-[#2D7E79] to-[#76B8A7]">

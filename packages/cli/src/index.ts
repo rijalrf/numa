@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// pakeai CLI — agent loop driver untuk AI coding agent.
+// numa CLI — agent loop driver untuk AI coding agent.
 // Tanpa mock fallback. Semua error dilaporkan eksplisit.
 import { Command } from 'commander';
 import fs from 'node:fs';
@@ -10,14 +10,14 @@ import { runGuard, GuardError, generateConventionalCommit, gitCommit } from './g
 
 const program = new Command();
 program
-  .name('pakeai')
-  .description('CLI agent loop untuk pakeai (AI Planner). Dipakai oleh AI coding agent.')
+  .name('numa')
+  .description('CLI agent loop untuk numa (AI Planner). Dipakai oleh AI coding agent.')
   .version('0.2.2');
 
 program
   .command('login <token>')
   .description('Simpan Personal Access Token (PAT) dan verifikasi ke server.')
-  .option('--api-url <url>', 'URL server API pakeai (default: http://localhost:6655)')
+  .option('--api-url <url>', 'URL server API numa (default: http://localhost:6655)')
   .action(async (token: string, opts: { apiUrl?: string }) => {
     const cfg = loadConfig();
     if (opts.apiUrl) {
@@ -28,7 +28,7 @@ program
     const healthy = await probeHealth(cfg);
     if (!healthy) {
       console.error(`Tidak bisa menghubungi server di ${cfg.apiUrl}.`);
-      console.error('Pastikan pakeai API jalan di port 6655.');
+      console.error('Pastikan numa API jalan di port 6655.');
       process.exit(2);
     }
 
@@ -71,7 +71,7 @@ program
         console.log(`Project aktif otomatis: ${availableProjects[0].name} (${availableProjects[0].id})`);
       } else {
         console.log('');
-        console.log('Gunakan "pakeai switch <project-id>" untuk memilih project aktif.');
+        console.log('Gunakan "numa switch <project-id>" untuk memilih project aktif.');
       }
     } else {
       console.log('Token valid, tetapi belum ada project yang di-scope.');
@@ -88,14 +88,14 @@ program
     const cfg = loadConfig();
 
     if (!cfg.token) {
-      console.error('Belum login. Jalankan: pakeai login <token>');
+      console.error('Belum login. Jalankan: numa login <token>');
       process.exit(1);
     }
 
     if (!projectId) {
       // List available projects by trying common endpoints
       console.log('Proyek tersedia untuk token ini:\n');
-      console.log('> Gunakan: pakeai switch <project-id>');
+      console.log('> Gunakan: numa switch <project-id>');
       return;
     }
 
@@ -141,7 +141,7 @@ program
     console.log(`ID    : ${out.task!.id}`);
     console.log(`Judul : ${out.task!.title}`);
     if (out.task!.description) console.log(`\n${out.task!.description}`);
-    console.log(`\n-> Lanjut: \`pakeai start\` lalu \`pakeai context\``);
+    console.log(`\n-> Lanjut: \`numa start\` lalu \`numa context\``);
   });
 
 program
@@ -151,7 +151,7 @@ program
     const cfg = loadConfig();
     const taskId = id ?? cfg.activeTaskId;
     if (!taskId) {
-      console.error('Tidak ada task aktif. Jalankan: pakeai next');
+      console.error('Tidak ada task aktif. Jalankan: numa next');
       process.exit(1);
     }
     const r = await api.start(cfg, taskId);
@@ -165,7 +165,7 @@ program
     const cfg = loadConfig();
     const taskId = id ?? cfg.activeTaskId;
     if (!taskId) {
-      console.error('Tidak ada task aktif. Jalankan: pakeai next');
+      console.error('Tidak ada task aktif. Jalankan: numa next');
       process.exit(1);
     }
     const r = await api.context(cfg, taskId);
@@ -183,7 +183,7 @@ program
     const cfg = loadConfig();
     const taskId = id ?? cfg.activeTaskId;
     if (!taskId) {
-      console.error('Tidak ada task aktif. Jalankan: pakeai next');
+      console.error('Tidak ada task aktif. Jalankan: numa next');
       process.exit(1);
     }
 
@@ -199,7 +199,7 @@ program
             console.error(e.message);
             if (e.failureContext) {
               try {
-                const dir = path.join(cwd, '.pakeai');
+                const dir = path.join(cwd, '.numa');
                 if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
                 fs.writeFileSync(
                   path.join(dir, 'failure-context.json'),
@@ -252,7 +252,7 @@ program
       console.log(`\n!!! CHECKPOINT PENDING !!!`);
       console.log(`Layer ${r.layer} selesai. Berhenti dan minta approval user sebelum lanjut ke layer berikutnya.`);
     } else {
-      console.log(`-> Lanjut: pakeai next`);
+      console.log(`-> Lanjut: numa next`);
     }
   });
 
@@ -386,7 +386,7 @@ program.parseAsync(process.argv).catch((e) => {
   if (e instanceof ApiError) {
     console.error(`Error [${e.status}]: ${e.message}`);
     if (e.status === 401) {
-      console.error('Token ditolak. Coba: pakeai login <token>');
+      console.error('Token ditolak. Coba: numa login <token>');
     }
   } else {
     console.error('Error:', e instanceof Error ? e.message : e);

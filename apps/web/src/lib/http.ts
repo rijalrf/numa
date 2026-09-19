@@ -1,4 +1,4 @@
-// Fetch wrapper ke backend pakeai. credentials 'include' agar cookie session terbaca.
+// Fetch wrapper ke backend numa. credentials 'include' agar cookie session terbaca.
 export function resolveApiUrl() {
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;

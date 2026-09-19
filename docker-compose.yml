@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: .docker/api/Dockerfile
-    container_name: pakeai-api
+    container_name: numa-api
     command: ["npx", "tsx", "watch", "src/index.ts"]
     ports:
       - "6655:6655"
@@ -15,7 +15,7 @@ services:
       - NODE_ENV=development
       - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:admin123@host.docker.internal:5432/project_ai_planner}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-http://host.docker.internal:20128/v1}
-      - FE_URL=${FE_URL:-http://localhost:3455,https://pakeai.mrijal.my.id}
+      - FE_URL=${FE_URL:-http://localhost:3455,https://numa.mrijal.my.id}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -28,7 +28,7 @@ services:
       context: .
       dockerfile: .docker/web/Dockerfile
       target: dev
-    container_name: pakeai-web
+    container_name: numa-web
     ports:
       - "3455:3455"
     environment:
@@ -46,7 +46,7 @@ services:
   # Jalankan dengan: docker compose --profile with-db up -d
   db:
     image: postgres:16-alpine
-    container_name: pakeai-db
+    container_name: numa-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres

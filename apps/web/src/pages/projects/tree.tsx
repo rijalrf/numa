@@ -690,7 +690,7 @@ export function TreePage() {
               </div>
 
               <div className="rounded-xl bg-muted/40 p-3 text-[11px] text-muted-foreground">
-                Detail struktur ini bersifat <strong>read-only</strong>. Seluruh task pengerjaan otomatis tersedia pada Board Task dan dapat dijalankan melalui CLI <code>pakeai</code>.
+                Detail struktur ini bersifat <strong>read-only</strong>. Seluruh task pengerjaan otomatis tersedia pada Board Task dan dapat dijalankan melalui CLI <code>numa</code>.
               </div>
             </div>
 

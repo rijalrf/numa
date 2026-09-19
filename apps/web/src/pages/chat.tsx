@@ -1,4 +1,4 @@
-// Halaman chat: Brainstorming ide aplikasi dengan AI pake.ai
+// Halaman chat: Brainstorming ide aplikasi dengan AI Numa
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Textarea } from '@/components/ui/textarea';
@@ -236,7 +236,7 @@ export function ChatPage() {
               </h1>
               <p className="text-sm text-muted-foreground max-w-lg mx-auto leading-relaxed">
                 Ceritakan konsep, fitur utama, atau masalah yang ingin diselesaikan oleh aplikasi Anda.
-                AI pake.ai akan membantu memperjelas kebutuhan sebelum disusun menjadi BRD.
+                AI Numa akan membantu memperjelas kebutuhan sebelum disusun menjadi BRD.
               </p>
             </div>
 

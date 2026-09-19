@@ -1,4 +1,4 @@
-// Prisma schema untuk pakeai (AI Planner versi refactor).
+// Prisma schema untuk numa (AI Planner versi refactor).
 // Tabel Better Auth + domain aplikasi. Fresh migrate — data lama di-drop.
 
 generator client {

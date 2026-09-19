@@ -1,4 +1,4 @@
-name: Deploy PakeAI to VPS
+name: Deploy Numa to VPS
 
 on:
   workflow_dispatch:
@@ -31,7 +31,7 @@ jobs:
           file: .docker/api/Dockerfile
           target: runner
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/pakeai-api:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/numa-api:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -42,7 +42,7 @@ jobs:
           file: .docker/web/Dockerfile
           target: runner
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/pakeai-web:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/numa-web:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: pakeai-db
+    container_name: numa-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -17,15 +17,15 @@ services:
       retries: 5
       start_period: 10s
     networks:
-      - pakeai-net
+      - numa-net
 
   api:
-    image: ${DOCKERHUB_USERNAME}/pakeai-api:latest
+    image: ${DOCKERHUB_USERNAME}/numa-api:latest
     build:
       context: .
       dockerfile: .docker/api/Dockerfile
       target: runner
-    container_name: pakeai-api
+    container_name: numa-api
     restart: unless-stopped
     depends_on:
       db:
@@ -38,8 +38,8 @@ services:
       - PORT=6655
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-admin123}@db:5432/${POSTGRES_DB:-project_ai_planner}?schema=public
       - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
-      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-https://pakeai.opendv.xyz}
-      - FE_URL=${FE_URL:-https://pakeai.opendv.xyz,https://pakeai.mrijal.my.id}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-https://numa.opendv.xyz}
+      - FE_URL=${FE_URL:-https://numa.opendv.xyz,https://numa.mrijal.my.id}
       - AI_PROVIDER=${AI_PROVIDER:-openai}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-http://host.docker.internal:20128/v1}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
@@ -58,17 +58,17 @@ services:
       retries: 5
       start_period: 15s
     networks:
-      - pakeai-net
+      - numa-net
 
   web:
-    image: ${DOCKERHUB_USERNAME}/pakeai-web:latest
+    image: ${DOCKERHUB_USERNAME}/numa-web:latest
     build:
       context: .
       dockerfile: .docker/web/Dockerfile
       target: runner
       args:
-        VITE_API_URL: ${VITE_API_URL:-https://pakeai.opendv.xyz}
-    container_name: pakeai-web
+        VITE_API_URL: ${VITE_API_URL:-https://numa.opendv.xyz}
+    container_name: numa-web
     restart: unless-stopped
     ports:
       - "127.0.0.1:3455:3455"
@@ -76,13 +76,13 @@ services:
       api:
         condition: service_healthy
     networks:
-      - pakeai-net
+      - numa-net
 
 volumes:
   pgdata:
-    name: pakeai_pgdata
+    name: numa_pgdata
 
 networks:
-  pakeai-net:
-    name: pakeai-net
+  numa-net:
+    name: numa-net
     driver: bridge

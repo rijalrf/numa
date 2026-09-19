@@ -1,11 +1,11 @@
-# pakeai
+# numa
 
 CLI agent loop untuk autonomous AI coding agent. Execute tasks via bounded context isolation. Universal PAT support — satu token bisa akses multiple projects.
 
 ## Installation
 
 ```bash
-npx pakeai@latest login <token>
+npx numa@latest login <token>
 ```
 
 No manual install needed — runs directly via npx!
@@ -17,7 +17,7 @@ Login dengan Personal Access Token (PAT) yang dibuat di web UI Settings.
 
 **Contoh:**
 ```bash
-npx pakeai login pak_abc123def456...
+npx numa login numa_abc123def456...
 ```
 
 Token universal ini bisa diakses ke beberapa project berbeda — cukup switch project sesuai kebutuhan.
@@ -27,12 +27,12 @@ Beralih project dari token universal. Tanpa parameter tampilkan bantuan, dengan 
 
 **Tampilkan bantuan:**
 ```bash
-npx pakeai switch
+npx numa switch
 ```
 
 **Switch ke project lain:**
 ```bash
-npx pakeai switch <project-id>
+npx numa switch <project-id>
 ```
 
 ### `whoami`
@@ -40,7 +40,7 @@ Tampilkan info project dari token saat ini.
 
 **Contoh:**
 ```bash
-npx pakeai brd
+npx numa whoami
 ```
 
 ### `next`
@@ -56,7 +56,7 @@ Task #1 [DATABASE] TODO
 ID    : abc-123-def
 Judul : Create database schema for users table
 
--> Lanjut: pakeai start lalu pakeai context
+-> Lanjut: numa start lalu numa context
 ```
 
 ### `start [id]`
@@ -64,9 +64,9 @@ Tandai task sebagai IN_PROGRESS. Gunakan setelah `next`.
 
 **Contoh:**
 ```bash
-npx pakeai start
+npx numa start
 # atau spesifik:
-npx pakeai start abc-123-def
+npx numa start abc-123-def
 ```
 
 ### `context [id]`
@@ -79,7 +79,7 @@ Cetak Markdown bounded context untuk task aktif. Berisi:
 
 **Contoh:**
 ```bash
-npx pakeai context
+npx numa context
 ```
 
 ### `done [id]`
@@ -95,7 +95,7 @@ Layer FRONTEND selesai. Berhenti dan minta approval user sebelum lanjut ke layer
 
 **Jika tidak ada checkpoint:**
 ```
--> Lanjut: pakeai next
+-> Lanjut: numa next
 ```
 
 ### `status`
@@ -109,20 +109,20 @@ Active : abc-123-def
 ```
 
 ### `logout`
-Hapus token lokal dari config file `~/.pakeai/config.json`.
+Hapus token lokal dari config file `~/.numa/config.json`.
 
 ## Bounded Context Isolation
 
 Setiap task punya **bounded context** yang ketat:
-- ✅ **BOLEH**: Hanya sentuh file dalam `files_to_create` dan `files_to_modify`
-- ❌ **DILARANG**: Sentuh file di luar list (akan ditolak oleh server validation)
+- **BOLEH**: Hanya sentuh file dalam `files_to_create` dan `files_to_modify`
+- **DILARANG**: Sentuh file di luar list (akan ditolak oleh server validation)
 
 Ini mencegah AI agent merusak file yang bukan tugasnya!
 
 ## Checkpoint Gates
 
 Sistem auto-trigger checkpoint saat layer selesai:
-- DATABASE → BACKEND → FRONTEND → INTEGRATION
+- DATABASE -> BACKEND -> FRONTEND -> INTEGRATION
 - Setiap checkpoint butuh **user approval** via web UI sebelum lanjut
 
 Plus: **APPS_READY_FOR_USE** checkpoint setelah FRONTEND selesai untuk verifikasi aplikasi jalan lokal di `http://localhost:9999`.
@@ -133,25 +133,25 @@ Loop eksekusi standar:
 
 ```bash
 # 1. Login (sekali saja)
-npx pakeai login pak_your_token_here
+npx numa login numa_your_token_here
 
 # 2. Loop setiap task
-npx pakeai next      # Ambil task berikutnya
-npx pakeai start     # Tandai IN_PROGRESS
-npx pakeai context   # Baca bounded context (WAJIB!)
+npx numa next      # Ambil task berikutnya
+npx numa start     # Tandai IN_PROGRESS
+npx numa context   # Baca bounded context (WAJIB!)
 # ... kerjakan coding sesuai bounded context ...
-npx pakeai done      # Tanda selesai
+npx numa done      # Tanda selesai
 
 # Ulangi sampai CLI bilang "Tidak ada task tersisa"
 ```
 
 ## Configuration
 
-File konfigurasi disimpan di: `~/.pakeai/config.json`
+File konfigurasi disimpan di: `~/.numa/config.json`
 
 Environment variable override:
 ```bash
-export PAKEAI_API_URL=http://your-server:6655
+export NUMA_API_URL=http://your-server:6655
 ```
 
 ## Security

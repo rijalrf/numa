@@ -24,8 +24,8 @@ const allowedHosts = Array.from(
     'localhost:3455',
     '127.0.0.1:6655',
     '127.0.0.1:3455',
-    'pakeai.mrijal.my.id',
-    'pakeai.opendv.xyz',
+    'numa.mrijal.my.id',
+    'numa.opendv.xyz',
     ...dynamicHosts,
   ]),
 );
@@ -33,12 +33,12 @@ const allowedHosts = Array.from(
 const isProd = process.env.NODE_ENV === 'production';
 const fallbackBaseUrl =
   process.env.BETTER_AUTH_URL ??
-  (isProd ? 'https://pakeai.opendv.xyz' : 'http://localhost:6655');
+  (isProd ? 'https://numa.opendv.xyz' : 'http://localhost:6655');
 
 const defaultOrigins = [
   'http://localhost:3455',
-  'https://pakeai.mrijal.my.id',
-  'https://pakeai.opendv.xyz',
+  'https://numa.mrijal.my.id',
+  'https://numa.opendv.xyz',
 ];
 const customOrigins = (process.env.FE_URL ?? '')
   .split(',')
@@ -65,7 +65,7 @@ export const auth = betterAuth({
   // Login Google: satu-satunya metode yang ditampilkan di UI.
   // Redirect URI yang didaftarkan di Google Cloud Console:
   //   http://localhost:6655/api/auth/callback/google
-  //   https://pakeai.mrijal.my.id/api/auth/callback/google
+  //   https://numa.mrijal.my.id/api/auth/callback/google
   socialProviders: {
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID ?? '',

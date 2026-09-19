@@ -1,6 +1,6 @@
 // Runtime scope guard (Fase 2 & Bab 38).
 // Validasi eksekusi task secara lokal di mesin user (git diff vs forbidden + validation commands)
-// sebelum pakeai done mengirim status ke API. Server tidak bisa akses filesystem laptop user,
+// sebelum numa done mengirim status ke API. Server tidak bisa akses filesystem laptop user,
 // jadi guard ini wajib berjalan di CLI.
 import { spawn } from 'node:child_process';
 
@@ -155,7 +155,7 @@ export async function runGuard(spec: GuardSpec, cwd: string, taskId?: string): P
       next_action: 'Revert perubahan pada file forbidden atau mintalah izin lingkup teknis baru.',
     };
     throw new GuardError(
-      `Task menyentuh file terlarang (forbidden).\n${list}\n\nPerbaiki dengan revert perubahan tersebut, atau jalankan: pakeai done --force`,
+      `Task menyentuh file terlarang (forbidden).\n${list}\n\nPerbaiki dengan revert perubahan tersebut, atau jalankan: numa done --force`,
       failure
     );
   }
@@ -180,7 +180,7 @@ export async function runGuard(spec: GuardSpec, cwd: string, taskId?: string): P
         next_action: 'Perbaiki kegagalan kode sesuai output test/build di atas sebelum menandai selesai.',
       };
       throw new GuardError(
-        'Validation commands GAGAL. Task belum layak ditandai selesai.\nPerbaiki kegagalan di atas, atau jalankan: pakeai done --force',
+        'Validation commands GAGAL. Task belum layak ditandai selesai.\nPerbaiki kegagalan di atas, atau jalankan: numa done --force',
         failure
       );
     }
@@ -201,8 +201,8 @@ export function generateConventionalCommit(task: {
 
   const cleanTitle = task.title.replace(/^(feat|fix|chore|refactor|test)(\(.*\))?:\s*/i, '').trim();
   const summary = cleanTitle.length > 55 ? cleanTitle.slice(0, 52) + '...' : cleanTitle;
-  const orderText = task.order ? `Task #${task.order}` : 'pakeai task';
-  return `${type}(${rawLayer}): ${summary}\n\nAutomated commit via pakeai done --commit (${orderText})`;
+  const orderText = task.order ? `Task #${task.order}` : 'numa task';
+  return `${type}(${rawLayer}): ${summary}\n\nAutomated commit via numa done --commit (${orderText})`;
 }
 
 export function gitCommit(message: string, cwd: string): Promise<string> {

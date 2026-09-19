@@ -1,4 +1,4 @@
-// Konfigurasi tersimpan di ~/.pakeai/config.json
+// Konfigurasi tersimpan di ~/.numa/config.json
 // Skema: { apiUrl, token?, activeTaskId?, projectId? }
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,7 +11,7 @@ export type Config = {
   projectId?: string;
 };
 
-const DIR = path.join(os.homedir(), '.pakeai');
+const DIR = path.join(os.homedir(), '.numa');
 const FILE = path.join(DIR, 'config.json');
 
 function ensureDir() {
@@ -21,18 +21,18 @@ function ensureDir() {
 export function loadConfig(): Config {
   ensureDir();
   if (!fs.existsSync(FILE)) {
-    return { apiUrl: process.env.PAKEAI_API_URL ?? 'http://localhost:6655' };
+    return { apiUrl: process.env.NUMA_API_URL ?? 'http://localhost:6655' };
   }
   try {
     const raw = JSON.parse(fs.readFileSync(FILE, 'utf-8')) as Partial<Config>;
     return {
-      apiUrl: raw.apiUrl ?? process.env.PAKEAI_API_URL ?? 'http://localhost:6655',
+      apiUrl: raw.apiUrl ?? process.env.NUMA_API_URL ?? 'http://localhost:6655',
       token: raw.token,
       activeTaskId: raw.activeTaskId,
       projectId: raw.projectId,
     };
   } catch {
-    return { apiUrl: process.env.PAKEAI_API_URL ?? 'http://localhost:6655' };
+    return { apiUrl: process.env.NUMA_API_URL ?? 'http://localhost:6655' };
   }
 }
 

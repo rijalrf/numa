@@ -7,7 +7,7 @@ dist
 .git
 .github
 .legacy_archive
-.pakeai
+.numa
 *.tgz
 *.log
 .env.local

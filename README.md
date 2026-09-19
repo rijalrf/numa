@@ -8,7 +8,7 @@ Pipeline: Chat (brainstorm) -> Interview (discovery) -> Tech Stack -> BRD -> Tre
 
 - **apps/web** — Vite + React + TypeScript + Tailwind + shadcn-style + react-router v7 + TanStack Query + better-auth/react. Port **3455**.
 - **apps/api** — Express + Prisma + Zod + Better Auth (Prisma adapter). Port **6655**.
-- **packages/cli** — `pakeai` (commander) — dipanggil sebagai `npx pakeai`. Tanpa mock fallback.
+- **packages/cli** — `numa` (commander) — dipanggil sebagai `npx numa`. Tanpa mock fallback.
 - **DB** — PostgreSQL lokal `project_ai_planner` di `localhost:5432` (user `postgres`).
 - **AI** — Gateway lokal OpenAI-compatible `http://localhost:20128/v1` (model `ai-builder`). Multi-provider via env.
 
@@ -30,14 +30,14 @@ cd apps/web
 npx vite --port 3455                 # http://localhost:3455
 
 # Terminal 3 — coba CLI
-pakeai login pak_demo_seed_token_replace_in_app
-pakeai next
-pakeai start
-pakeai context
-pakeai done
+numa login numa_demo_seed_token_replace_in_app
+numa next
+numa start
+numa context
+numa done
 ```
 
-`pakeai` saat dev dipanggil via wrapper script di `~/.local/bin/pakeai` yang menjalankan `tsx` ke `packages/cli/src/index.ts`. Untuk distribusi production, `packages/cli` dipublish ke npm.
+`numa` saat dev dipanggil via wrapper script di `~/.local/bin/numa` yang menjalankan `tsx` ke `packages/cli/src/index.ts`. Untuk distribusi production, `packages/cli` dipublish ke npm.
 
 ## Alur Aplikasi
 
@@ -50,12 +50,12 @@ pakeai done
 7. **Settings** (`/projects/:id/settings`) — generate PAT (Personal Access Token).
 8. **Execute** (`/projects/:id/execute`) — salin Master Prompt, paste ke AI agent user. Agent menjalankan loop:
    ```
-   npx pakeai login <token>
-   npx pakeai next
-   npx pakeai start
-   npx pakeai context
+   npx numa login <token>
+   npx numa next
+   npx numa start
+   npx numa context
    # kerjakan task HANYA pada file yang diizinkan
-   npx pakeai done
+   npx numa done
    ```
 9. **Checkpoint gate** — saat layer selesai, agent berhenti dan minta approval user.
 
@@ -71,33 +71,33 @@ pakeai done
 DATABASE_URL=postgresql://postgres:admin123@localhost:5432/project_ai_planner
 PORT=6655
 # Daftar origin yang diizinkan, dipisah koma (lokal untuk dev + domain publik untuk akses luar)
-FE_URL=http://localhost:3455,https://pakeai.mrijal.my.id
+FE_URL=http://localhost:3455,https://numa.mrijal.my.id
 AI_PROVIDER=openai
 OPENAI_BASE_URL=http://localhost:20128/v1
 OPENAI_API_KEY=<your-key>
 OPENAI_MODEL=ai-builder
 BETTER_AUTH_SECRET=<random>
-BETTER_AUTH_URL=https://pakeai.mrijal.my.id
+BETTER_AUTH_URL=https://numa.mrijal.my.id
 ```
 
 ## Akses dari Komputer Lain (Cloudflare Tunnel)
 
-Aplikasi di-expose lewat tunnel Cloudflare di satu hostname `pakeai.mrijal.my.id`
+Aplikasi di-expose lewat tunnel Cloudflare di satu hostname `numa.mrijal.my.id`
 (remotely-managed tunnel — ingress diatur dari dashboard Zero Trust, bukan file lokal).
 
 ### Ingress di dashboard Cloudflare (Zero Trust > Networks > Tunnels > Public Hostname)
 
 | Urutan | Hostname | Path | Service |
 |---|---|---|---|
-| 1 | `pakeai.mrijal.my.id` | `/api/*` | `http://localhost:6655` |
-| 2 | `pakeai.mrijal.my.id` | (sisanya) | `http://localhost:3455` |
+| 1 | `numa.mrijal.my.id` | `/api/*` | `http://localhost:6655` |
+| 2 | `numa.mrijal.my.id` | (sisanya) | `http://localhost:3455` |
 
 Urutan penting: rule `/api/*` harus di atas rule catch-all.
 
 ### Web (apps/web/.env)
 
 ```
-VITE_API_URL=https://pakeai.mrijal.my.id
+VITE_API_URL=https://numa.mrijal.my.id
 ```
 
 Dev lokal boleh mengosongkan `VITE_API_URL` (default `http://localhost:6655`).
@@ -107,16 +107,16 @@ Dev lokal boleh mengosongkan `VITE_API_URL` (default `http://localhost:6655`).
 CLI didistribusikan sebagai tarball (tanpa npm registry):
 
 ```bash
-# di mesin ini (hasil: packages/cli/pakeai-<versi>.tgz)
+# di mesin ini (hasil: packages/cli/numa-<versi>.tgz)
 cd packages/cli && npm run build && npm pack
 
 # di komputer lain
-npm install -g ./pakeai-<versi>.tgz
-pakeai login <token PAT dari web UI> --api-url https://pakeai.mrijal.my.id
-pakeai next && pakeai start && pakeai context && pakeai done
+npm install -g ./numa-<versi>.tgz
+numa login <token PAT dari web UI> --api-url https://numa.mrijal.my.id
+numa next && numa start && numa context && numa done
 ```
 
-URL API tersimpan di `~/.pakeai/config.json` saat login, jadi perintah berikutnya tidak perlu flag lagi. Alternatif: set env `PAKEAI_API_URL` atau edit `~/.pakeai/config.json` manual.
+URL API tersimpan di `~/.numa/config.json` saat login, jadi perintah berikutnya tidak perlu flag lagi. Alternatif: set env `NUMA_API_URL` atau edit `~/.numa/config.json` manual.
 
 ## Endpoints API
 

@@ -36,4 +36,4 @@ CHANGELOG.md
 .DS_Store
 Thumbs.db
 *.tgz
-.pakeai/
+.numa/

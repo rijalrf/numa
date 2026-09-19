@@ -12,7 +12,19 @@ export default defineConfig({
     strictPort: true,
     host: true,
     // Izinkan akses lewat domain tunnel Cloudflare / reverse proxy (selain localhost).
-    allowedHosts: ['pakeai.mrijal.my.id', 'pakeai.opendv.xyz'],
+    allowedHosts: ['numa.mrijal.my.id', 'numa.opendv.xyz'],
+    fs: {
+      deny: [
+        '.env',
+        '.env.*',
+        '*.{crt,pem}',
+        '**/.git/**',
+        '**/prisma/seed.ts',
+        '**/prisma/.env',
+        '**/.docker/**',
+        '**/node_modules/.cache/**',
+      ],
+    },
     proxy: {
       '/api': {
         target: process.env.VITE_PROXY_API_URL || 'http://localhost:6655',

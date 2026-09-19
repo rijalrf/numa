@@ -1,10 +1,10 @@
 import assert from 'node:assert';
 
-const API_BASE = process.env.PAKEAI_API_URL || 'http://localhost:6655';
+const API_BASE = process.env.NUMA_API_URL || 'http://localhost:6655';
 
 async function run() {
   console.log('--- 1. REGISTER & LOGIN REAL TEST USER ---');
-  const email = `test-minitask-${Date.now()}@pakeai.dev`;
+  const email = `test-minitask-${Date.now()}@numa.dev`;
   const password = 'PasswordSuperAman123!';
 
   const regRes = await fetch(`${API_BASE}/api/auth/sign-up/email`, {

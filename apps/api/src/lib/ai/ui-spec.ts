@@ -48,7 +48,7 @@ export async function generateUiSpec(args: {
   projectName: string;
   projectId?: string;
 }): Promise<UiSpecData> {
-  const system = `Anda adalah Principal UX/UI Specification Architect untuk pake.ai.
+  const system = `Anda adalah Principal UX/UI Specification Architect untuk Numa.
 Tugas Anda adalah mengubah dokumen kebutuhan canonical (BRD) menjadi Spesifikasi UI/UX Terstruktur yang siap diimplementasikan oleh AI coding agent atau junior frontend developer.
 
 PRINSIP DESIGN SYSTEM & UI CONTRACT:

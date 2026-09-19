@@ -38,7 +38,7 @@ export function ProfilePage() {
       }),
     onSuccess: (res) => {
       setNewToken(res.token);
-      localStorage.setItem('pakeai_active_pat', res.token);
+      localStorage.setItem('numa_active_pat', res.token);
       setName('Token CLI');
       qc.invalidateQueries({ queryKey: ['agent-tokens'] });
     },
@@ -89,7 +89,7 @@ export function ProfilePage() {
             Token Akses Pribadi (PAT)
           </CardTitle>
           <CardDescription>
-            Token digunakan untuk autentikasi CLI di terminal (<code>npx pakeai login &lt;token&gt;</code>).
+            Token digunakan untuk autentikasi CLI di terminal (<code>npx numa login &lt;token&gt;</code>).
             Satu token mewakili identitas Anda dan dapat mengakses semua proyek Anda. Token plaintext hanya ditampilkan sekali saat dibuat.
           </CardDescription>
         </CardHeader>

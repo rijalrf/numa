@@ -38,7 +38,7 @@ export const toolsRegistry: ToolMeta[] = [
   {
     id: 'execute',
     name: 'Eksekusi via CLI',
-    description: 'Salin Master Prompt dan jalankan AI Agent lewat `npx pakeai`.',
+    description: 'Salin Master Prompt dan jalankan AI Agent lewat `npx numa`.',
     icon: 'Terminal',
     href: (projectId) => `/projects/${projectId}/execute`,
     status: 'available',
