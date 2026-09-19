@@ -7,7 +7,7 @@ import { useLocation } from 'react-router-dom';
 export default function WizardLayout() {
   const location = useLocation();
   const isChat = location.pathname.startsWith('/chat/');
-  const isHome = location.pathname === '/';
+  const isHome = location.pathname === '/dashboard';
 
   return (
     <WizardNavProvider>

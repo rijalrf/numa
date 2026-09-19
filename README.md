@@ -1,6 +1,6 @@
-# pakeai — AI Software Factory
+# Numa — AI Software Factory
 
-Platform SaaS yang mengubah ide aplikasi menjadi project siap eksekusi secara otomatis. User mendeskripsikan ide, lalu AI memandu melalui wizard bertahap: wawancara kebutuhan (interview), pemilihan tech stack, pembuatan dokumen bisnis (BRD), perancangan arsitektur (tree), dan pemecahan menjadi atomic tasks dengan bounded context ketat. Hasil akhirnya dieksekusi oleh AI coding agent di komputer user via CLI `pakeai`.
+Platform SaaS yang mengubah ide aplikasi menjadi project siap eksekusi secara otomatis. User mendeskripsikan ide, lalu AI memandu melalui wizard bertahap: wawancara kebutuhan (interview), pemilihan tech stack, pembuatan dokumen bisnis (BRD), perancangan arsitektur (tree), dan pemecahan menjadi atomic tasks dengan bounded context ketat. Hasil akhirnya dieksekusi oleh AI coding agent di komputer user via CLI `numa`.
 
 Pipeline: Chat (brainstorm) -> Interview (discovery) -> Tech Stack -> BRD -> Tree (hierarki) -> Board (atomic tasks Kanban) -> Guide (master prompt + PAT) -> Eksekusi CLI.
 

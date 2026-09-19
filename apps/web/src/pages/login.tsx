@@ -12,7 +12,7 @@ export function LoginPage() {
     setErr(null);
     setLoading(true);
     try {
-      const callbackURL = typeof window !== 'undefined' ? `${window.location.origin}/` : '/';
+      const callbackURL = typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : '/dashboard';
       await signIn.social({ provider: 'google', callbackURL });
       // signIn.social mengalihkan ke halaman persetujuan Google secara otomatis.
     } catch {
@@ -25,11 +25,14 @@ export function LoginPage() {
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">
-            <span className="text-green-600 dark:text-green-400">pake</span>.ai
+          <CardTitle className="flex items-center justify-center gap-2 text-2xl">
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-[#2D7E79] to-[#76B8A7]">
+              <span className="text-xs font-bold text-white">N</span>
+            </div>
+            <span className="text-foreground">Numa</span>
           </CardTitle>
           <CardDescription>
-            Perencana proyek berbasis AI. Masuk dengan akun Google Anda untuk melanjutkan.
+            AI Software Factory. Masuk dengan akun Google Anda untuk melanjutkan.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">

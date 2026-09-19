@@ -33,14 +33,14 @@ export function HomePage() {
     <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center gap-8 px-6">
       {/* Teks tengah */}
       <h1 className="text-4xl font-semibold text-center text-foreground">
-        Mau pake.ai buat apa?
+        Mau Numa buat apa?
       </h1>
 
       {/* 1 Card BRD */}
       <Card className="w-full max-w-md border-primary shadow-lg hover:shadow-xl transition-shadow">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <FileText className="h-6 w-6 text-green-600 dark:text-green-400" />
+            <FileText className="h-6 w-6 text-primary" />
             Susun BRD & Rencana Aplikasi
           </CardTitle>
           <CardDescription>

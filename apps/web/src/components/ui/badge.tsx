@@ -9,7 +9,7 @@ export function Badge({ className, variant = 'default', ...rest }: BadgeProps) {
   const variantClasses = {
     default: 'bg-primary text-primary-foreground hover:bg-primary/80',
     outline: 'border border-input bg-transparent hover:bg-accent',
-    success: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+    success: 'bg-primary/15 text-primary dark:bg-primary/20 dark:text-primary',
     warning: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
   };
 

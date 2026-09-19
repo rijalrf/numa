@@ -11,3 +11,5 @@ build/
 .turbo
 coverage/
 *.txt
+.refira/
+.agents/

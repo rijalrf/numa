@@ -35,7 +35,7 @@ export function Stepper() {
               <div key={step.id} className="flex items-center flex-1">
                 <div className="flex items-center gap-2">
                   {isCompleted ? (
-                    <Check className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    <Check className="h-5 w-5 text-primary" />
                   ) : isActive ? (
                     <Circle className="h-5 w-5 text-primary fill-current opacity-20" />
                   ) : (

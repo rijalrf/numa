@@ -99,8 +99,11 @@ export function Header() {
       <div className="px-6 py-2.5 flex items-center justify-between gap-4">
         {/* Kiri: Logo pake.ai + Pemisah + Judul & Subjudul Halaman */}
         <div className="flex items-center gap-3.5 min-w-0">
-          <Link to="/" className="font-semibold text-xl shrink-0">
-            <span className="text-green-600 dark:text-green-400">pake</span>.ai
+          <Link to="/dashboard" className="flex items-center gap-2 shrink-0">
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-[#2D7E79] to-[#76B8A7]">
+              <span className="text-xs font-bold text-white">N</span>
+            </div>
+            <span className="font-semibold text-lg tracking-tight text-foreground">Numa</span>
           </Link>
 
           {pageInfo && (

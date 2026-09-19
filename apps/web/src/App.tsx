@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useSession } from '@/lib/auth-client';
 import { LoginPage } from '@/pages/login';
+import { LandingPage } from '@/pages/landing';
 import { HomePage } from '@/pages/home';
 import { ProfilePage } from '@/pages/profile';
 import { ProjectsPage } from '@/pages/projects/index';
@@ -20,10 +21,18 @@ function Protected({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Redirect cerdas: auth -> /dashboard, unauth -> /
+function SmartRedirect() {
+  const { data, isPending } = useSession();
+  if (isPending) return <div className="p-8 text-muted-foreground">Memuat...</div>;
+  return <Navigate to={data?.user ? '/dashboard' : '/'} replace />;
+}
+
 export function App() {
   return (
     <Routes>
       {/* Public routes */}
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
 
       {/* Protected routes wrapped in WizardLayout */}
@@ -34,7 +43,7 @@ export function App() {
           </Protected>
         }
       >
-        <Route path="/" element={<HomePage />} />
+        <Route path="/dashboard" element={<HomePage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/chat/:sessionId" element={<ChatPage />} />
@@ -46,8 +55,8 @@ export function App() {
         <Route path="/projects/:projectId/settings" element={<SettingsPage />} />
       </Route>
 
-      {/* Fallback 404 */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* Fallback */}
+      <Route path="*" element={<SmartRedirect />} />
     </Routes>
   );
 }
