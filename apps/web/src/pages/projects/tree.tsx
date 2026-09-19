@@ -1,7 +1,6 @@
 // Tree Diagram page: Visualisasi diagram arsitektur pohon modern horizontal (full-width & interaktif)
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -18,7 +17,8 @@ import {
   CheckCircle2,
   ListTree,
   Lock,
-  Palette,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { api } from '@/lib/http';
 import { cn } from '@/lib/utils';
@@ -59,6 +59,24 @@ export function TreePage() {
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const canvasWrapperRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      canvasWrapperRef.current?.requestFullscreen?.();
+    } else {
+      document.exitFullscreen?.();
+    }
+  };
 
   // Load atau generate tree
   useEffect(() => {
@@ -289,17 +307,6 @@ export function TreePage() {
       label: 'Kembali ke BRD',
       onClick: handleBackToBrd,
     },
-    extra: (
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={() => navigate(`/projects/${projectId}/ui-spec`)}
-        className="gap-1.5 text-xs h-8 font-medium cursor-pointer"
-      >
-        <Palette className="h-3.5 w-3.5 text-primary" />
-        <span>Review UI Spec</span>
-      </Button>
-    ),
     next: {
       label: 'Lanjut ke Board Task',
       onClick: () => navigate(`/projects/${projectId}/board`),
@@ -308,149 +315,147 @@ export function TreePage() {
 
   if (loading || generating) {
     return (
-      <div className="w-full space-y-6">
-        <Card className="border-border">
-          <CardContent className="h-[650px] flex flex-col items-center justify-center space-y-4">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <div className="text-center space-y-1">
-              <p className="text-sm font-medium text-foreground">
-                Menyusun diagram struktur arsitektur aplikasi...
-              </p>
-              <p className="text-xs text-muted-foreground">
-                AI sedang memetakan hierarki pohon fitur dan rincian modul teknis
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="flex-1 w-full h-full min-h-[400px] flex flex-col items-center justify-center space-y-4 bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="text-center space-y-1">
+          <p className="text-sm font-medium text-foreground">
+            Menyusun diagram struktur arsitektur aplikasi...
+          </p>
+          <p className="text-xs text-muted-foreground">
+            AI sedang memetakan hierarki pohon fitur dan rincian modul teknis
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full space-y-5">
-      {/* Banner terkunci jika sudah lewat Tree */}
-      {isLocked && (
-        <div className="flex items-center gap-2.5 p-3.5 bg-muted/70 border border-border rounded-xl text-xs text-muted-foreground shadow-xs">
-          <Lock className="h-4 w-4 text-primary shrink-0" />
-          <span>
-            Tahap Diagram Struktur telah selesai dan terkunci (Read-Only). Diagram arsitektur pohon tersimpan permanen dan tidak dapat di-generate ulang.
-          </span>
-        </div>
-      )}
+    <div
+      ref={canvasWrapperRef}
+      className="flex-1 w-full h-full min-h-0 flex flex-col relative overflow-hidden bg-card select-none"
+    >
+      {/* Floating Toolbar & Status (Kiri Atas) */}
+      <div className="absolute top-4 left-4 z-20 flex items-center gap-2 flex-wrap max-w-[calc(100%-240px)]">
+        {isLocked && (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-background/90 backdrop-blur-md border border-border/80 rounded-xl text-xs text-muted-foreground shadow-md">
+            <Lock className="h-3.5 w-3.5 text-primary shrink-0" />
+            <span className="font-medium">Terkunci (Read-Only)</span>
+          </div>
+        )}
 
-      {/* Toolbar Kontrol Level & Aksi */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-xs px-2.5 py-1 font-normal">
+        <div className="flex items-center gap-1 bg-background/90 backdrop-blur-md border border-border/80 p-1 rounded-xl shadow-md text-xs">
+          <Badge variant="outline" className="text-xs px-2.5 py-1 font-normal border-0 text-muted-foreground">
             Total {nodes.length} Simpul
           </Badge>
-          <span className="text-xs text-muted-foreground">
-            Klik simpul untuk melihat rincian detail spesifikasi
-          </span>
-        </div>
-
-        {/* Toolbar Kontrol Level & Aksi */}
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* Switcher Level */}
-          <div className="inline-flex rounded-lg border border-border p-1 bg-muted/40 text-xs">
-            <button
-              type="button"
-              onClick={() => setViewMode('architecture')}
-              className={cn(
-                'px-3 py-1.5 rounded-md font-medium transition-colors flex items-center gap-1.5',
-                viewMode === 'architecture'
-                  ? 'bg-background text-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              <Layers className="h-3.5 w-3.5 text-primary" />
-              <span>Arsitektur Fitur</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('full')}
-              className={cn(
-                'px-3 py-1.5 rounded-md font-medium transition-colors flex items-center gap-1.5',
-                viewMode === 'full'
-                  ? 'bg-background text-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              <ListTree className="h-3.5 w-3.5" />
-              <span>Semua Task ({nodes.length})</span>
-            </button>
-          </div>
+          <div className="h-4 w-px bg-border mx-0.5" />
+          <button
+            type="button"
+            onClick={() => setViewMode('architecture')}
+            className={cn(
+              'px-3 py-1 rounded-lg font-medium transition-colors flex items-center gap-1.5 cursor-pointer',
+              viewMode === 'architecture'
+                ? 'bg-primary/15 text-primary font-semibold shadow-2xs'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <Layers className="h-3.5 w-3.5" />
+            <span>Arsitektur Fitur</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('full')}
+            className={cn(
+              'px-3 py-1 rounded-lg font-medium transition-colors flex items-center gap-1.5 cursor-pointer',
+              viewMode === 'full'
+                ? 'bg-primary/15 text-primary font-semibold shadow-2xs'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <ListTree className="h-3.5 w-3.5" />
+            <span>Semua Task ({nodes.length})</span>
+          </button>
 
           {!isLocked && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={generateTree}
-              disabled={generating}
-              className="gap-1.5 text-xs h-8"
-            >
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
-              <span>Generate Ulang</span>
-            </Button>
+            <>
+              <div className="h-4 w-px bg-border mx-0.5" />
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={generateTree}
+                disabled={generating}
+                className="gap-1.5 text-xs h-7 px-2.5 font-medium cursor-pointer hover:bg-accent"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-primary" />
+                <span>Generate Ulang</span>
+              </Button>
+            </>
           )}
         </div>
       </div>
 
-      {/* Kanvas Diagram Pohon Modern (Lebar Penuh & Interaktif) */}
-      <div className="relative border border-border/80 rounded-2xl bg-card overflow-hidden shadow-xs">
-        {/* Floating Controls HUD (Kanan Atas) */}
-        <div className="absolute top-4 right-4 z-10 flex items-center gap-1.5 bg-background/85 backdrop-blur-md border border-border/80 p-1.5 rounded-xl shadow-md">
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={() => handleZoom(0.15)}
-            className="h-8 w-8 hover:bg-accent"
-            title="Perbesar (Zoom In)"
-          >
-            <ZoomIn className="h-4 w-4" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={() => handleZoom(-0.15)}
-            className="h-8 w-8 hover:bg-accent"
-            title="Perkecil (Zoom Out)"
-          >
-            <ZoomOut className="h-4 w-4" />
-          </Button>
-          <div className="h-4 w-px bg-border mx-0.5" />
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={handleResetView}
-            className="h-8 w-8 hover:bg-accent"
-            title="Reset Posisi & Skala"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-          </Button>
-          <span className="text-xs text-muted-foreground px-2 font-mono font-medium">
-            {Math.round(zoom * 100)}%
-          </span>
-        </div>
-
-        {/* Floating Hint (Kiri Bawah) */}
-        <div className="absolute bottom-4 left-4 z-10 pointer-events-none text-xs text-muted-foreground bg-background/85 backdrop-blur-md px-3 py-1.5 rounded-lg border border-border/70 shadow-xs flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-primary" />
-          <span>Geser kanvas (drag) untuk bernavigasi • Klik kartu untuk rincian</span>
-        </div>
-
-        {/* Viewport Drag & Zoom */}
-        <div
-          ref={containerRef}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-          className={cn(
-            'h-[720px] w-full overflow-hidden select-none relative',
-            isPanning ? 'cursor-grabbing' : 'cursor-grab'
-          )}
+      {/* Floating Controls HUD (Kanan Atas) */}
+      <div className="absolute top-4 right-4 z-20 flex items-center gap-1.5 bg-background/90 backdrop-blur-md border border-border/80 p-1.5 rounded-xl shadow-md">
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => handleZoom(0.15)}
+          className="h-8 w-8 hover:bg-accent cursor-pointer"
+          title="Perbesar (Zoom In)"
         >
+          <ZoomIn className="h-4 w-4" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => handleZoom(-0.15)}
+          className="h-8 w-8 hover:bg-accent cursor-pointer"
+          title="Perkecil (Zoom Out)"
+        >
+          <ZoomOut className="h-4 w-4" />
+        </Button>
+        <div className="h-4 w-px bg-border mx-0.5" />
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={handleResetView}
+          className="h-8 w-8 hover:bg-accent cursor-pointer"
+          title="Reset Posisi & Skala"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+        </Button>
+        <span className="text-xs text-muted-foreground px-1.5 font-mono font-medium min-w-[40px] text-center">
+          {Math.round(zoom * 100)}%
+        </span>
+        <div className="h-4 w-px bg-border mx-0.5" />
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={toggleFullscreen}
+          className="h-8 w-8 hover:bg-accent cursor-pointer"
+          title={isFullscreen ? 'Keluar Layar Penuh' : 'Layar Penuh (Full Screen)'}
+        >
+          {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+        </Button>
+      </div>
+
+      {/* Floating Hint (Kiri Bawah) */}
+      <div className="absolute bottom-4 left-4 z-20 pointer-events-none text-xs text-muted-foreground bg-background/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-border/70 shadow-xs flex items-center gap-2">
+        <span className="h-2 w-2 rounded-full bg-primary" />
+        <span>Geser kanvas (drag) untuk bernavigasi • Klik kartu untuk rincian</span>
+      </div>
+
+      {/* Viewport Drag & Zoom (Full Screen) */}
+      <div
+        ref={containerRef}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        className={cn(
+          'flex-1 w-full h-full min-h-0 overflow-hidden select-none relative',
+          isPanning ? 'cursor-grabbing' : 'cursor-grab'
+        )}
+      >
           <div
             style={{
               transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
@@ -592,9 +597,8 @@ export function TreePage() {
             })}
           </div>
         </div>
-      </div>
 
-      {/* Modal Detail Node (Read-Only) */}
+        {/* Modal Detail Node (Read-Only) */}
       {selectedNode && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150"

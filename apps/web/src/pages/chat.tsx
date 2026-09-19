@@ -29,8 +29,9 @@ function parsePayload(val: any) {
 }
 
 export function ChatPage() {
-  const { sessionId } = useParams<{ sessionId: string }>();
+  const { sessionId: routeSessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
+  const [activeSessionId, setActiveSessionId] = useState<string | undefined>(routeSessionId);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -39,13 +40,21 @@ export function ChatPage() {
   const [isFinalizing, setIsFinalizing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    setActiveSessionId(routeSessionId);
+  }, [routeSessionId]);
+
   // Load pesan saat mount
   useEffect(() => {
-    if (!sessionId) return;
+    if (!activeSessionId) {
+      setMessages([]);
+      setShowFinishButton(false);
+      return;
+    }
 
     const loadMessages = async () => {
       try {
-        const json = await api<{ messages?: any[] }>(`/api/chat/sessions/${sessionId}/messages`);
+        const json = await api<{ messages?: any[] }>(`/api/chat/sessions/${activeSessionId}/messages`);
         const rawMsgs = json.messages || [];
         const msgs = rawMsgs.map((m: any) => ({
           ...m,
@@ -62,7 +71,7 @@ export function ChatPage() {
     };
 
     loadMessages();
-  }, [sessionId]);
+  }, [activeSessionId]);
 
   // Auto-scroll ke bawah saat ada pesan baru
   useEffect(() => {
@@ -87,8 +96,29 @@ export function ChatPage() {
     setIsTyping(true);
     setShowFinishButton(false);
 
+    let targetSessionId = activeSessionId;
+    if (!targetSessionId) {
+      try {
+        const sessionRes = await api<{ sessionId: string }>('/api/chat/sessions', {
+          method: 'POST',
+        });
+        if (!sessionRes.sessionId) {
+          throw new Error('Sesi gagal dibuat.');
+        }
+        targetSessionId = sessionRes.sessionId;
+        setActiveSessionId(targetSessionId);
+        window.history.replaceState(null, '', `/chat/${targetSessionId}`);
+      } catch (err) {
+        console.error('Gagal membuat sesi chat:', err);
+        setIsLoading(false);
+        setIsTyping(false);
+        alert('Terjadi kesalahan saat memulai sesi chat.');
+        return;
+      }
+    }
+
     try {
-      const aiResponse = await api<any>(`/api/chat/sessions/${sessionId}/messages`, {
+      const aiResponse = await api<any>(`/api/chat/sessions/${targetSessionId}/messages`, {
         method: 'POST',
         body: JSON.stringify({ content: textToSend }),
       });
@@ -115,11 +145,12 @@ export function ChatPage() {
   };
 
   const retryLastMessage = async () => {
+    if (!activeSessionId) return;
     setIsLoading(true);
     setIsTyping(true);
     setShowFinishButton(false);
     try {
-      const aiResponse = await api<any>(`/api/chat/sessions/${sessionId}/retry`, {
+      const aiResponse = await api<any>(`/api/chat/sessions/${activeSessionId}/retry`, {
         method: 'POST',
       });
       setMessages((prev) => {
@@ -149,6 +180,7 @@ export function ChatPage() {
   };
 
   const handleFormSubmit = async (answers: Record<string, string>) => {
+    if (!activeSessionId) return;
     const serialized = Object.entries(answers)
       .map(([key, value]) => `${key}: ${value}`)
       .join(', ');
@@ -167,7 +199,7 @@ export function ChatPage() {
     setShowFinishButton(false);
 
     try {
-      const aiResponse = await api<any>(`/api/chat/sessions/${sessionId}/messages`, {
+      const aiResponse = await api<any>(`/api/chat/sessions/${activeSessionId}/messages`, {
         method: 'POST',
         body: JSON.stringify({ content: serialized, formAnswers: answers }),
       });
@@ -193,10 +225,11 @@ export function ChatPage() {
   };
 
   const finalizeProject = async () => {
+    if (!activeSessionId) return;
     setIsFinalizing(true);
 
     try {
-      const json = await api<{ projectId?: string }>(`/api/chat/sessions/${sessionId}/finalize`, {
+      const json = await api<{ projectId?: string }>(`/api/chat/sessions/${activeSessionId}/finalize`, {
         method: 'POST',
       });
 

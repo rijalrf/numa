@@ -1,22 +1,23 @@
 // WizardLayout: Header + WizardNav (sticky top) + content
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Header } from './header';
 import { WizardNavProvider, WizardNav } from './wizard-nav';
-import { useLocation } from 'react-router-dom';
+import { cn } from '@/lib/utils';
 
 export default function WizardLayout() {
   const location = useLocation();
   const isChat = location.pathname.startsWith('/chat/');
   const isHome = location.pathname === '/dashboard';
+  const isTree = location.pathname.includes('/tree');
 
   return (
     <WizardNavProvider>
-      <div className="min-h-screen bg-background flex flex-col">
-        <div className="sticky top-0 z-50">
+      <div className={cn('bg-background flex flex-col', isTree ? 'h-screen overflow-hidden' : 'min-h-screen')}>
+        <div className="sticky top-0 z-50 shrink-0">
           <Header />
           <WizardNav />
         </div>
-        <main className={isChat || isHome ? 'flex-1' : 'px-6 py-6 flex-1'}>
+        <main className={cn('flex-1', isChat || isHome ? 'flex flex-col' : isTree ? 'flex flex-col min-h-0 overflow-hidden' : 'px-6 py-6')}>
           <Outlet />
         </main>
       </div>

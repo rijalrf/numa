@@ -137,7 +137,7 @@ app.use('/api/projects/:id/agent-tokens', tokenRateLimiter);
 // Health & meta
 // ============================================================
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, service: 'numa-api', port: PORT, time: new Date().toISOString() });
+  res.json({ ok: true });
 });
 
 app.get('/api/tools', (_req, res) => {
@@ -1660,7 +1660,27 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
     }
 
     await prisma.project.update({ where: { id: project.id }, data: { wizardStep: 'board' } });
-    res.json({ ok: true, count: generated.length, cleanupWarnings: cleanupResult.warnings });
+
+    const tasks = await prisma.task.findMany({
+      where: { projectId: project.id },
+      include: {
+        dependsOn: {
+          include: {
+            dependsOn: { select: { id: true, title: true, status: true, order: true } },
+          },
+        },
+      },
+      orderBy: { order: 'asc' },
+    });
+    const userStories = (project.brd?.content as any)?.userStories ?? [];
+
+    res.json({
+      ok: true,
+      count: tasks.length,
+      tasks,
+      userStories,
+      cleanupWarnings: cleanupResult.warnings,
+    });
   } catch (err) {
     res.status(502).json({ error: 'AI gagal menghasilkan tasks.', detail: (err as Error).message });
   }
@@ -2082,8 +2102,11 @@ app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
 // ============================================================
 // Start
 // ============================================================
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`[numa-api] listening on http://localhost:${PORT}`);
   console.log(`[numa-api] CORS origins: ${FE_ORIGINS.join(', ')}`);
   console.log(`[numa-api] Better Auth baseURL: ${process.env.BETTER_AUTH_URL}`);
 });
+server.setTimeout(300000);
+server.headersTimeout = 305000;
+server.requestTimeout = 300000;

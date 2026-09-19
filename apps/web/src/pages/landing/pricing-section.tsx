@@ -35,8 +35,8 @@ export function PricingSection() {
       <div className="mx-auto max-w-4xl px-6">
         <div className="text-center mb-16">
           <p className="font-mono text-xs tracking-[0.3em] uppercase text-numa-primary mb-4">Harga</p>
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Mulai gratis. Serius.</h2>
-          <p className="mt-3 text-numa-muted-light text-base">Tidak perlu kartu kredit. Upgrade kalau sudah ketagihan.</p>
+          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Mulai gratis. Tanpa komitmen.</h2>
+          <p className="mt-3 text-numa-muted-light text-base">Tanpa kartu kredit. Skalakan kapasitas saat kompleksitas sistem Anda bertumbuh.</p>
         </div>
 
         <div className="grid gap-5 md:grid-cols-2">

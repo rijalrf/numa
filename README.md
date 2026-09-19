@@ -1,8 +1,10 @@
 # Numa — AI Software Factory
 
-Platform SaaS yang mengubah ide aplikasi menjadi project siap eksekusi secara otomatis. User mendeskripsikan ide, lalu AI memandu melalui wizard bertahap: wawancara kebutuhan (interview), pemilihan tech stack, pembuatan dokumen bisnis (BRD), perancangan arsitektur (tree), dan pemecahan menjadi atomic tasks dengan bounded context ketat. Hasil akhirnya dieksekusi oleh AI coding agent di komputer user via CLI `numa`.
+> Shape ideas into software.
 
-Pipeline: Chat (brainstorm) -> Interview (discovery) -> Tech Stack -> BRD -> Tree (hierarki) -> Board (atomic tasks Kanban) -> Guide (master prompt + PAT) -> Eksekusi CLI.
+Workspace perencanaan dan eksekusi software yang mengubah ide produk menjadi arsitektur terstruktur dan task atomic yang siap dieksekusi oleh AI agent di terminal lokal. Panduan brand, design tokens, dan sistem penamaan fitur tersedia di [BRAND.md](BRAND.md).
+
+Pipeline: Numa Brief (Chat & Interview) -> Numa Blueprint (Tech Stack & BRD) -> Numa Flow (Tree) -> Numa Forge (Kanban Tasks) -> Numa Agent (CLI Runner).
 
 ## Stack
 

@@ -13,14 +13,13 @@ export function HeroSection() {
           </div>
 
           <h1 className="text-[clamp(2.4rem,5.5vw,4.5rem)] font-extrabold leading-[0.95] tracking-tight">
-            <span className="reveal-line block"><span>Kamu punya ide.</span></span>
-            <span className="reveal-line block mt-1"><span className="text-numa-muted">Biar AI yang</span></span>
-            <span className="reveal-line block mt-1"><span className="text-numa-muted">urus sisanya<span className="cursor-blink"></span></span></span>
+            <span className="reveal-line block"><span>Shape ideas</span></span>
+            <span className="reveal-line block mt-1"><span className="text-numa-muted">into software<span className="cursor-blink"></span></span></span>
           </h1>
 
           <div className="reveal-line mt-8 max-w-md">
             <p className="text-base leading-relaxed text-numa-muted-light">
-              Deskripsikan aplikasimu. Numa merancang arsitektur, memecah jadi task atomic, dan menjalankannya lewat AI agent -- langsung di terminalmu.
+              Workspace perencanaan dan eksekusi software yang mengubah ide produk menjadi arsitektur terstruktur dan task atomic yang siap dieksekusi oleh AI agent di terminal lokal.
             </p>
           </div>
 
@@ -64,25 +63,25 @@ export function HeroSection() {
             <div className="absolute top-6 left-1/2 -translate-x-1/2 node-pop" style={{ animationDelay: '0.3s' }}>
               <div className="flex items-center gap-2 rounded-xl bg-numa-card border border-numa-primary/25 px-3.5 py-2.5 shadow-[0_0_20px_rgba(45,126,121,0.1)]">
                 <MessageSquareText className="text-numa-accent" size={16} />
-                <span className="text-[11px] font-medium text-numa-text">Interview</span>
+                <span className="text-[11px] font-medium text-numa-text">Brief</span>
               </div>
             </div>
             <div className="absolute right-2 top-1/2 -translate-y-1/2 node-pop" style={{ animationDelay: '0.6s' }}>
               <div className="flex items-center gap-2 rounded-xl bg-numa-card border border-numa-primary/25 px-3.5 py-2.5 shadow-[0_0_20px_rgba(45,126,121,0.1)]">
                 <FileText className="text-numa-accent" size={16} />
-                <span className="text-[11px] font-medium text-numa-text">BRD</span>
+                <span className="text-[11px] font-medium text-numa-text">Blueprint</span>
               </div>
             </div>
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 node-pop" style={{ animationDelay: '0.9s' }}>
               <div className="flex items-center gap-2 rounded-xl bg-numa-card border border-numa-primary/25 px-3.5 py-2.5 shadow-[0_0_20px_rgba(45,126,121,0.1)]">
                 <Kanban className="text-numa-accent" size={16} />
-                <span className="text-[11px] font-medium text-numa-text">Tasks</span>
+                <span className="text-[11px] font-medium text-numa-text">Forge</span>
               </div>
             </div>
             <div className="absolute left-2 top-1/2 -translate-y-1/2 node-pop" style={{ animationDelay: '1.2s' }}>
               <div className="flex items-center gap-2 rounded-xl bg-numa-card border border-numa-primary/25 px-3.5 py-2.5 shadow-[0_0_20px_rgba(45,126,121,0.1)]">
                 <GitBranch className="text-numa-accent" size={16} />
-                <span className="text-[11px] font-medium text-numa-text">Tree</span>
+                <span className="text-[11px] font-medium text-numa-text">Flow</span>
               </div>
             </div>
             <div className="absolute top-16 right-10 node-pop" style={{ animationDelay: '1.5s' }}>
@@ -94,7 +93,7 @@ export function HeroSection() {
             <div className="absolute bottom-16 left-10 node-pop" style={{ animationDelay: '1.8s' }}>
               <div className="flex items-center gap-2 rounded-xl bg-numa-card border border-white/[.06] px-3 py-2 shadow-[0_0_15px_rgba(45,126,121,0.05)]">
                 <Terminal className="text-numa-muted" size={14} />
-                <span className="text-[10px] text-numa-muted">CLI</span>
+                <span className="text-[10px] text-numa-muted">Agent CLI</span>
               </div>
             </div>
             <div className="absolute top-20 left-14 node-pop" style={{ animationDelay: '2.1s' }}>

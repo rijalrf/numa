@@ -2,14 +2,12 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useSession } from '@/lib/auth-client';
 import { LoginPage } from '@/pages/login';
 import { LandingPage } from '@/pages/landing';
-import { HomePage } from '@/pages/home';
 import { ProfilePage } from '@/pages/profile';
 import { ProjectsPage } from '@/pages/projects/index';
 import { ChatPage } from '@/pages/chat';
 import { TechStackPage } from '@/pages/projects/techstack';
 import { BrdPage } from '@/pages/projects/brd';
 import { TreePage } from '@/pages/projects/tree';
-import { UiSpecPage } from '@/pages/projects/ui-spec';
 import { BoardPage } from '@/pages/projects/board';
 import { SettingsPage } from '@/pages/projects/settings';
 import WizardLayout from '@/components/layout/wizard-layout';
@@ -43,14 +41,13 @@ export function App() {
           </Protected>
         }
       >
-        <Route path="/dashboard" element={<HomePage />} />
+        <Route path="/dashboard" element={<ChatPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/chat/:sessionId" element={<ChatPage />} />
         <Route path="/projects/:projectId/techstack" element={<TechStackPage />} />
         <Route path="/projects/:projectId/brd" element={<BrdPage />} />
         <Route path="/projects/:projectId/tree" element={<TreePage />} />
-        <Route path="/projects/:projectId/ui-spec" element={<UiSpecPage />} />
         <Route path="/projects/:projectId/board" element={<BoardPage />} />
         <Route path="/projects/:projectId/settings" element={<SettingsPage />} />
       </Route>
