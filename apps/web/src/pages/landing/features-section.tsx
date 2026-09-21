@@ -23,8 +23,8 @@ const CARDS = [
     span: 'md:col-span-5',
     step: '02',
     label: 'Numa Blueprint',
-    title: 'Dokumen kebutuhan bisnis presisi',
-    desc: 'Functional requirements, business rules, dan batasan teknis (BRD) dihasilkan otomatis dari jawaban interview, bukan template kosong.',
+    title: 'Dokumen kebutuhan produk presisi',
+    desc: 'Functional requirements, product rules, dan batasan teknis (PRD) dihasilkan otomatis dari jawaban wawancara kebutuhan, bukan template kosong.',
     mockup: (
       <div className="mt-6 space-y-1.5">
         <div className="h-2 w-full rounded-full bg-white/[.04]"></div>

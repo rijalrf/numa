@@ -1,13 +1,13 @@
-// Stepper indikator langkah wizard (Chat → Tech Stack → BRD → Struktur → Board)
+// Stepper indikator langkah wizard (Chat → Tech Stack → PRD → Struktur → Board)
 import { useLocation } from 'react-router-dom';
 import { Check, Circle } from 'lucide-react';
 
 const STEPS = [
-  { id: 'chat', label: 'Chat', pathMatch: '/chat/:sessionId' },
-  { id: 'techstack', label: 'Tech Stack', pathMatch: '/projects/:id/techstack' },
-  { id: 'brd', label: 'BRD', pathMatch: '/projects/:id/brd' },
-  { id: 'tree', label: 'Struktur', pathMatch: '/projects/:id/tree' },
-  { id: 'board', label: 'Board', pathMatch: '/projects/:id/board' },
+  { id: 'chat', label: 'Chat', match: (p: string) => p.startsWith('/chat') },
+  { id: 'techstack', label: 'Tech Stack', match: (p: string) => p.includes('/techstack') },
+  { id: 'prd', label: 'PRD', match: (p: string) => p.includes('/prd') || p.includes('/brd') },
+  { id: 'tree', label: 'Struktur', match: (p: string) => p.includes('/tree') },
+  { id: 'board', label: 'Board', match: (p: string) => p.includes('/board') },
 ];
 
 export function Stepper() {
@@ -17,7 +17,7 @@ export function Stepper() {
   let currentStepIndex = -1;
   for (let i = 0; i < STEPS.length; i++) {
     const step = STEPS[i];
-    if (location.pathname.match(step.pathMatch)) {
+    if (step.match(location.pathname)) {
       currentStepIndex = i;
       break;
     }

@@ -12,17 +12,17 @@ export type ToolMeta = {
 
 export const toolsRegistry: ToolMeta[] = [
   {
-    id: 'brd-generator',
-    name: 'BRD Generator',
-    description: 'Wawancara AI untuk menggali kebutuhan, hasilkan Business Requirements Document.',
+    id: 'prd-generator',
+    name: 'PRD Generator',
+    description: 'Wawancara AI untuk menggali kebutuhan, hasilkan Product Requirements Document.',
     icon: 'FileText',
-    href: (projectId) => `/projects/${projectId}/brd`,
+    href: (projectId) => `/projects/${projectId}/prd`,
     status: 'available',
   },
   {
     id: 'roadmap',
     name: 'Roadmap Visual',
-    description: 'Diagram alur fase & fitur dari BRD, mudah dipahami.',
+    description: 'Diagram alur fase & fitur dari PRD, mudah dipahami.',
     icon: 'GitBranch',
     href: (projectId) => `/projects/${projectId}/roadmap`,
     status: 'available',

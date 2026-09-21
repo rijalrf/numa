@@ -117,18 +117,18 @@ Output JSON WAJIB:
 // ===============================================
 
 export async function recommendTechStack(projectId: string): Promise<{ techStack: string[]; reasoning: string }> {
-  const [project, brd] = await Promise.all([
+  const [project, prd] = await Promise.all([
     prisma.project.findUnique({ where: { id: projectId } }),
-    prisma.brd.findUnique({ where: { projectId } }),
+    prisma.prd.findUnique({ where: { projectId } }),
   ]);
 
   if (!project) throw new Error('Project tidak ditemukan');
 
-  const brdContent = brd?.content ? JSON.stringify(brd.content) : project.idea;
+  const prdContent = prd?.content ? JSON.stringify(prd.content) : project.idea;
 
   const result = await generateJson({
     system: RECOMMEND_TECH_STACK_PROMPT,
-    user: `Nama aplikasi: ${project.name}\nIde & fitur: ${brdContent}`,
+    user: `Nama aplikasi: ${project.name}\nIde & fitur: ${prdContent}`,
     schema: RecommendTechStackSchema,
     maxRetries: 2,
   });
@@ -140,21 +140,22 @@ export async function recommendTechStack(projectId: string): Promise<{ techStack
 // TREE GENERATION
 // ===============================================
 
-export async function generateTreeFromBrd(projectId: string): Promise<{ id: string; parentId: string | null; label: string; kind: string; order: number }[]> {
-  const [project, brd] = await Promise.all([
+export async function generateTreeFromPrd(projectId: string): Promise<{ id: string; parentId: string | null; label: string; kind: string; order: number }[]> {
+  const [project, prd] = await Promise.all([
     prisma.project.findUnique({ where: { id: projectId } }),
-    prisma.brd.findUnique({ where: { projectId } }),
+    prisma.prd.findUnique({ where: { projectId } }),
   ]);
 
-  if (!project || !brd) throw new Error('Project atau BRD tidak ditemukan');
+  if (!project || !prd) throw new Error('Project atau PRD tidak ditemukan');
 
-  const brdContent = typeof brd.content === 'string' ? brd.content : JSON.stringify(brd.content);
+  const prdContent = typeof prd.content === 'string' ? prd.content : JSON.stringify(prd.content);
 
   const treeData = await generateJson({
     system: GENERATE_TREE_PROMPT,
-    user: `Nama aplikasi: ${project.name}\nBRD / deskripsi lengkap: ${brdContent}`,
+    user: `Nama aplikasi: ${project.name}\nPRD / deskripsi lengkap: ${prdContent}`,
     schema: TreeDataSchema,
     maxRetries: 2,
+    agentName: 'generateTreeFromPrd',
   });
 
   // Flatten ke TreeNode dalam satu transaksi
@@ -170,6 +171,9 @@ export async function generateTreeFromBrd(projectId: string): Promise<{ id: stri
 
   return flatNodes;
 }
+
+// Backward compatibility alias
+export const generateTreeFromBrd = generateTreeFromPrd;
 
 // Helper: recursive flatten dari TreeDataSchema
 function flattenTree(data: TreeData, projectId: string) {

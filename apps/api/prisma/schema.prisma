@@ -86,7 +86,7 @@ model Project {
   description String?
   status      String   @default("DRAFT") // DRAFT | ACTIVE | ARCHIVED
   reviewFlow  Boolean  @default(false)   // bila true, complete -> REVIEW dulu
-  wizardStep  String   @default("done")  // chat | techstack | brd | tree | board | guide | done
+  wizardStep  String   @default("done")  // chat | techstack | prd | tree | board | guide | done
   uiSpec      Json?                      // spesifikasi desain UI/UX terstruktur (Bab 14)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -94,7 +94,7 @@ model Project {
   user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   stacks           Stack[]
   questions        DiscoveryQuestion[]
-  brd              Brd?
+  prd              Prd?
   roadmap          RoadmapPhase[]
   tasks            Task[]
   agentTokenScopes AgentTokenScope[]
@@ -142,10 +142,10 @@ model DiscoveryAnswer {
   @@index([questionId])
 }
 
-model Brd {
+model Prd {
   id          String   @id @default(cuid())
   projectId   String   @unique
-  // Konten BRD disimpan sebagai JSON fleksibel: { overview, goals, features, techRequirements, ... }
+  // Konten PRD disimpan sebagai JSON fleksibel: { overview, goals, features, techRequirements, ... }
   content     Json
   version     Int      @default(1)
   generatedAt DateTime @default(now())
@@ -284,7 +284,7 @@ model AgentSession {
 model Checkpoint {
   id        String   @id @default(cuid())
   projectId String
-  type      String   // LAYER_TRANSITION | BRD_APPROVAL | ROADMAP_APPROVAL | APPS_READY_FOR_USE
+  type      String   // LAYER_TRANSITION | PRD_APPROVAL | ROADMAP_APPROVAL | APPS_READY_FOR_USE
   layer     String?
   status    String   @default("PENDING") // PENDING | APPROVED | REJECTED
   message   String?
@@ -356,7 +356,7 @@ model TreeNode {
 model AiCallLog {
   id            String   @id @default(cuid())
   projectId     String?
-  agentName     String   // e.g. "generateTasks", "generateBRD", "generateRoadmap", "replyChat", dsb.
+  agentName     String   // e.g. "generateTasks", "generatePRD", "generateRoadmap", "replyChat", dsb.
   model         String   // e.g. "ai-builder"
   inputTokens   Int      @default(0)
   outputTokens  Int      @default(0)

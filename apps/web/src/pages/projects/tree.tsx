@@ -289,23 +289,23 @@ export function TreePage() {
     }
   };
 
-  const handleBackToBrd = async () => {
+  const handleBackToPrd = async () => {
     if (!projectId) return;
     try {
       await api(`/api/projects/${projectId}/wizard-step`, {
         method: 'POST',
-        body: JSON.stringify({ step: 'brd' }),
+        body: JSON.stringify({ step: 'prd' }),
       });
-      navigate(`/projects/${projectId}/brd`);
+      navigate(`/projects/${projectId}/prd`);
     } catch {
-      navigate(`/projects/${projectId}/brd`);
+      navigate(`/projects/${projectId}/prd`);
     }
   };
 
   useWizardNav({
     back: {
-      label: 'Kembali ke BRD',
-      onClick: handleBackToBrd,
+      label: 'Kembali ke PRD',
+      onClick: handleBackToPrd,
     },
     next: {
       label: 'Lanjut ke Board Task',

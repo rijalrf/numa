@@ -1,5 +1,5 @@
 // Validator coverage API endpoint ke UI task.
-// Memastikan setiap endpoint mutasi (POST, PUT, PATCH, DELETE) dari BRD atau apiContracts backend
+// Memastikan setiap endpoint mutasi (POST, PUT, PATCH, DELETE) dari PRD atau apiContracts backend
 // memiliki task consumer di FRONTEND/INTEGRATION.
 
 import type { TaskGen } from './tasks.js';
@@ -32,13 +32,13 @@ const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
  */
 export function validateApiCoverage(
   tasks: TaskGen[],
-  brdEndpoints: Array<{ method: string; path: string; description?: string }> = []
+  prdEndpoints: Array<{ method: string; path: string; description?: string }> = []
 ): ApiCoverageResult {
   const warnings: string[] = [];
   const requiredEndpointsMap = new Map<string, EndpointRef>();
 
-  // 1. Kumpulkan dari BRD
-  for (const ep of brdEndpoints) {
+  // 1. Kumpulkan dari PRD
+  for (const ep of prdEndpoints) {
     const method = ep.method.toUpperCase();
     if (MUTATION_METHODS.has(method)) {
       const normKey = `${method} ${normalizePath(ep.path)}`;

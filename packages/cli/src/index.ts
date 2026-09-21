@@ -257,19 +257,23 @@ program
   });
 
 program
-  .command('brd')
-  .description('Tampilkan BRD project dalam format Markdown.')
+  .command('prd')
+  .description('Tampilkan PRD project dalam format Markdown.')
   .action(async () => {
     const cfg = loadConfig();
     try {
-      const r = await api.brd(cfg);
-      const content: Record<string, unknown> = r.brd.content as unknown as Record<string, unknown>;
+      const r = await api.prd(cfg);
+      const prdObj = r.prd ?? r.brd;
+      if (!prdObj) {
+        throw new ApiError('PRD belum ada di project ini.', 400);
+      }
+      const content: Record<string, unknown> = prdObj.content as unknown as Record<string, unknown>;
       const mdParts: string[] = [];
 
-      mdParts.push('# Business Requirements Document');
+      mdParts.push('# Product Requirements Document');
       mdParts.push('');
-      mdParts.push(`**Generated:** ${new Date(r.brd.generatedAt).toLocaleString('id-ID')}`);
-      mdParts.push(`**Version:** ${r.brd.version}`);
+      mdParts.push(`**Generated:** ${new Date(prdObj.generatedAt).toLocaleString('id-ID')}`);
+      mdParts.push(`**Version:** ${prdObj.version}`);
       mdParts.push('');
       mdParts.push('---');
       mdParts.push('');
@@ -353,7 +357,7 @@ program
       if (e instanceof ApiError) {
         console.error(`Error [${e.status}]: ${e.message}`);
         if (e.status === 400) {
-          console.error('BRD belum ada di project ini. Generate BRD dulu via web UI.');
+          console.error('PRD belum ada di project ini. Generate PRD dulu via web UI.');
         }
       } else {
         console.error('Error:', e instanceof Error ? e.message : e);

@@ -24,14 +24,14 @@ import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-import { generateBRDFromDiscovery, BrdSchema } from './lib/ai/brd.js';
-import { generateRoadmapFromBRD } from './lib/ai/roadmap.js';
+import { generatePRDFromDiscovery, PrdSchema } from './lib/ai/prd.js';
+import { generateRoadmapFromPRD } from './lib/ai/roadmap.js';
 import { generateTasksFromRoadmap } from './lib/ai/tasks.js';
 import { generateUiSpec, UiSpecSchema } from './lib/ai/ui-spec.js';
 import { validateAndNormalizeDAG } from './lib/ai/dag-validator.js';
 import { validateApiCoverage } from './lib/ai/api-coverage-validator.js';
 import { validateCleanup } from './lib/ai/cleanup-validator.js';
-import { replyChat, finalizeChatSession, recommendTechStack, generateTreeFromBrd } from './lib/ai/chat.js';
+import { replyChat, finalizeChatSession, recommendTechStack, generateTreeFromPrd } from './lib/ai/chat.js';
 import { buildZip } from './lib/zip.js';
 import { parseStackEntry, resolveStackContract } from './lib/ai/stack-contract.js';
 
@@ -40,12 +40,13 @@ function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-// Urutan tahapan wizard proyek (interview dihapus, langsung chat -> techstack)
+// Urutan tahapan wizard proyek (interview dihapus, langsung chat -> techstack -> prd)
 const STAGE_ORDER: Record<string, number> = {
   chat: 0,
   interview: 1, // backward compat
   techstack: 1,
-  brd: 2,
+  prd: 2,
+  brd: 2, // backward compat
   tree: 3,
   board: 4,
   guide: 5, // Kompatibilitas data lama
@@ -176,7 +177,7 @@ app.post('/api/projects', requireUser, async (req: AuthedRequest, res) => {
 app.get('/api/projects/:id', requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({
     where: { id: req.params.id, userId: req.userId },
-    include: { stacks: true, brd: true, roadmap: { include: { features: { include: { tasks: true } } } } },
+    include: { stacks: true, prd: true, roadmap: { include: { features: { include: { tasks: true } } } } },
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
   res.json({ project });
@@ -589,7 +590,7 @@ app.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentRequest, 
   const task = await prisma.task.findFirst({
     where: { id: req.params.id, projectId: req.agent.projectId },
     include: {
-      project: { include: { brd: true } },
+      project: { include: { prd: true } },
       dependsOn: {
         include: {
           dependsOn: { select: { id: true, title: true, status: true, order: true } },
@@ -614,9 +615,10 @@ app.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentRequest, 
     out_of_scope?: string[];
   };
 
-  const brd = task.project.brd?.content as {
+  const prd = task.project.prd?.content as {
     userStories?: Array<{ id: string; persona: string; action: string; benefit: string }>;
     functionalRequirements?: Array<{ id: string; title: string; description: string }>;
+    productRules?: Array<{ id: string; description: string }>;
     businessRules?: Array<{ id: string; description: string }>;
     dataModels?: Array<{ name: string; description?: string; fields: Array<{ name: string; type: string; required?: boolean }>; relations?: string[] }>;
     apiEndpoints?: Array<{ method: string; path: string; description: string; requestBody?: string; responseBody?: string }>;
@@ -639,8 +641,9 @@ app.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentRequest, 
 
   // Filter requirement yang bersangkutan untuk hemat token dan cegah distorsi context
   const reqIds = new Set(ctx.requirement_ids ?? []);
-  const relevantReqs = (brd?.functionalRequirements ?? []).filter((r) => reqIds.has(r.id));
-  const relevantRules = (brd?.businessRules ?? []).filter((b) => reqIds.has(b.id));
+  const relevantReqs = (prd?.functionalRequirements ?? []).filter((r) => reqIds.has(r.id));
+  const rulesList = prd?.productRules?.length ? prd.productRules : prd?.businessRules;
+  const relevantRules = (rulesList ?? []).filter((b) => reqIds.has(b.id));
 
   const mdParts: string[] = [
     `### [TASK ${task.order}] ${task.title}`,
@@ -649,7 +652,7 @@ app.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentRequest, 
   ];
 
   if (ctx.userStoryId) {
-    const matchedStory = (brd?.userStories ?? []).find((s: any) => s.id === ctx.userStoryId);
+    const matchedStory = (prd?.userStories ?? []).find((s: any) => s.id === ctx.userStoryId);
     if (matchedStory) {
       mdParts.push(`**User Story**: [${matchedStory.id}] Sebagai ${matchedStory.persona}, ${matchedStory.action}, ${matchedStory.benefit}`);
     } else {
@@ -690,7 +693,7 @@ app.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentRequest, 
     mdParts.push('```');
   }
 
-  // API Registry dari backend tasks yang sudah selesai atau dari spesifikasi BRD
+  // API Registry dari backend tasks yang sudah selesai atau dari spesifikasi PRD
   const completedContracts = completedTasks
     .filter((t) => t.layer === 'BACKEND' || t.layer === 'INTEGRATION')
     .flatMap((t) => {
@@ -707,7 +710,7 @@ app.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentRequest, 
 
   const displayEndpoints = completedContracts.length > 0
     ? completedContracts
-    : (brd?.apiEndpoints ?? []);
+    : (prd?.apiEndpoints ?? []);
 
   if (displayEndpoints.length > 0) {
     mdParts.push(``, `#### API Endpoints Tersedia (Kontrak Integrasi)`);
@@ -719,9 +722,9 @@ app.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentRequest, 
   }
 
   // Referensi Model Data / Schema untuk task DATABASE dan BACKEND
-  if (brd?.dataModels && brd.dataModels.length > 0) {
+  if (prd?.dataModels && prd.dataModels.length > 0) {
     mdParts.push(``, `#### Kontrak Model Data (Database Schema)`);
-    for (const m of brd.dataModels.slice(0, 8)) {
+    for (const m of prd.dataModels.slice(0, 8)) {
       const fieldsStr = m.fields.map((f) => `${f.name}: ${f.type}${f.required === false ? '?' : ''}`).join(', ');
       mdParts.push(`- **${m.name}**${m.description ? ` (${m.description})` : ''}: \`{ ${fieldsStr} }\``);
       if (m.relations?.length) {
@@ -869,29 +872,30 @@ app.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentRequest, 
   });
 });
 
-// ============================================================
-// Agent endpoint: fetch BRD untuk CLI agent
-// ============================================================
-app.get('/api/agent/brd', requireAgent, async (req: AgentRequest, res) => {
-  const brd = await prisma.brd.findUnique({
+// ===============================================
+// Agent endpoint: fetch PRD untuk CLI agent (juga dukung alias /brd)
+// ===============================================
+app.get(['/api/agent/prd', '/api/agent/brd'], requireAgent, async (req: AgentRequest, res) => {
+  const prd = await prisma.prd.findUnique({
     where: { projectId: req.agent.projectId },
   });
-  if (!brd) {
-    return res.status(400).json({ error: 'BRD belum ada di project ini. Generate BRD dulu lewat web UI.' });
+  if (!prd) {
+    return res.status(400).json({ error: 'PRD belum ada di project ini. Generate PRD dulu lewat web UI.' });
   }
-  res.json({ brd });
+  res.json({ prd, brd: prd });
 });
 
 // ============================================================
 // Helper format markdown export dokumen proyek
 // ============================================================
-function buildBrdMarkdown(project: { name: string }, brd: { generatedAt: Date | string; version: number; content: any }): string {
-  const content = (brd.content ?? {}) as any;
+function buildPrdMarkdown(project: { name: string }, prd: { generatedAt: Date | string; version: number; content: any }): string {
+  const content = (prd.content ?? {}) as any;
+  const rulesList = content.productRules?.length ? content.productRules : content.businessRules;
   return [
-    `# Business Requirements Document (${project.name})`,
+    `# Product Requirements Document (${project.name})`,
     ``,
-    `**Generated:** ${new Date(brd.generatedAt).toLocaleString('id-ID')}`,
-    `**Version:** ${brd.version}`,
+    `**Generated:** ${new Date(prd.generatedAt).toLocaleString('id-ID')}`,
+    `**Version:** ${prd.version}`,
     ``,
     `---`,
     ``,
@@ -926,6 +930,18 @@ function buildBrdMarkdown(project: { name: string }, brd: { generatedAt: Date | 
     ``,
     `---`,
     ``,
+    `## Kebutuhan Fungsional`,
+    ``,
+    ...(content.functionalRequirements?.map((r: any) => `- **[${r.id}] ${r.title}** (${r.priority || 'MUST'}${r.actor ? `, Aktor: ${r.actor}` : ''}): ${r.description}`) ?? []),
+    ``,
+    `---`,
+    ``,
+    `## Aturan Produk`,
+    ``,
+    ...(rulesList?.map((r: any) => `- **[${r.id}]** ${r.description}`) ?? []),
+    ``,
+    `---`,
+    ``,
     `## Tech Requirements`,
     ``,
     ...(content.techRequirements?.map((t: string) => `- ${t}`) ?? []),
@@ -944,8 +960,10 @@ function buildBrdMarkdown(project: { name: string }, brd: { generatedAt: Date | 
   ].join('\n');
 }
 
-function buildUserStoriesMarkdown(project: { name: string }, brd: { content: any } | null): string {
-  const content = (brd?.content ?? {}) as any;
+const buildBrdMarkdown = buildPrdMarkdown; // Backward compatibility alias
+
+function buildUserStoriesMarkdown(project: { name: string }, prdDoc: { content: any } | null): string {
+  const content = (prdDoc?.content ?? {}) as any;
   const stories = content.userStories ?? [];
   const lines = [
     `# User Stories — ${project.name}`,
@@ -1052,34 +1070,34 @@ function buildTasksMarkdown(project: { name: string }, tasks: any[]): string {
 }
 
 // ============================================================
-// User endpoint: download BRD sebagai .md file
+// User endpoint: download PRD sebagai .md file (juga dukung alias /brd/download)
 // ============================================================
-app.get('/api/projects/:id/brd/download', requireUser, async (req: AuthedRequest, res) => {
+app.get(['/api/projects/:id/prd/download', '/api/projects/:id/brd/download'], requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({
     where: { id: req.params.id, userId: req.userId },
-    include: { brd: true },
+    include: { prd: true },
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
-  if (!project.brd) {
-    return res.status(400).json({ error: 'BRD belum ada. Generate BRD dulu.' });
+  if (!project.prd) {
+    return res.status(400).json({ error: 'PRD belum ada. Generate PRD dulu.' });
   }
 
-  const md = buildBrdMarkdown(project, project.brd);
+  const md = buildPrdMarkdown(project, project.prd);
   const safeName = project.name.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
 
   res.setHeader('Content-Type', 'text/markdown');
-  res.setHeader('Content-Disposition', `attachment; filename="${safeName}_BRD.md"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${safeName}_PRD.md"`);
   res.send(md);
 });
 
 // ============================================================
-// User endpoint: download paket lengkap (.zip) -> BRD.md, USER-STORIES.md, TASKS.md
+// User endpoint: download paket lengkap (.zip) -> PRD.md, USER-STORIES.md, TASKS.md
 // ============================================================
 app.get('/api/projects/:id/export.zip', requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({
     where: { id: req.params.id, userId: req.userId },
     include: {
-      brd: true,
+      prd: true,
       tasks: {
         orderBy: { order: 'asc' },
       },
@@ -1087,12 +1105,12 @@ app.get('/api/projects/:id/export.zip', requireUser, async (req: AuthedRequest, 
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
 
-  const brdMd = project.brd ? buildBrdMarkdown(project, project.brd) : '# BRD Belum Dibuat\n';
-  const userStoriesMd = buildUserStoriesMarkdown(project, project.brd);
+  const prdMd = project.prd ? buildPrdMarkdown(project, project.prd) : '# PRD Belum Dibuat\n';
+  const userStoriesMd = buildUserStoriesMarkdown(project, project.prd);
   const tasksMd = buildTasksMarkdown(project, project.tasks);
 
   const zipBuffer = buildZip([
-    { name: 'BRD.md', content: brdMd },
+    { name: 'PRD.md', content: prdMd },
     { name: 'USER-STORIES.md', content: userStoriesMd },
     { name: 'TASKS.md', content: tasksMd },
   ]);
@@ -1109,7 +1127,7 @@ app.get('/api/projects/:id/export.zip', requireUser, async (req: AuthedRequest, 
 // User endpoint: unlock tahap sebelumnya (mundur step)
 // ============================================================
 const WizardStepBody = z.object({
-  step: z.enum(['chat', 'techstack', 'brd', 'tree', 'board']),
+  step: z.enum(['chat', 'techstack', 'prd', 'brd', 'tree', 'board']),
 });
 
 app.post('/api/projects/:id/wizard-step', requireUser, async (req: AuthedRequest, res) => {
@@ -1124,15 +1142,16 @@ app.post('/api/projects/:id/wizard-step', requireUser, async (req: AuthedRequest
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
 
+  const normalizedStep = parsed.data.step === 'brd' ? 'prd' : parsed.data.step;
   const currentRank = STAGE_ORDER[project.wizardStep ?? 'techstack'] ?? 1;
-  const targetRank = STAGE_ORDER[parsed.data.step] ?? 0;
+  const targetRank = STAGE_ORDER[normalizedStep] ?? 0;
   if (targetRank >= currentRank) {
     return res.status(400).json({ error: 'Hanya diizinkan berpindah mundur ke tahap sebelumnya.' });
   }
 
   await prisma.project.update({
     where: { id: project.id },
-    data: { wizardStep: parsed.data.step },
+    data: { wizardStep: normalizedStep },
   });
 
   res.json({
@@ -1148,7 +1167,7 @@ app.post('/api/projects/:id/wizard-step', requireUser, async (req: AuthedRequest
 app.get('/api/projects/:id/master-prompt', requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({
     where: { id: req.params.id, userId: req.userId },
-    include: { brd: true },
+    include: { prd: true },
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
 
@@ -1165,7 +1184,7 @@ Anda adalah AI Coding Agent otonom. Tugas Anda: mengeksekusi task-task project i
 ## Identitas Project
 - Nama: ${project.name}
 - Ide: ${project.idea}
-${project.brd ? `- BRD: SEDIA — fetch via \`numa brd\` atau download manual` : `- BRD: BELUM dibuat — minta user membuatnya lewat tool BRD Generator`}
+${project.prd ? `- PRD: SEDIA — fetch via \`numa prd\` atau download manual` : `- PRD: BELUM dibuat — minta user membuatnya lewat tool PRD Generator`}
 
 ## Setup (jalankan 1x di awal)
 1. Install CLI:
@@ -1177,13 +1196,13 @@ ${project.brd ? `- BRD: SEDIA — fetch via \`numa brd\` atau download manual` :
    numa login {{TOKEN}} --api-url ${serverUrl}
    \`\`\`
 
-## Fetch BRD (lakukan sekali, sebelum loop task)
+## Fetch PRD (lakukan sekali, sebelum loop task)
 Pilih SALAH SATU:
 - **Via CLI** (direkomendasikan):
   \`\`\`
-  numa brd
+  numa prd
   \`\`\`
-- **Manual**: download BRD.md dari web UI → save ke disk → paste isi BRD sebagai konteks
+- **Manual**: download PRD.md dari web UI → save ke disk → paste isi PRD sebagai konteks
 
 ## Loop Eksekusi (ulangi sampai tidak ada task tersisa)
 Untuk SETIAP task, kerjakan langkah ini PERSIS:
@@ -1212,7 +1231,7 @@ Setelah semua task DONE, aplikasi siap dijalankan di komputer lokal user:
 **Catatan penting**: Gunakan port **9999** agar tidak bertabrakan dengan numa platform yang jalan di port 3455.
 
 ## Aturan Penting
-- **Isolasi project**: agent HANYA boleh membaca task/BRD dari project ini (server menegakkan via token).
+- **Isolasi project**: agent HANYA boleh membaca task/PRD dari project ini (server menegakkan via token).
 - **Fokus Task**: penuhi Acceptance Criteria dan loloskan Validation Commands. Struktur file adalah panduan arsitektur.
 - **Checkpoint gate**: jika setelah \`done\` ada pesan checkpoint, BERHENTI dan minta approval user sebelum lanjut.
 - **Layer transition**: jika layer (DATABASE/BACKEND/FRONTEND) sudah selesai, minta approval user.
@@ -1240,8 +1259,8 @@ Tempel token di placeholder di bawah SEBELUM menyalin prompt ini.
   res.json({ projectName: project.name, prompt: md });
 });
 
-// Step 2: generate BRD dari ide + tech stack + chat history.
-app.post('/api/projects/:id/brd/generate', requireUser, async (req: AuthedRequest, res) => {
+// Step 2: generate PRD dari ide + tech stack + chat history (juga dukung alias /brd/generate)
+app.post(['/api/projects/:id/prd/generate', '/api/projects/:id/brd/generate'], requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({
     where: { id: req.params.id, userId: req.userId },
     include: {
@@ -1250,9 +1269,9 @@ app.post('/api/projects/:id/brd/generate', requireUser, async (req: AuthedReques
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
 
-  const existing = await prisma.brd.findUnique({ where: { projectId: project.id } });
-  if (existing && isStageLocked(project.wizardStep, 'brd')) {
-    return res.status(403).json({ error: 'Dokumen BRD telah selesai dan terkunci (Read-Only).' });
+  const existing = await prisma.prd.findUnique({ where: { projectId: project.id } });
+  if (existing && isStageLocked(project.wizardStep, 'prd')) {
+    return res.status(403).json({ error: 'Dokumen PRD telah selesai dan terkunci (Read-Only).' });
   }
 
   const chatSession = await prisma.chatSession.findFirst({
@@ -1268,45 +1287,45 @@ app.post('/api/projects/:id/brd/generate', requireUser, async (req: AuthedReques
     : undefined;
 
   try {
-    const brd = await generateBRDFromDiscovery({
+    const prd = await generatePRDFromDiscovery({
       idea: project.idea,
       projectId: project.id,
       techStack: techStackList,
       chatHistory,
     });
     if (existing) {
-      const updated = await prisma.brd.update({
+      const updated = await prisma.prd.update({
         where: { projectId: project.id },
-        data: { content: brd, version: existing.version + 1 },
+        data: { content: prd, version: existing.version + 1 },
       });
       await prisma.project.update({ where: { id: project.id }, data: { wizardStep: 'tree' } });
-      return res.json({ brd: updated });
+      return res.json({ prd: updated, brd: updated });
     }
-    const created = await prisma.brd.create({ data: { projectId: project.id, content: brd } });
+    const created = await prisma.prd.create({ data: { projectId: project.id, content: prd } });
     await prisma.project.update({ where: { id: project.id }, data: { wizardStep: 'tree' } });
-    res.status(201).json({ brd: created });
+    res.status(201).json({ prd: created, brd: created });
   } catch (err) {
-    res.status(502).json({ error: 'AI gagal menghasilkan BRD.', detail: (err as Error).message });
+    res.status(502).json({ error: 'AI gagal menghasilkan PRD.', detail: (err as Error).message });
   }
 });
 
-app.get('/api/projects/:id/brd', requireUser, async (req: AuthedRequest, res) => {
+app.get(['/api/projects/:id/prd', '/api/projects/:id/brd'], requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({ where: { id: req.params.id, userId: req.userId } });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
-  const brd = await prisma.brd.findUnique({ where: { projectId: project.id } });
-  res.json({ brd });
+  const prd = await prisma.prd.findUnique({ where: { projectId: project.id } });
+  res.json({ prd, brd: prd });
 });
 
-// Step 3: roadmap dari BRD.
+// Step 3: roadmap dari PRD.
 app.post('/api/projects/:id/roadmap/generate', requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({
     where: { id: req.params.id, userId: req.userId },
-    include: { brd: true },
+    include: { prd: true },
   });
-  if (!project?.brd) return res.status(400).json({ error: 'BRD belum ada. Generate BRD dulu.' });
+  if (!project?.prd) return res.status(400).json({ error: 'PRD belum ada. Generate PRD dulu.' });
   try {
-    const parsed = BrdSchema.parse(project.brd.content);
-    const data = await generateRoadmapFromBRD(parsed, { projectId: project.id });
+    const parsed = PrdSchema.parse(project.prd.content);
+    const data = await generateRoadmapFromPRD(parsed, { projectId: project.id });
 
     // Hapus roadmap lama (cascade akan hapus features + deps).
     await prisma.roadmapPhase.deleteMany({ where: { projectId: project.id } });
@@ -1372,15 +1391,15 @@ app.get('/api/projects/:id/ui-spec', requireUser, async (req: AuthedRequest, res
 app.post('/api/projects/:id/ui-spec/generate', requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({
     where: { id: req.params.id, userId: req.userId },
-    include: { brd: true },
+    include: { prd: true },
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
-  if (!project.brd) return res.status(400).json({ error: 'BRD belum ada. Generate BRD dulu.' });
+  if (!project.prd) return res.status(400).json({ error: 'PRD belum ada. Generate PRD dulu.' });
 
   try {
-    const parsedBrd = BrdSchema.parse(project.brd.content);
+    const parsedPrd = PrdSchema.parse(project.prd.content);
     const spec = await generateUiSpec({
-      brd: parsedBrd,
+      prd: parsedPrd,
       projectName: project.name,
       projectId: project.id,
     });
@@ -1399,7 +1418,7 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
   let project = await prisma.project.findFirst({
     where: { id: req.params.id, userId: req.userId },
     include: {
-      brd: true,
+      prd: true,
       stacks: true,
       roadmap: { include: { features: { include: { dependencies: true } } } },
     },
@@ -1411,12 +1430,12 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
     return res.status(403).json({ error: 'Tasks telah selesai dibuat dan terkunci (Read-Only).' });
   }
 
-  // Auto-generate roadmap jika belum ada tapi BRD ada
+  // Auto-generate roadmap jika belum ada tapi PRD ada
   if (project.roadmap.length === 0) {
-    if (!project.brd) return res.status(400).json({ error: 'BRD belum ada. Generate BRD dulu.' });
+    if (!project.prd) return res.status(400).json({ error: 'PRD belum ada. Generate PRD dulu.' });
     try {
-      const parsedBrd = BrdSchema.parse(project.brd.content);
-      const roadmapData = await generateRoadmapFromBRD(parsedBrd, { projectId: project.id });
+      const parsedPrd = PrdSchema.parse(project.prd.content);
+      const roadmapData = await generateRoadmapFromPRD(parsedPrd, { projectId: project.id });
       await prisma.roadmapPhase.deleteMany({ where: { projectId: project.id } });
 
       const phaseMap = new Map<string, string>();
@@ -1448,7 +1467,7 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
       const refetched = await prisma.project.findFirst({
         where: { id: req.params.id, userId: req.userId },
         include: {
-          brd: true,
+          prd: true,
           stacks: true,
           roadmap: { include: { features: { include: { dependencies: true } } } },
         },
@@ -1489,9 +1508,10 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
   }));
 
   try {
-    const brdData = project.brd?.content as {
+    const prdData = project.prd?.content as {
       userStories?: Array<{ id: string; persona: string; action: string; benefit: string }>;
       functionalRequirements?: Array<{ id: string; title: string; description: string; priority?: string }>;
+      productRules?: Array<{ id: string; description: string }>;
       businessRules?: Array<{ id: string; description: string }>;
       dataModels?: Array<{ name: string; description?: string; fields: Array<{ name: string; type: string; required?: boolean }>; relations?: string[] }>;
       apiEndpoints?: Array<{ method: string; path: string; description: string; requestBody?: string; responseBody?: string; authRequired?: boolean }>;
@@ -1501,11 +1521,11 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
 
     // Dedicated UX/UI Specification Agent (Bab 14)
     let uiSpecData = project.uiSpec as any;
-    if (!uiSpecData && project.brd) {
+    if (!uiSpecData && project.prd) {
       try {
-        const parsedBrd = BrdSchema.parse(project.brd.content);
+        const parsedPrd = PrdSchema.parse(project.prd.content);
         uiSpecData = await generateUiSpec({
-          brd: parsedBrd,
+          prd: parsedPrd,
           projectName: project.name,
           projectId: project.id,
         });
@@ -1523,14 +1543,14 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
     let generated = await generateTasksFromRoadmap({
       roadmap: { phases: phasesForAI },
       projectName: project.name,
-      brd: brdData,
+      prd: prdData,
       uiSpec: uiSpecData,
       projectId: project.id,
       stack: stackContract,
     });
 
     // Validasi coverage API ke UI: catat jika ada endpoint mutasi tanpa pemanggil di frontend
-    const coverage = validateApiCoverage(generated, brdData?.apiEndpoints ?? []);
+    const coverage = validateApiCoverage(generated, prdData?.apiEndpoints ?? []);
     if (coverage.uncovered.length > 0) {
       console.warn(`[API-COVERAGE] Catatan: Ditemukan ${coverage.uncovered.length} endpoint mutasi tanpa UI pemanggil.`);
     }
@@ -1645,7 +1665,7 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
       },
       orderBy: { order: 'asc' },
     });
-    const userStories = (project.brd?.content as any)?.userStories ?? [];
+    const userStories = (project.prd?.content as any)?.userStories ?? [];
 
     res.json({
       ok: true,
@@ -1663,7 +1683,7 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
 app.get('/api/projects/:id/tasks', requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({
     where: { id: req.params.id, userId: req.userId },
-    include: { brd: true },
+    include: { prd: true },
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
   const tasks = await prisma.task.findMany({
@@ -1677,7 +1697,7 @@ app.get('/api/projects/:id/tasks', requireUser, async (req: AuthedRequest, res) 
     },
     orderBy: { order: 'asc' },
   });
-  const userStories = (project.brd?.content as any)?.userStories ?? [];
+  const userStories = (project.prd?.content as any)?.userStories ?? [];
 
   // Normalisasi backwards compatibility untuk task lama yang belum punya userStoryId
   let needPersist = false;
@@ -2016,17 +2036,17 @@ app.put('/api/projects/:id/techstack', requireUser, async (req: AuthedRequest, r
     })
   );
 
-  await prisma.project.update({ where: { id: project.id }, data: { wizardStep: 'brd' } });
+  await prisma.project.update({ where: { id: project.id }, data: { wizardStep: 'prd' } });
   res.json({ ok: true });
 });
 
 app.post('/api/projects/:id/tree/generate', requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({
     where: { id: req.params.id, userId: req.userId },
-    include: { brd: true },
+    include: { prd: true },
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
-  if (!project.brd) return res.status(400).json({ error: 'BRD belum ada. Generate BRD dulu.' });
+  if (!project.prd) return res.status(400).json({ error: 'PRD belum ada. Generate PRD dulu.' });
 
   const existingTreeCount = await prisma.treeNode.count({ where: { projectId: project.id } });
   if (existingTreeCount > 0 && isStageLocked(project.wizardStep, 'tree')) {
@@ -2034,7 +2054,7 @@ app.post('/api/projects/:id/tree/generate', requireUser, async (req: AuthedReque
   }
 
   try {
-    const nodes = await generateTreeFromBrd(project.id);
+    const nodes = await generateTreeFromPrd(project.id);
     await prisma.project.update({ where: { id: project.id }, data: { wizardStep: 'board' } });
     res.json({ ok: true, count: nodes.length });
   } catch (err) {

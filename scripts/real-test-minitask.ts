@@ -93,14 +93,15 @@ async function run() {
   assert(saveStackRes.ok, 'Simpan stack gagal');
   console.log('Tech stack tersimpan.');
 
-  console.log('\n--- 5. TAHAP BRD (Generate dari Chat History) ---');
-  const brdRes = await authedFetch(`/api/projects/${projectId}/brd/generate`, { method: 'POST' });
-  if (!brdRes.ok) {
-    throw new Error(`Generate BRD gagal: ${await brdRes.text()}`);
+  console.log('\n--- 5. TAHAP PRD (Generate dari Chat History) ---');
+  const prdRes = await authedFetch(`/api/projects/${projectId}/prd/generate`, { method: 'POST' });
+  if (!prdRes.ok) {
+    throw new Error(`Generate PRD gagal: ${await prdRes.text()}`);
   }
-  const brdJson = await brdRes.json();
-  const endpoints = brdJson.brd.content.apiEndpoints || [];
-  console.log(`BRD berhasil. Total API endpoints terdefinisi: ${endpoints.length}`);
+  const prdJson = await prdRes.json();
+  const prdObj = prdJson.prd ?? prdJson.brd;
+  const endpoints = prdObj?.content?.apiEndpoints || [];
+  console.log(`PRD berhasil. Total API endpoints terdefinisi: ${endpoints.length}`);
   endpoints.forEach((ep: any) => console.log(`  - [${ep.method}] ${ep.path}: ${ep.description}`));
 
   console.log('\n--- 6. TAHAP TREE DIAGRAM ---');

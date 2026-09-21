@@ -19,12 +19,14 @@ export type GenerateJsonParams<T> = {
 
 // ponytail: static set covers current system agents, add dynamic tier lookup when agents become plugins
 const REASONING_AGENTS = new Set([
+  'CanonicalPrdSpec',
   'CanonicalBrdSpec',
   'FeatureExecutionGraph',
   'UiSpecArchitect',
   'TechStackArchitect',
   'replyChat',
   'finalizeChatSession',
+  'generateTreeFromPrd',
   'generateTreeFromBrd',
   'SecurityAuditor',
 ]);

@@ -104,11 +104,11 @@ Perintah dipasang secara global (`-g`), sehingga langsung tersedia di semua dire
 
 ---
 
-### 8. `numa brd`
-- **Deskripsi**: Mengunduh dan menampilkan Business Requirements Document (BRD) lengkap dalam format Markdown.
+### 8. `numa prd`
+- **Deskripsi**: Mengunduh dan menampilkan Product Requirements Document (PRD) lengkap dalam format Markdown.
 - **Alur Eksekusi**:
-  - Mengirim request ke `GET /api/agent/brd`.
-  - Mengonversi data BRD dari database (Ringkasan, Tujuan, Fitur, Tech Requirements, Non-Functional Requirements, Out of Scope) menjadi dokumen Markdown utuh ke terminal.
+  - Mengirim request ke `GET /api/agent/prd`.
+  - Mengonversi data PRD dari database (Ringkasan, Tujuan, Fitur, Tech Requirements, Non-Functional Requirements, Out of Scope) menjadi dokumen Markdown utuh ke terminal.
 
 ---
 

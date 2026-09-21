@@ -3,7 +3,7 @@
 import { z } from 'zod';
 import { generateJson } from './ai-service.js';
 import type { TaskGen } from './tasks.js';
-import type { BrdData } from './brd.js';
+import type { PrdData } from './prd.js';
 
 export const SecurityFindingSchema = z.object({
   severity: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']),
@@ -41,9 +41,12 @@ export type SecurityAuditResult = z.infer<typeof SecurityAuditResultSchema>;
 
 export async function auditTasksSecurity(args: {
   tasks: TaskGen[];
-  brd?: BrdData | null;
+  prd?: PrdData | null;
+  brd?: PrdData | null; // Kompatibilitas ke belakang
   projectId?: string;
 }): Promise<SecurityAuditResult> {
+  const prdDoc = args.prd ?? args.brd;
+  const rules = prdDoc?.productRules?.length ? prdDoc.productRules : prdDoc?.businessRules;
   const system = `Anda adalah Senior Application Security (AppSec) Engineer.
 Tugas Anda adalah mengaudit daftar atomic tasks sebelum dieksekusi oleh AI coding agent.
 Tinjau seluruh task untuk mendeteksi potensi celah keamanan berikut:
@@ -75,9 +78,9 @@ Kembalikan HANYA JSON valid sesuai skema.`;
   const user = `DAFTAR ATOMIC TASKS:
 ${JSON.stringify(taskSummaries, null, 2)}
 
-ATURAN BISNIS BRD & NON-FUNCTIONAL:
-Non-Functional: ${JSON.stringify(args.brd?.nonFunctional ?? [])}
-Business Rules: ${JSON.stringify(args.brd?.businessRules ?? [])}
+ATURAN PRODUK PRD & NON-FUNCTIONAL:
+Non-Functional: ${JSON.stringify(prdDoc?.nonFunctional ?? [])}
+Product Rules: ${JSON.stringify(rules ?? [])}
 
 Format JSON (WAJIB):
 {

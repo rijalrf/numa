@@ -1,8 +1,7 @@
-// Generate roadmap (phases + features + dependencies) dari BRD.
-// Port dari lib/ai/roadmap.ts.
+// Generate roadmap (phases + features + dependencies) dari PRD.
 import { z } from 'zod';
 import { generateJson } from './ai-service.js';
-import type { BrdData } from './brd.js';
+import type { PrdData } from './prd.js';
 
 const RoadmapSchema = z.object({
   phases: z
@@ -29,20 +28,20 @@ const RoadmapSchema = z.object({
 
 export type RoadmapData = z.infer<typeof RoadmapSchema>;
 
-export async function generateRoadmapFromBRD(brd: BrdData, opts?: { projectId?: string }): Promise<RoadmapData> {
-  const system = `Anda adalah Principal Systems Architect. Pecah BRD menjadi Feature Execution Graph terstruktur.
+export async function generateRoadmapFromPRD(prd: PrdData, opts?: { projectId?: string }): Promise<RoadmapData> {
+  const system = `Anda adalah Principal Systems Architect. Pecah PRD menjadi Feature Execution Graph terstruktur.
 Setiap fase mengelompokkan layer delivery secara ketat: BOOTSTRAP -> DATABASE -> BACKEND -> FRONTEND -> INTEGRATION.
 Setiap fitur dalam fase wajib memodelkan dependensi logis (dependsOn) ke fitur prasyarat agar eksekusi task otonom berjalan berurutan tanpa race conditions atau circular dependency.
 
 ATURAN STRUKTUR LAYER:
 1. Fase 1 WAJIB berlayer 'BOOTSTRAP': inisialisasi project, konfigurasi package.json, tsconfig, struktur folder, variabel lingkungan (.env), .gitignore (wajib exclude node_modules, .env, *.db, dist), .env.example, README.md (cara install & jalankan), dan kontrak tipe bersama.
 2. Fase DATABASE: perancangan skema data (Prisma/SQL), migrasi, dan seed data awal. Bergantung pada BOOTSTRAP.
-3. Fase BACKEND: implementasi controller/route API sesuai spesifikasi BRD. Bergantung pada fitur DATABASE terkait.
+3. Fase BACKEND: implementasi controller/route API sesuai spesifikasi PRD. Bergantung pada fitur DATABASE terkait.
 4. Fase FRONTEND: implementasi halaman UI, komponen, dan konsumsi API backend. Bergantung pada fitur BACKEND terkait.
 5. Fase TERAKHIR WAJIB berlayer 'INTEGRATION': mencakup WIRING (menghubungkan FE ke API BE sesungguhnya, BE ke DB) dan smoke test lokal (aplikasi bisa dijalankan end-to-end tanpa error).`;
 
-  const user = `BRD:
-${JSON.stringify(brd, null, 2)}
+  const user = `PRD:
+${JSON.stringify(prd, null, 2)}
 
 Schema JSON:
 {
@@ -82,3 +81,6 @@ PRINSIP EXECUTION GRAPH:
     projectId: opts?.projectId,
   });
 }
+
+// Backward compatibility alias
+export const generateRoadmapFromBRD = generateRoadmapFromPRD;

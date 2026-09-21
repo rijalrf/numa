@@ -21,7 +21,7 @@ const PLANS = [
     features: [
       'Unlimited project',
       'Priority AI generation',
-      'Expor BRD, roadmap, dan task',
+      'Expor PRD, roadmap, dan task',
       'Multi-agent token',
     ],
     cta: 'Pilih Pro',

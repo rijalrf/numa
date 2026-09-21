@@ -1,4 +1,4 @@
-// Seed data demo: 1 user, 1 project, BRD, roadmap, tasks, dan 1 PAT demo.
+// Seed data demo: 1 user, 1 project, PRD, roadmap, tasks, dan 1 PAT demo.
 import { PrismaClient } from '@prisma/client';
 import { hashPassword } from 'better-auth/crypto';
 import crypto from 'node:crypto';
@@ -22,7 +22,7 @@ async function main() {
   await prisma.roadmapDependency.deleteMany();
   await prisma.roadmapFeature.deleteMany();
   await prisma.roadmapPhase.deleteMany();
-  await prisma.brd.deleteMany();
+  await prisma.prd.deleteMany();
   await prisma.discoveryAnswer.deleteMany();
   await prisma.discoveryQuestion.deleteMany();
   await prisma.checkpoint.deleteMany();
@@ -62,6 +62,7 @@ async function main() {
       idea: 'Aplikasi web untuk mencatat ide dan tugas harian dengan tag dan pengingat.',
       description: 'Contoh project demo hasil generate AI.',
       status: 'ACTIVE',
+      wizardStep: 'prd',
     },
   });
 
@@ -73,7 +74,7 @@ async function main() {
     ],
   });
 
-  await prisma.brd.create({
+  await prisma.prd.create({
     data: {
       projectId: project.id,
       content: {
