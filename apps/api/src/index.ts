@@ -144,33 +144,6 @@ app.get('/api/tools', (_req, res) => {
   res.json({ tools: toolsRegistry });
 });
 
-// Endpoint download CLI tarball untuk instalasi di laptop/komputer lain tanpa publish ke npm
-app.get('/api/download/numa.tgz', (_req, res) => {
-  const candidateDirs = [
-    process.env.CLI_DIR,
-    path.resolve(__dirname, '../../../packages/cli'),
-    path.resolve(process.cwd(), '../../packages/cli'),
-    path.resolve(process.cwd(), 'packages/cli'),
-    '/app/packages/cli',
-  ].filter(Boolean) as string[];
-
-  const cliDir = candidateDirs.find((d) => fs.existsSync(d));
-  try {
-    if (!cliDir) {
-      return res.status(404).json({ error: 'Direktori CLI tidak ditemukan' });
-    }
-    const files = fs.readdirSync(cliDir).filter((f) => f.startsWith('numa-') && f.endsWith('.tgz'));
-    if (files.length === 0) {
-      return res.status(404).json({ error: 'Paket CLI belum tersedia' });
-    }
-    files.sort().reverse();
-    const targetFile = path.join(cliDir, files[0]);
-    res.download(targetFile, 'numa.tgz');
-  } catch (err) {
-    res.status(500).json({ error: 'Gagal mengunduh file CLI' });
-  }
-});
-
 // ============================================================
 // Project endpoints (user)
 // ============================================================
@@ -1195,9 +1168,9 @@ Anda adalah AI Coding Agent otonom. Tugas Anda: mengeksekusi task-task project i
 ${project.brd ? `- BRD: SEDIA — fetch via \`numa brd\` atau download manual` : `- BRD: BELUM dibuat — minta user membuatnya lewat tool BRD Generator`}
 
 ## Setup (jalankan 1x di awal)
-1. Install CLI dari tarball:
+1. Install CLI:
    \`\`\`
-   npm install -g ${serverUrl}/api/download/numa.tgz
+   npm install -g numa@latest
    \`\`\`
 2. Login dengan token di bawah ini sekaligus arahkan ke server (tersimpan di ~/.numa/config.json):
    \`\`\`
