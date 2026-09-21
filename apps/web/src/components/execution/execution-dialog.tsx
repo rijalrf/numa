@@ -101,6 +101,7 @@ Jika perintah \`numa\` belum terpasang di lingkungan terminal ini, jalankan:
 - Project ID: ${projectId}
 - Login CLI: \`${loginCommand}\`
 - Switch Project (jika diperlukan): \`numa switch ${projectId}\`
+- Baca Spesifikasi PRD: \`numa prd\`
 
 ${executionLoopText}
 
