@@ -6,7 +6,7 @@ import { ProfilePage } from '@/pages/profile';
 import { ProjectsPage } from '@/pages/projects/index';
 import { ChatPage } from '@/pages/chat';
 import { TechStackPage } from '@/pages/projects/techstack';
-import { BrdPage } from '@/pages/projects/brd';
+import { PrdPage } from '@/pages/projects/prd';
 import { TreePage } from '@/pages/projects/tree';
 import { BoardPage } from '@/pages/projects/board';
 import { SettingsPage } from '@/pages/projects/settings';
@@ -46,7 +46,8 @@ export function App() {
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/chat/:sessionId" element={<ChatPage />} />
         <Route path="/projects/:projectId/techstack" element={<TechStackPage />} />
-        <Route path="/projects/:projectId/brd" element={<BrdPage />} />
+        <Route path="/projects/:projectId/prd" element={<PrdPage />} />
+        <Route path="/projects/:projectId/brd" element={<PrdPage />} />
         <Route path="/projects/:projectId/tree" element={<TreePage />} />
         <Route path="/projects/:projectId/board" element={<BoardPage />} />
         <Route path="/projects/:projectId/settings" element={<SettingsPage />} />

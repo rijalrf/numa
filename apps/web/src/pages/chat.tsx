@@ -269,7 +269,7 @@ export function ChatPage() {
               </h1>
               <p className="text-sm text-muted-foreground max-w-lg mx-auto leading-relaxed">
                 Ceritakan konsep, fitur utama, atau masalah yang ingin diselesaikan oleh aplikasi Anda.
-                AI Numa akan membantu memperjelas kebutuhan sebelum disusun menjadi BRD.
+                AI Numa akan membantu memperjelas kebutuhan sebelum disusun menjadi PRD.
               </p>
             </div>
 

@@ -27,10 +27,10 @@ function getPageHeaderInfo(pathname: string): { title: string; subtitle?: string
       subtitle: 'Tentukan arsitektur dan teknologi untuk membangun aplikasi',
     };
   }
-  if (pathname.includes('/brd')) {
+  if (pathname.includes('/prd') || pathname.includes('/brd')) {
     return {
-      title: 'Business Requirements Document',
-      subtitle: 'Dokumen spesifikasi kebutuhan bisnis aplikasi Anda',
+      title: 'Product Requirements Document',
+      subtitle: 'Dokumen spesifikasi kebutuhan produk aplikasi Anda',
     };
   }
   if (pathname.includes('/tree')) {

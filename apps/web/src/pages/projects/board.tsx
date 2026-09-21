@@ -400,7 +400,7 @@ export function BoardPage() {
           <div className="space-y-1.5 max-w-md mx-auto">
             <h3 className="text-base font-semibold text-foreground">Belum Ada Task yang Dirancang</h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Task implementasi belum tersedia untuk proyek ini. Klik tombol di bawah agar AI Numa menyusun daftar task dengan bounded context dan acceptance criteria berdasarkan dokumen BRD & diagram arsitektur.
+              Task implementasi belum tersedia untuk proyek ini. Klik tombol di bawah agar AI Numa menyusun daftar task dengan bounded context dan acceptance criteria berdasarkan dokumen PRD & diagram arsitektur.
             </p>
           </div>
           <Button onClick={generateTasks} className="gap-2">

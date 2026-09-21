@@ -1,18 +1,18 @@
-// BRD page: View atau auto-generate BRD dari chat history + tech stack
+// PRD page: View atau auto-generate PRD dari chat history + tech stack
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@/lib/http';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Lock } from 'lucide-react';
+import { Lock } from 'lucide-react';
 import { isStageLocked } from '@/lib/constants';
 import { useWizardNav } from '@/components/layout/wizard-nav';
 
-type BrdContent = {
+export type PrdContent = {
   overview?: string;
   goals?: string[];
-  features?: Array<{ name: string; description?: string }>;
+  features?: Array<{ id?: string; name: string; description?: string }>;
   userStories?: Array<{
     id: string;
     persona: string;
@@ -33,6 +33,10 @@ type BrdContent = {
     priority?: 'MUST' | 'SHOULD' | 'COULD';
     actor?: string;
   }>;
+  productRules?: Array<{
+    id: string;
+    description: string;
+  }>;
   businessRules?: Array<{
     id: string;
     description: string;
@@ -51,54 +55,56 @@ type BrdContent = {
   outOfScope?: string[];
 };
 
-export function BrdPage() {
+export function PrdPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const [brd, setBrd] = useState<BrdContent | null>(null);
+  const [prd, setPrd] = useState<PrdContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
 
-  // Load BRD on mount
+  // Load PRD on mount
   useEffect(() => {
     if (!projectId) return;
 
-    const loadBrd = async () => {
+    const loadPrd = async () => {
       try {
         const projectRes = await api<{ project?: { wizardStep?: string } }>(`/api/projects/${projectId}`);
-        const currentStep = projectRes.project?.wizardStep || 'brd';
-        const locked = isStageLocked(currentStep, 'brd');
+        const currentStep = projectRes.project?.wizardStep || 'prd';
+        const locked = isStageLocked(currentStep, 'prd');
         setIsLocked(locked);
 
-        const json = await api<{ brd?: { content: unknown } }>(`/api/projects/${projectId}/brd`);
-        if (json.brd?.content) {
-          setBrd(json.brd.content as BrdContent);
+        const json = await api<{ prd?: { content: unknown }; brd?: { content: unknown } }>(`/api/projects/${projectId}/prd`);
+        const rawContent = json.prd?.content ?? json.brd?.content;
+        if (rawContent) {
+          setPrd(rawContent as PrdContent);
         } else if (!locked) {
           // Auto generate jika belum ada dan belum terkunci
-          await generateBRD();
+          await generatePRD();
         }
       } catch (err) {
-        console.error('Gagal load BRD:', err);
+        console.error('Gagal load PRD:', err);
       } finally {
         setLoading(false);
       }
     };
 
-    loadBrd();
+    loadPrd();
   }, [projectId]);
 
-  const generateBRD = async () => {
+  const generatePRD = async () => {
     if (!projectId || isLocked) return;
     setGenerating(true);
 
     try {
-      await api(`/api/projects/${projectId}/brd/generate`, {
+      await api(`/api/projects/${projectId}/prd/generate`, {
         method: 'POST',
       });
-      const refreshJson = await api<{ brd?: { content: unknown } }>(`/api/projects/${projectId}/brd`);
-      setBrd(refreshJson.brd?.content as BrdContent);
+      const refreshJson = await api<{ prd?: { content: unknown }; brd?: { content: unknown } }>(`/api/projects/${projectId}/prd`);
+      const rawContent = refreshJson.prd?.content ?? refreshJson.brd?.content;
+      setPrd(rawContent as PrdContent);
     } catch (err) {
-      console.error('Error generating BRD:', err);
+      console.error('Error generating PRD:', err);
     } finally {
       setGenerating(false);
       setLoading(false);
@@ -126,7 +132,7 @@ export function BrdPage() {
     next: {
       label: 'Lihat Struktur Fitur',
       onClick: () => navigate(`/projects/${projectId}/tree`),
-      disabled: !brd || generating,
+      disabled: !prd || generating,
     },
   });
 
@@ -152,14 +158,16 @@ export function BrdPage() {
     );
   }
 
+  const productRulesList = prd?.productRules?.length ? prd.productRules : prd?.businessRules;
+
   return (
     <div className="max-w-4xl mx-auto w-full space-y-6">
-      {/* Banner terkunci jika sudah lewat BRD */}
+      {/* Banner terkunci jika sudah lewat PRD */}
       {isLocked && (
         <div className="flex items-center gap-2.5 p-3.5 bg-muted/70 border border-border rounded-xl text-xs text-muted-foreground shadow-xs">
           <Lock className="h-4 w-4 text-primary shrink-0" />
           <span>
-            Tahap Dokumen BRD telah selesai dan terkunci (Read-Only). Spesifikasi kebutuhan fungsional dan aturan bisnis tersimpan permanen.
+            Tahap Dokumen PRD telah selesai dan terkunci (Read-Only). Spesifikasi kebutuhan fungsional dan aturan produk tersimpan permanen.
           </span>
         </div>
       )}
@@ -167,29 +175,29 @@ export function BrdPage() {
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-2 border-b border-border">
         <div>
-          <h2 className="text-lg font-semibold text-foreground">Dokumen Kebutuhan Bisnis (BRD)</h2>
+          <h2 className="text-lg font-semibold text-foreground">Dokumen Kebutuhan Produk (PRD)</h2>
           <p className="text-xs text-muted-foreground">
-            Spesifikasi kebutuhan fitur, user stories (format Gherkin), functional requirements, dan aturan bisnis.
+            Spesifikasi kebutuhan produk, user stories (format Gherkin), functional requirements, dan aturan produk.
           </p>
         </div>
         <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-          {!brd && !generating && !isLocked && (
-            <Button onClick={generateBRD} size="sm" variant="outline" className="gap-2">
-              Generate BRD
+          {!prd && !generating && !isLocked && (
+            <Button onClick={generatePRD} size="sm" variant="outline" className="gap-2">
+              Generate PRD
             </Button>
           )}
         </div>
       </div>
 
-      {/* BRD Content */}
+      {/* PRD Content */}
       <div className="space-y-6 pb-8">
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Ringkasan</CardTitle>
+            <CardTitle className="text-lg">Ringkasan Produk</CardTitle>
           </CardHeader>
           <CardContent>
-            {brd?.overview ? (
-              <p className="whitespace-pre-wrap">{brd.overview}</p>
+            {prd?.overview ? (
+              <p className="whitespace-pre-wrap">{prd.overview}</p>
             ) : (
               <p className="text-muted-foreground italic">Belum ada ringkasan.</p>
             )}
@@ -197,14 +205,14 @@ export function BrdPage() {
         </Card>
 
         {/* Goals */}
-        {brd?.goals && brd.goals.length > 0 && (
+        {prd?.goals && prd.goals.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Tujuan</CardTitle>
+              <CardTitle className="text-lg">Tujuan Produk (Goals)</CardTitle>
             </CardHeader>
             <CardContent>
               <ul className="list-disc list-inside space-y-1">
-                {brd.goals.map((g, i) => (
+                {prd.goals.map((g, i) => (
                   <li key={i}>{g}</li>
                 ))}
               </ul>
@@ -213,14 +221,14 @@ export function BrdPage() {
         )}
 
         {/* Features */}
-        {brd?.features && brd.features.length > 0 && (
+        {prd?.features && prd.features.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Fitur Utama</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                {brd.features.map((f, i) => (
+                {prd.features.map((f, i) => (
                   <div
                     key={i}
                     className="p-3.5 rounded-xl border border-border bg-card/60 space-y-1.5 hover:border-primary/40 transition-colors"
@@ -241,7 +249,7 @@ export function BrdPage() {
         )}
 
         {/* User Stories (US-xxx) dengan Format Gherkin */}
-        {brd?.userStories && brd.userStories.length > 0 && (
+        {prd?.userStories && prd.userStories.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center justify-between">
@@ -251,7 +259,7 @@ export function BrdPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {brd.userStories.map((s) => (
+                {prd.userStories.map((s) => (
                   <div key={s.id} className="p-3.5 rounded-lg border border-border bg-card/60 flex flex-col gap-2 shadow-2xs">
                     <div className="flex items-center gap-2">
                       <Badge variant="default" className="font-mono text-xs">
@@ -312,14 +320,14 @@ export function BrdPage() {
         )}
 
         {/* Functional Requirements (FR-xxx) */}
-        {brd?.functionalRequirements && brd.functionalRequirements.length > 0 && (
+        {prd?.functionalRequirements && prd.functionalRequirements.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Kebutuhan Fungsional (Source of Truth)</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {brd.functionalRequirements.map((r) => (
+                {prd.functionalRequirements.map((r) => (
                   <div key={r.id} className="p-3 rounded-md border border-border bg-card/50 flex flex-col gap-1.5">
                     <div className="flex items-center gap-2">
                       <Badge variant="default" className="font-mono text-xs">
@@ -345,15 +353,15 @@ export function BrdPage() {
           </Card>
         )}
 
-        {/* Business Rules (BR-xxx) */}
-        {brd?.businessRules && brd.businessRules.length > 0 && (
+        {/* Product Rules (PR-xxx / BR-xxx) */}
+        {productRulesList && productRulesList.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Aturan Bisnis (Business Rules)</CardTitle>
+              <CardTitle className="text-lg">Aturan Produk (Product Rules)</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {brd.businessRules.map((b) => (
+                {productRulesList.map((b) => (
                   <div key={b.id} className="flex items-start gap-2.5 p-2.5 rounded-md border border-border/70 text-xs">
                     <Badge variant="outline" className="font-mono shrink-0">
                       {b.id}
@@ -367,14 +375,14 @@ export function BrdPage() {
         )}
 
         {/* Edge Cases & Failure States (EC-xxx) */}
-        {brd?.edgeCases && brd.edgeCases.length > 0 && (
+        {prd?.edgeCases && prd.edgeCases.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Edge Cases &amp; Skenario Kegagalan</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {brd.edgeCases.map((ec) => (
+                {prd.edgeCases.map((ec) => (
                   <div key={ec.id} className="p-2.5 rounded-md border border-border/70 text-xs space-y-1">
                     <div className="flex items-center gap-2">
                       <Badge variant="outline" className="font-mono shrink-0">
@@ -393,14 +401,14 @@ export function BrdPage() {
         )}
 
         {/* Success Metrics */}
-        {brd?.successMetrics && brd.successMetrics.length > 0 && (
+        {prd?.successMetrics && prd.successMetrics.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Metrik Keberhasilan (Success Metrics)</CardTitle>
+              <CardTitle className="text-lg">Metrik Keberhasilan Produk (Success Metrics)</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {brd.successMetrics.map((sm, idx) => (
+                {prd.successMetrics.map((sm, idx) => (
                   <div key={idx} className="p-2.5 rounded-md border border-border/70 bg-card/40 text-xs">
                     <div className="font-semibold text-foreground">{sm.metric}</div>
                     <div className="text-muted-foreground text-[11px] mt-0.5">{sm.target}</div>
@@ -412,14 +420,14 @@ export function BrdPage() {
         )}
 
         {/* Tech Requirements */}
-        {brd?.techRequirements && brd.techRequirements.length > 0 && (
+        {prd?.techRequirements && prd.techRequirements.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Tech Requirements</CardTitle>
             </CardHeader>
             <CardContent>
               <ul className="list-disc list-inside space-y-1">
-                {brd.techRequirements.map((t, i) => (
+                {prd.techRequirements.map((t, i) => (
                   <li key={i}>{t}</li>
                 ))}
               </ul>
@@ -428,14 +436,14 @@ export function BrdPage() {
         )}
 
         {/* Non-Functional */}
-        {brd?.nonFunctional && brd.nonFunctional.length > 0 && (
+        {prd?.nonFunctional && prd.nonFunctional.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Non-Functional Requirements</CardTitle>
             </CardHeader>
             <CardContent>
               <ul className="list-disc list-inside space-y-1">
-                {brd.nonFunctional.map((n, i) => (
+                {prd.nonFunctional.map((n, i) => (
                   <li key={i}>{n}</li>
                 ))}
               </ul>
@@ -444,14 +452,14 @@ export function BrdPage() {
         )}
 
         {/* Out of Scope */}
-        {brd?.outOfScope && brd.outOfScope.length > 0 && (
+        {prd?.outOfScope && prd.outOfScope.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Out of Scope</CardTitle>
             </CardHeader>
             <CardContent>
               <ul className="list-disc list-inside space-y-1">
-                {brd.outOfScope.map((o, i) => (
+                {prd.outOfScope.map((o, i) => (
                   <li key={i}>{o}</li>
                 ))}
               </ul>

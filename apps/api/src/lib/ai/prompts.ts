@@ -65,7 +65,7 @@ export const GENERATE_TREE_PROMPT = `Anda adalah technical architect senior. Pec
 
 Input:
 - Nama aplikasi: {appName}
-- BRD / deskripsi lengkap: {brdContent}
+- PRD / deskripsi lengkap: {prdContent}
 
 Panduan:
 1. Aplikasi punya 3-7 fitur utama. Setiap fitur punya 1-3 sub-fitur opsional.

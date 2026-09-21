@@ -72,7 +72,11 @@ export type ContextResp = {
   };
 };
 export type StatusResp = { ok: true; taskId: string; status: string; checkpointPending?: boolean; layer?: string };
-export type BrdResponse = { brd: { id: string; content: unknown; version: number; generatedAt: string } };
+export type PrdResponse = {
+  prd?: { id: string; content: unknown; version: number; generatedAt: string };
+  brd?: { id: string; content: unknown; version: number; generatedAt: string };
+};
+export type BrdResponse = PrdResponse;
 export type ProjectScope = { id: string; name: string };
 
 export const api = {
@@ -110,8 +114,11 @@ export const api = {
       body: JSON.stringify(failure),
     });
   },
+  prd(cfg: Config) {
+    return request<PrdResponse>(cfg, '/api/agent/prd');
+  },
   brd(cfg: Config) {
-    return request<BrdResponse>(cfg, '/api/agent/brd');
+    return request<PrdResponse>(cfg, '/api/agent/prd');
   },
 };
 

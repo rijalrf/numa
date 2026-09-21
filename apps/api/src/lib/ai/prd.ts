@@ -1,4 +1,4 @@
-// Generate BRD dari discovery answers. Port dari lib/ai/prd.ts (rename PRD->BRD).
+// Generate PRD dari discovery answers. Product Requirements Document canonical spec.
 import { z } from 'zod';
 import { generateJson } from './ai-service.js';
 
@@ -10,10 +10,12 @@ export const FunctionalRequirementSchema = z.object({
   actor: z.string().optional(),
 });
 
-export const BusinessRuleSchema = z.object({
-  id: z.string(), // Format: BR-001, BR-002, dst.
+export const ProductRuleSchema = z.object({
+  id: z.string(), // Format: PR-001, PR-002, dst. (juga mendukung format BR-xxx untuk data terdahulu)
   description: z.string(),
 });
+
+export const BusinessRuleSchema = ProductRuleSchema; // Alias untuk kompatibilitas data
 
 export const DataModelFieldSchema = z.object({
   name: z.string(),
@@ -66,13 +68,14 @@ export const SuccessMetricSchema = z.object({
   target: z.string(),
 });
 
-export const BrdSchema = z.object({
+export const PrdSchema = z.object({
   overview: z.string(),
   goals: z.array(z.string()).min(1),
   features: z.array(z.object({ id: z.string(), name: z.string(), description: z.string().optional() })).min(1),
   userStories: z.array(UserStorySchema).default([]),
   functionalRequirements: z.array(FunctionalRequirementSchema).default([]),
-  businessRules: z.array(BusinessRuleSchema).default([]),
+  productRules: z.array(ProductRuleSchema).default([]),
+  businessRules: z.array(ProductRuleSchema).default([]),
   dataModels: z.array(DataModelSchema).default([]),
   apiEndpoints: z.array(ApiEndpointSchema).default([]),
   edgeCases: z.array(EdgeCaseSchema).default([]),
@@ -80,17 +83,29 @@ export const BrdSchema = z.object({
   techRequirements: z.array(z.string()),
   nonFunctional: z.array(z.string()).default([]),
   outOfScope: z.array(z.string()).default([]),
+}).transform((data) => {
+  // Normalisasi productRules dan businessRules agar kompatibel bolak-balik
+  const rules = data.productRules.length > 0 ? data.productRules : data.businessRules;
+  return {
+    ...data,
+    productRules: rules,
+    businessRules: rules,
+  };
 });
 
-export type BrdData = z.infer<typeof BrdSchema>;
+export type PrdData = z.infer<typeof PrdSchema>;
 
-export async function generateBRDFromDiscovery(args: {
+// Aliases untuk backward compatibility
+export const BrdSchema = PrdSchema;
+export type BrdData = PrdData;
+
+export async function generatePRDFromDiscovery(args: {
   idea: string;
   questions?: { question: string; answer: string }[];
   projectId?: string;
   techStack?: string[];
   chatHistory?: string;
-}): Promise<BrdData> {
+}): Promise<PrdData> {
   const fence = (label: string, text?: string) => {
     if (!text || !text.trim()) return '';
     // Escape sequence delimiter agar input pengguna tidak bisa breakout dari fence (prompt injection)
@@ -110,10 +125,10 @@ export async function generateBRDFromDiscovery(args: {
   const chatText = args.chatHistory ? fence('RIWAYAT PERCAKAPAN LENGKAP DENGAN PENGGUNA (SUMBER KEBUTUHAN UTAMA)', args.chatHistory) : '';
   const ideaText = fence('IDE PENGGUNA', args.idea);
 
-  const system = `Anda adalah Principal Systems Architect dan Lead Product Manager. Hasilkan Business Requirements Document (BRD) canonical teknis yang sangat presisi dan menjadi source of truth mutlak bagi AI coding agent downstream.
-Wajib menyertakan rancangan model data (dataModels) dan spesifikasi endpoint API (apiEndpoints) konkret yang sinkron dengan functional requirements dan aturan bisnis. Gali sedalam mungkin dari riwayat percakapan pengguna.`;
+  const system = `Anda adalah Lead Product Manager dan Principal Systems Architect. Hasilkan Product Requirements Document (PRD) yang sangat presisi, berorientasi pada nilai produk dan pengalaman pengguna, serta menjadi source of truth mutlak bagi tim engineering dan AI coding agent downstream.
+Wajib menyertakan rancangan model data (dataModels) dan spesifikasi endpoint API (apiEndpoints) konkret yang sinkron dengan functional requirements dan aturan produk. Gali sedalam mungkin dari riwayat percakapan pengguna.`;
 
-  const user = `SUMBER SPESIFIKASI DAN KEBUTUHAN PROYEK:
+  const user = `SUMBER SPESIFIKASI DAN KEBUTUHAN PRODUK:
 ${ideaText}
 ${chatText}
 ${stackText}
@@ -122,8 +137,8 @@ ${qaText}
 Schema JSON yang WAJIB diikuti:
 {
   "overview": string (2-4 kalimat ringkasan produk),
-  "goals": string[] (3-6 tujuan terukur),
-  "features": [{ "id": string (slug unik), "name": string, "description"?: string }] (3-8 fitur utama),
+  "goals": string[] (3-6 tujuan produk terukur),
+  "features": [{ "id": string (slug unik), "name": string, "description"?: string }] (3-8 fitur utama produk),
   "userStories": [
     {
       "id": "US-001",
@@ -145,15 +160,15 @@ Schema JSON yang WAJIB diikuti:
     {
       "id": "FR-001",
       "title": "Nama Kebutuhan Singkat",
-      "description": "Deskripsi spesifik apa yang harus dilakukan sistem secara teknis",
+      "description": "Deskripsi spesifik apa yang harus dilakukan produk/sistem secara teknis",
       "priority": "MUST" | "SHOULD" | "COULD",
       "actor": "Pengguna" | "Admin" | "Sistem"
     }
   ],
-  "businessRules": [
+  "productRules": [
     {
-      "id": "BR-001",
-      "description": "Aturan validasi atau batasan bisnis spesifik (misal: email harus unik, status valid: PENDING, ACTIVE, DONE)"
+      "id": "PR-001",
+      "description": "Aturan produk atau batasan validasi spesifik (misal: email harus unik, status valid: PENDING, ACTIVE, DONE)"
     }
   ],
   "dataModels": [
@@ -200,20 +215,23 @@ Schema JSON yang WAJIB diikuti:
     - "Error handling: Semua error API mengembalikan format JSON konsisten {error: string} dengan HTTP status code yang tepat."
     - "Reliabilitas: Operasi yang melibatkan perubahan stok/saldo/kuota WAJIB atomik dalam database transaction."
   ),
-  "outOfScope": string[] (fitur atau lingkup yang DILARANG dikerjakan)
+  "outOfScope": string[] (fitur atau lingkup produk yang DILARANG dikerjakan)
 }
 
 ATURAN KRITIS:
-1. Pastikan ID requirement berurutan (FR-001, FR-002...), aturan bisnis (BR-001, BR-002...), user stories (US-001, US-002...), dan edge cases (EC-001, EC-002...).
+1. Pastikan ID requirement berurutan (FR-001, FR-002...), aturan produk (PR-001, PR-002...), user stories (US-001, US-002...), dan edge cases (EC-001, EC-002...).
 2. Minimal buat 3-5 userStories yang mencakup seluruh aktor utama dalam format Sebagai... saya ingin... supaya... Setiap userStory WAJIB menyertakan minimal 1-2 skenario Gherkin terstruktur (title, given, when, then).
 3. Minimal buat 3 edgeCases kritis yang mengantisipasi kegagalan sistem atau input tak terduga.
-4. Minimal buat 2-4 successMetrics terukur (waktu proses, tingkat error, atau performa).
-5. Minimal buat 2-5 dataModels yang mencakup seluruh domain problem.
-6. Minimal buat 4-10 apiEndpoints yang memetakan seluruh operasi CRUD dan flow bisnis utama.
-7. Jika aplikasi memiliki autentikasi (login/register), BRD WAJIB menyertakan fitur manajemen pengguna (minimal: register, lihat profil, ubah password) — bukan hanya login via seed.
-8. businessRules WAJIB menyertakan aturan integritas referensial: jika entitas A memiliki relasi aktif ke entitas B (misal: peminjaman PENDING), maka penghapusan entitas B harus DITOLAK atau memerlukan penyelesaian relasi terlebih dahulu. Dilarang silent cascade delete pada data berelasi aktif.
-9. businessRules WAJIB menyertakan aturan atomisitas untuk operasi konkuren: jika dua user dapat mengubah resource yang sama secara bersamaan (misal: approve peminjaman yang mengurangi stok), aturan bisnis harus menyebutkan bahwa operasi tersebut wajib atomik dan mencegah race condition.
+4. Minimal buat 2-4 successMetrics produk yang terukur (waktu proses, tingkat error, atau performa).
+5. Minimal buat 2-5 dataModels yang mencakup seluruh domain problem produk.
+6. Minimal buat 4-10 apiEndpoints yang memetakan seluruh operasi CRUD dan alur produk utama.
+7. Jika aplikasi memiliki autentikasi (login/register), PRD WAJIB menyertakan fitur manajemen pengguna (minimal: register, lihat profil, ubah password) — bukan hanya login via seed.
+8. productRules WAJIB menyertakan aturan integritas referensial: jika entitas A memiliki relasi aktif ke entitas B (misal: peminjaman PENDING), maka penghapusan entitas B harus DITOLAK atau memerlukan penyelesaian relasi terlebih dahulu. Dilarang silent cascade delete pada data berelasi aktif.
+9. productRules WAJIB menyertakan aturan atomisitas untuk operasi konkuren: jika dua user dapat mengubah resource yang sama secara bersamaan (misal: approve peminjaman yang mengurangi stok), aturan produk harus menyebutkan bahwa operasi tersebut wajib atomik dan mencegah race condition.
 10. Kembalikan HANYA JSON valid.`;
 
-  return generateJson({ system, user, schema: BrdSchema, agentName: 'CanonicalBrdSpec', projectId: args.projectId });
+  return generateJson({ system, user, schema: PrdSchema, agentName: 'CanonicalPrdSpec', projectId: args.projectId });
 }
+
+// Backward compatibility alias
+export const generateBRDFromDiscovery = generatePRDFromDiscovery;

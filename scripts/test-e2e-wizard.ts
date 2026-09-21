@@ -110,29 +110,30 @@ async function runTest() {
   assert.strictEqual(feStack.version, '18', 'Versi stack frontend harus 18');
   console.log('Verifikasi parsing stack contract OK: category=frontend, name=React, version=18');
 
-  console.log('\n--- 5. TEST BRD (GENERATE & IDEMPOTENT DARI CHAT HISTORY) ---');
-  // Generate BRD
-  const brdGenRes = await authedFetch(`/api/projects/${projectId}/brd/generate`, { method: 'POST' });
-  assert.strictEqual(brdGenRes.status === 200 || brdGenRes.status === 201, true, 'BRD generate status harus 200/201');
-  console.log('BRD berhasil digenerate.');
+  console.log('\n--- 5. TEST PRD (GENERATE & IDEMPOTENT DARI CHAT HISTORY) ---');
+  // Generate PRD
+  const prdGenRes = await authedFetch(`/api/projects/${projectId}/prd/generate`, { method: 'POST' });
+  assert.strictEqual(prdGenRes.status === 200 || prdGenRes.status === 201, true, 'PRD generate status harus 200/201');
+  console.log('PRD berhasil digenerate.');
 
-  // Ambil BRD (Idempotent: membuka lagi tidak generate ulang)
-  const brdGetRes = await authedFetch(`/api/projects/${projectId}/brd`);
-  const brdGetJson = await brdGetRes.json();
-  assert(brdGetJson.brd?.content, 'BRD content harus ada');
-  console.log('BRD idempotent check OK: content ditemukan tanpa generate ulang.');
-  if (brdGetJson.brd.content.userStories?.length > 0) {
-    console.log(`User stories count: ${brdGetJson.brd.content.userStories.length}`);
-    const gherkinCount = brdGetJson.brd.content.userStories.filter((us: any) => us.gherkin && us.gherkin.length > 0).length;
+  // Ambil PRD (Idempotent: membuka lagi tidak generate ulang)
+  const prdGetRes = await authedFetch(`/api/projects/${projectId}/prd`);
+  const prdGetJson = await prdGetRes.json();
+  const prdContent = prdGetJson.prd?.content ?? prdGetJson.brd?.content;
+  assert(prdContent, 'PRD content harus ada');
+  console.log('PRD idempotent check OK: content ditemukan tanpa generate ulang.');
+  if (prdContent.userStories?.length > 0) {
+    console.log(`User stories count: ${prdContent.userStories.length}`);
+    const gherkinCount = prdContent.userStories.filter((us: any) => us.gherkin && us.gherkin.length > 0).length;
     console.log(`User stories dengan skenario Gherkin: ${gherkinCount}`);
   }
 
-  // Test Download BRD .md
-  const brdDownloadRes = await authedFetch(`/api/projects/${projectId}/brd/download`);
-  assert.strictEqual(brdDownloadRes.status, 200, 'Download BRD status harus 200');
-  const brdMdText = await brdDownloadRes.text();
-  assert(brdMdText.includes('# Business Requirements Document'), 'Konten BRD.md harus valid');
-  console.log('Download BRD .md OK.');
+  // Test Download PRD .md
+  const prdDownloadRes = await authedFetch(`/api/projects/${projectId}/prd/download`);
+  assert.strictEqual(prdDownloadRes.status, 200, 'Download PRD status harus 200');
+  const prdMdText = await prdDownloadRes.text();
+  assert(prdMdText.includes('# Product Requirements Document'), 'Konten PRD.md harus valid');
+  console.log('Download PRD .md OK.');
 
   console.log('\n--- 7. TEST TREE DIAGRAM (GENERATE & IDEMPOTENT) ---');
   // Generate Tree
@@ -163,7 +164,7 @@ async function runTest() {
   assert(tasksGetJson.tasks.length > 0, 'Tasks harus ada');
   console.log(`Tasks idempotent check OK: ${tasksGetJson.tasks.length} tasks.`);
   assert(Array.isArray(tasksGetJson.userStories), 'Response /api/projects/:id/tasks harus menyertakan userStories');
-  console.log(`User stories dari BRD terhubung: ${tasksGetJson.userStories.length} stories.`);
+  console.log(`User stories dari PRD terhubung: ${tasksGetJson.userStories.length} stories.`);
 
   // Verifikasi struktur task (Acceptance Criteria, Validation Commands, dan User Story Induk)
   for (const t of tasksGetJson.tasks) {

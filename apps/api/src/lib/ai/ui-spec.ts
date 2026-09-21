@@ -1,8 +1,8 @@
 // Dedicated UX/UI Specification Agent (Bab 14 & 15).
-// Mengubah canonical BRD menjadi spesifikasi UI/UX, tata letak, komponen, dan state interaktif.
+// Mengubah canonical PRD menjadi spesifikasi UI/UX, tata letak, komponen, dan state interaktif.
 import { z } from 'zod';
 import { generateJson } from './ai-service.js';
-import type { BrdData } from './brd.js';
+import type { PrdData } from './prd.js';
 
 export const UiSpecSchema = z.object({
   pages: z
@@ -44,12 +44,14 @@ export const UiSpecSchema = z.object({
 export type UiSpecData = z.infer<typeof UiSpecSchema>;
 
 export async function generateUiSpec(args: {
-  brd: BrdData;
+  prd?: PrdData;
+  brd?: PrdData; // Kompatibilitas ke belakang
   projectName: string;
   projectId?: string;
 }): Promise<UiSpecData> {
+  const specDoc = args.prd ?? args.brd;
   const system = `Anda adalah Principal UX/UI Specification Architect untuk Numa.
-Tugas Anda adalah mengubah dokumen kebutuhan canonical (BRD) menjadi Spesifikasi UI/UX Terstruktur yang siap diimplementasikan oleh AI coding agent atau junior frontend developer.
+Tugas Anda adalah mengubah dokumen kebutuhan produk canonical (PRD) menjadi Spesifikasi UI/UX Terstruktur yang siap diimplementasikan oleh AI coding agent atau junior frontend developer.
 
 PRINSIP DESIGN SYSTEM & UI CONTRACT:
 1. Mobile-first: Desain tata letak harus bekerja prima pada mobile lalu adaptif ke desktop.
@@ -63,8 +65,8 @@ PRINSIP DESIGN SYSTEM & UI CONTRACT:
 
   const user = `NAMA PROJECT: ${args.projectName}
 
-CANONICAL BRD:
-${JSON.stringify(args.brd, null, 2)}
+CANONICAL PRD:
+${JSON.stringify(specDoc, null, 2)}
 
 Schema JSON WAJIB:
 {

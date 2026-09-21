@@ -110,7 +110,7 @@ export function TechStackPage() {
     loadTechStack();
   }, [projectId]);
 
-  // Alur Rekomendasi AI: Generate langsung & simpan ke DB lalu otomatis redirect ke BRD
+  // Alur Rekomendasi AI: Generate langsung & simpan ke DB lalu otomatis redirect ke PRD
   const handleAiGenerateAndProceed = async () => {
     if (!projectId || generatingAi || isLocked) return;
     setGeneratingAi(true);
@@ -130,14 +130,14 @@ export function TechStackPage() {
         return;
       }
 
-      // 2. Simpan tech stack terpilih ke backend (otomatis memajukan wizardStep ke brd)
+      // 2. Simpan tech stack terpilih ke backend (otomatis memajukan wizardStep ke prd)
       await api(`/api/projects/${projectId}/techstack`, {
         method: 'PUT',
         body: JSON.stringify({ techStack: stackList }),
       });
 
-      // 3. Langsung navigasi ke halaman BRD
-      navigate(`/projects/${projectId}/brd`);
+      // 3. Langsung navigasi ke halaman PRD
+      navigate(`/projects/${projectId}/prd`);
     } catch (err) {
       console.error('Error saat generate & simpan tech stack AI:', err);
       alert('Terjadi kesalahan saat memproses rekomendasi AI.');
@@ -170,7 +170,7 @@ export function TechStackPage() {
     }
   };
 
-  // Simpan pilihan manual dan lanjut ke BRD
+  // Simpan pilihan manual dan lanjut ke PRD
   const saveAndContinue = async () => {
     if (selected.length === 0) {
       alert('Pilih minimal 1 teknologi untuk melanjutkan.');
@@ -184,7 +184,7 @@ export function TechStackPage() {
         body: JSON.stringify({ techStack: selected }),
       });
 
-      navigate(`/projects/${projectId}/brd`);
+      navigate(`/projects/${projectId}/prd`);
     } catch (err) {
       console.error('Error saving tech stack:', err);
       alert('Terjadi kesalahan saat menyimpan tech stack.');
@@ -218,7 +218,7 @@ export function TechStackPage() {
             onClick: () => setView('select'),
           },
           next: {
-            label: 'Simpan & Lanjut ke BRD',
+            label: 'Simpan & Lanjut ke PRD',
             onClick: saveAndContinue,
             disabled: selected.length === 0,
             loading: saving,
@@ -231,8 +231,8 @@ export function TechStackPage() {
             onClick: handleBackToChat,
           },
           next: {
-            label: 'Lanjut ke BRD',
-            onClick: () => navigate(`/projects/${projectId}/brd`),
+            label: 'Lanjut ke PRD',
+            onClick: () => navigate(`/projects/${projectId}/prd`),
           },
         }
       : {
@@ -243,7 +243,7 @@ export function TechStackPage() {
           next:
             selectedMode === 'ai'
               ? {
-                  label: 'Lanjut ke BRD (Rekomendasi AI)',
+                  label: 'Lanjut ke PRD (Rekomendasi AI)',
                   onClick: handleAiGenerateAndProceed,
                   loading: generatingAi,
                 }
@@ -446,7 +446,7 @@ export function TechStackPage() {
           <div className="text-xs">
             {selected.length === 0 ? (
               <span className="text-destructive font-medium">
-                Pilih minimal 1 teknologi untuk melanjutkan ke penyusunan BRD
+                Pilih minimal 1 teknologi untuk melanjutkan ke penyusunan PRD
               </span>
             ) : (
               <span className="text-primary font-medium">
@@ -539,7 +539,7 @@ export function TechStackPage() {
               </div>
               <div className="flex items-center gap-2 text-[11px]">
                 <Check className="h-3.5 w-3.5 text-primary shrink-0" />
-                <span>Langsung generate & siap lanjut ke BRD</span>
+                <span>Langsung generate & siap lanjut ke PRD</span>
               </div>
             </div>
           </div>
@@ -645,7 +645,7 @@ export function TechStackPage() {
       <div className="pt-4 border-t border-border text-center">
         <p className="text-xs text-muted-foreground">
           {selectedMode === 'ai'
-            ? 'Pilihan Rekomendasi AI aktif. Gunakan tombol di bar navigasi atas untuk lanjut ke penyusunan BRD.'
+            ? 'Pilihan Rekomendasi AI aktif. Gunakan tombol di bar navigasi atas untuk lanjut ke penyusunan PRD.'
             : 'Pilihan Manual aktif. Gunakan tombol di bar navigasi atas untuk membuka formulir kategori teknologi.'}
         </p>
       </div>

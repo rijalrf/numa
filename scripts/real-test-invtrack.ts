@@ -94,12 +94,13 @@ async function run() {
   });
   if (!saveStackRes.ok) throw new Error('Simpan stack gagal');
 
-  console.log('\n=== 5. GENERATE BRD DARI CHAT HISTORY ===');
-  const brdRes = await authedFetch(`/api/projects/${projectId}/brd/generate`, { method: 'POST' });
-  if (!brdRes.ok) throw new Error(`Generate BRD gagal: ${await brdRes.text()}`);
-  const brdJson = await brdRes.json();
-  const endpoints = brdJson.brd?.content?.apiEndpoints || [];
-  console.log(`BRD sukses dibuat. Total endpoints: ${endpoints.length}`);
+  console.log('\n=== 5. GENERATE PRD DARI CHAT HISTORY ===');
+  const prdRes = await authedFetch(`/api/projects/${projectId}/prd/generate`, { method: 'POST' });
+  if (!prdRes.ok) throw new Error(`Generate PRD gagal: ${await prdRes.text()}`);
+  const prdJson = await prdRes.json();
+  const prdObj = prdJson.prd ?? prdJson.brd;
+  const endpoints = prdObj?.content?.apiEndpoints || [];
+  console.log(`PRD sukses dibuat. Total endpoints: ${endpoints.length}`);
   endpoints.forEach((ep: any) => console.log(`  - [${ep.method}] ${ep.path}: ${ep.description}`));
 
   console.log('\n=== 6. GENERATE TREE DIAGRAM ===');

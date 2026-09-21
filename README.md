@@ -4,7 +4,7 @@
 
 Workspace perencanaan dan eksekusi software yang mengubah ide produk menjadi arsitektur terstruktur dan task atomic yang siap dieksekusi oleh AI agent di terminal lokal. Panduan brand, design tokens, dan sistem penamaan fitur tersedia di [BRAND.md](BRAND.md).
 
-Pipeline: Numa Brief (Chat & Interview) -> Numa Blueprint (Tech Stack & BRD) -> Numa Flow (Tree) -> Numa Forge (Kanban Tasks) -> Numa Agent (CLI Runner).
+Pipeline: Numa Brief (Chat & Interview) -> Numa Blueprint (Tech Stack & PRD) -> Numa Flow (Tree) -> Numa Forge (Kanban Tasks) -> Numa Agent (CLI Runner).
 
 ## Stack
 
@@ -46,7 +46,7 @@ numa done
 1. **Register/Login** di `http://localhost:3455` (Better Auth, cookie session).
 2. **Onboarding** — masukkan ide aplikasi.
 3. **Dashboard** — daftar project + tools (cards).
-4. **BRD Generator** (`/projects/:id/brd`) — interview discovery (5 pertanyaan), jawab, AI generate BRD.
+4. **PRD Generator** (`/projects/:id/prd`) — interview discovery (5 pertanyaan), jawab, AI generate PRD.
 5. **Roadmap Visual** (`/projects/:id/roadmap`) — diagram DAG fase & fitur (xyflow + dagre).
 6. **Task Kanban** (`/projects/:id/tasks`) — 5 kolom, polling 3 detik.
 7. **Settings** (`/projects/:id/settings`) — generate PAT (Personal Access Token).
@@ -64,7 +64,7 @@ numa done
 ## Isolasi & Keamanan
 
 - PAT disimpan sebagai `sha256(token)` di DB. Plaintext hanya dikembalikan SEKALI saat generate.
-- `requireAgent` middleware attach `projectId` ke request. Agent hanya bisa akses task/BRD project itu.
+- `requireAgent` middleware attach `projectId` ke request. Agent hanya bisa akses task/PRD project itu.
 - Uji: token project A ditolak untuk task project B (HTTP 404 "Task tidak ditemukan di project ini.").
 
 ## Env (apps/api/.env)
@@ -106,14 +106,10 @@ Dev lokal boleh mengosongkan `VITE_API_URL` (default `http://localhost:6655`).
 
 ### CLI di komputer lain
 
-CLI didistribusikan sebagai tarball (tanpa npm registry):
+CLI dipublish ke npm registry:
 
 ```bash
-# di mesin ini (hasil: packages/cli/numa-<versi>.tgz)
-cd packages/cli && npm run build && npm pack
-
-# di komputer lain
-npm install -g ./numa-<versi>.tgz
+npm install -g numa
 numa login <token PAT dari web UI> --api-url https://numa.mrijal.my.id
 numa next && numa start && numa context && numa done
 ```
@@ -132,8 +128,8 @@ URL API tersimpan di `~/.numa/config.json` saat login, jadi perintah berikutnya 
 | POST | `/api/projects/:id/discovery/generate` | user | generate pertanyaan |
 | GET | `/api/projects/:id/discovery` | user | list Q&A |
 | POST | `/api/discovery/:qid/answer` | user | submit jawaban |
-| POST | `/api/projects/:id/brd/generate` | user | AI generate BRD |
-| GET | `/api/projects/:id/brd` | user | BRD viewer |
+| POST | `/api/projects/:id/prd/generate` | user | AI generate PRD |
+| GET | `/api/projects/:id/prd` | user | PRD viewer |
 | POST | `/api/projects/:id/roadmap/generate` | user | AI generate roadmap |
 | GET | `/api/projects/:id/roadmap` | user | roadmap + edges |
 | POST | `/api/projects/:id/tasks/generate` | user | AI generate atomic tasks |

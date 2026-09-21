@@ -26,7 +26,6 @@ COPY --from=deps /app/node_modules /app/node_modules
 COPY --from=deps /app/apps/api/node_modules ./node_modules
 COPY --from=deps /app/apps/api/prisma ./prisma
 COPY tsconfig.base.json /app/tsconfig.base.json
-COPY packages/cli /app/packages/cli
 COPY apps/api/package.json ./package.json
 COPY apps/api/tsconfig.json ./tsconfig.json
 COPY apps/api/src ./src

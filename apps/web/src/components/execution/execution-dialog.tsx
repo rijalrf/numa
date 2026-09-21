@@ -1,4 +1,4 @@
-// Dialog Popup Panduan Eksekusi: Download BRD, Download Paket ZIP, dan Master Prompt Coding Agent
+// Dialog Popup Panduan Eksekusi: Download PRD, Download Paket ZIP, dan Master Prompt Coding Agent
 import { useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { api, downloadFile } from '@/lib/http';
@@ -29,7 +29,7 @@ export function ExecutionDialog({ projectId, projectName, isOpen, onClose }: Exe
   const [view, setView] = useState<'menu' | 'agent'>('menu');
   const [approvalMode, setApprovalMode] = useState<'approval' | 'full_auto'>('approval');
   const [copiedPrompt, setCopiedPrompt] = useState(false);
-  const [downloadingBrd, setDownloadingBrd] = useState(false);
+  const [downloadingPrd, setDownloadingPrd] = useState(false);
   const [downloadingZip, setDownloadingZip] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
@@ -63,7 +63,7 @@ export function ExecutionDialog({ projectId, projectName, isOpen, onClose }: Exe
       ? window.location.origin
       : (import.meta.env.VITE_API_URL ?? 'http://localhost:6655');
 
-  const installCommand = `npm install -g ${apiUrl}/api/download/numa.tgz`;
+  const installCommand = 'npm install -g numa@latest';
   const loginCommand = `numa login ${activeToken} --api-url ${apiUrl}`;
 
   const executionLoopText =
@@ -119,16 +119,16 @@ ${executionLoopText}
     }
   };
 
-  const handleDownloadBrd = async () => {
-    setDownloadingBrd(true);
+  const handleDownloadPrd = async () => {
+    setDownloadingPrd(true);
     setDownloadError(null);
     try {
-      await downloadFile(`/api/projects/${projectId}/brd/download`, `${projectName || 'Proyek'}_BRD.md`);
+      await downloadFile(`/api/projects/${projectId}/prd/download`, `${projectName || 'Proyek'}_PRD.md`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Gagal mengunduh BRD.';
+      const msg = err instanceof Error ? err.message : 'Gagal mengunduh PRD.';
       setDownloadError(msg);
     } finally {
-      setDownloadingBrd(false);
+      setDownloadingPrd(false);
     }
   };
 
@@ -200,7 +200,7 @@ ${executionLoopText}
         {/* VIEW 1: Menu 3 Opsi */}
         {view === 'menu' && (
           <div className="space-y-3.5">
-            {/* Opsi 1: Download BRD .md */}
+            {/* Opsi 1: Download PRD .md */}
             <div className="rounded-xl border border-border/80 bg-muted/20 hover:bg-muted/40 transition-colors p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-start gap-3">
                 <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0 mt-0.5 sm:mt-0">
@@ -208,10 +208,10 @@ ${executionLoopText}
                 </div>
                 <div>
                   <div className="text-sm font-semibold text-foreground">
-                    Download BRD (.md)
+                    Download PRD (.md)
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">
-                    Dokumen Business Requirements Document lengkap dalam format Markdown
+                    Dokumen Product Requirements Document lengkap dalam format Markdown
                   </div>
                 </div>
               </div>
@@ -219,16 +219,16 @@ ${executionLoopText}
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={handleDownloadBrd}
-                disabled={downloadingBrd}
+                onClick={handleDownloadPrd}
+                disabled={downloadingPrd}
                 className="gap-1.5 text-xs shrink-0 self-start sm:self-auto font-medium"
               >
-                {downloadingBrd ? (
+                {downloadingPrd ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <Download className="h-3.5 w-3.5" />
                 )}
-                <span>{downloadingBrd ? 'Mengunduh...' : 'Unduh .md'}</span>
+                <span>{downloadingPrd ? 'Mengunduh...' : 'Unduh .md'}</span>
               </Button>
             </div>
 
@@ -248,7 +248,7 @@ ${executionLoopText}
                     </Badge>
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">
-                    Arsip ZIP berisi BRD.md, USER-STORIES.md (skenario Gherkin), dan TASKS.md
+                    Arsip ZIP berisi PRD.md, USER-STORIES.md (skenario Gherkin), dan TASKS.md
                   </div>
                 </div>
               </div>
