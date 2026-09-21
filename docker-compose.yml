@@ -16,6 +16,7 @@ services:
       - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:admin123@host.docker.internal:5432/project_ai_planner}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-http://host.docker.internal:20128/v1}
       - FE_URL=${FE_URL:-http://localhost:3455,https://numa.mrijal.my.id}
+      - ENABLE_EMAIL_AUTH=${ENABLE_EMAIL_AUTH:-true}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
