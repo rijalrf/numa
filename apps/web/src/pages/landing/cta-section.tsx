@@ -9,7 +9,7 @@ export function CtaSection() {
       </div>
       <div className="relative z-10 mx-auto max-w-3xl px-6 text-center">
         <h2 className="text-3xl font-bold tracking-tight sm:text-5xl cta-fade">
-          Turn clarity into progress.
+          Ubah kejelasan ide jadi progres nyata.
         </h2>
         <p className="mt-4 text-numa-muted-light text-base max-w-md mx-auto cta-fade">
           Fondasi produk Anda sudah siap. Mulai perencanaan arsitektur dan eksekusi sekarang.

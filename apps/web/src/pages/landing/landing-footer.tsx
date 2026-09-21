@@ -10,26 +10,26 @@ export function LandingFooter() {
               </div>
               <span className="text-base font-bold tracking-tight text-white">Numa</span>
             </div>
-            <p className="mt-4 max-w-xs text-sm leading-6 text-numa-muted">Shape ideas into software. AI-powered planning from concept to agent-ready execution.</p>
+            <p className="mt-4 max-w-xs text-sm leading-6 text-numa-muted">Ubah ide jadi software. Perencanaan berbasis AI dari konsep awal hingga siap dieksekusi agent.</p>
           </div>
           <div>
-            <p className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-numa-muted">Product</p>
+            <p className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-numa-muted">Produk</p>
             <ul className="space-y-3 text-sm text-numa-text">
-              <li><a href="#features" className="transition-colors hover:text-white">Features</a></li>
-              <li><a href="#workflow" className="transition-colors hover:text-white">How it works</a></li>
-              <li><a href="#pricing" className="transition-colors hover:text-white">Pricing</a></li>
+              <li><a href="#features" className="transition-colors hover:text-white">Fitur</a></li>
+              <li><a href="#workflow" className="transition-colors hover:text-white">Cara Kerja</a></li>
+              <li><a href="#pricing" className="transition-colors hover:text-white">Harga</a></li>
             </ul>
           </div>
           <div>
-            <p className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-numa-muted">Resources</p>
+            <p className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-numa-muted">Sumber Daya</p>
             <ul className="space-y-3 text-sm text-numa-text">
-              <li><a href="#" className="transition-colors hover:text-white">Documentation</a></li>
-              <li><a href="#" className="transition-colors hover:text-white">CLI Reference</a></li>
-              <li><a href="#" className="transition-colors hover:text-white">Changelog</a></li>
+              <li><a href="#" className="transition-colors hover:text-white">Dokumentasi</a></li>
+              <li><a href="#" className="transition-colors hover:text-white">Referensi CLI</a></li>
+              <li><a href="#" className="transition-colors hover:text-white">Catatan Rilis</a></li>
             </ul>
           </div>
           <div>
-            <p className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-numa-muted">Connect</p>
+            <p className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-numa-muted">Komunitas</p>
             <div className="flex items-center gap-4">
               <a href="#" className="text-numa-muted transition-colors hover:text-white">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
@@ -41,8 +41,8 @@ export function LandingFooter() {
           </div>
         </div>
         <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-white/[.06] pt-8 sm:flex-row">
-          <p className="text-xs text-numa-dim">2026 Numa. All rights reserved.</p>
-          <p className="text-xs text-numa-dim">Built for developers who build with AI.</p>
+          <p className="text-xs text-numa-dim">2026 Numa. Hak cipta dilindungi.</p>
+          <p className="text-xs text-numa-dim">Dibuat untuk developer yang membangun dengan AI.</p>
         </div>
       </div>
     </footer>

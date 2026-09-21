@@ -16,9 +16,9 @@ export function LandingHeader() {
         </a>
 
         <nav className="hidden items-center gap-8 md:flex">
-          <a href="#features" className="text-[13px] text-numa-text transition-colors hover:text-white">Features</a>
-          <a href="#workflow" className="text-[13px] text-numa-text transition-colors hover:text-white">How it works</a>
-          <a href="#pricing" className="text-[13px] text-numa-text transition-colors hover:text-white">Pricing</a>
+          <a href="#features" className="text-[13px] text-numa-text transition-colors hover:text-white">Fitur</a>
+          <a href="#workflow" className="text-[13px] text-numa-text transition-colors hover:text-white">Cara Kerja</a>
+          <a href="#pricing" className="text-[13px] text-numa-text transition-colors hover:text-white">Harga</a>
         </nav>
 
         <div className="flex items-center gap-3">
@@ -35,13 +35,13 @@ export function LandingHeader() {
                 to="/login"
                 className="hidden text-[13px] font-medium text-numa-text transition-colors hover:text-white sm:inline-flex"
               >
-                Sign in
+                Masuk
               </Link>
               <Link
                 to="/login"
                 className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-b from-numa-primary to-[#237069] px-4 py-2 text-[13px] font-semibold text-white shadow-[0_0_16px_rgba(45,126,121,.3),inset_0_1px_0_rgba(255,255,255,.1)] transition-all hover:shadow-[0_0_24px_rgba(45,126,121,.5)] active:translate-y-px"
               >
-                Get started
+                Mulai
               </Link>
             </>
           )}

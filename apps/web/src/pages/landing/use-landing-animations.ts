@@ -13,23 +13,22 @@ export function useLandingAnimations() {
 
   useEffect(() => {
     const ctx = gsap.context(() => {
-      // Hero text reveal
-      document.querySelectorAll('[data-page="landing"] .reveal-line').forEach((el, i) => {
-        const child = el.children[0];
-        if (child) {
-          gsap.to(child, {
-            y: 0,
-            duration: 0.9,
-            ease: 'power3.out',
-            delay: 0.2 + i * 0.12,
-          });
-        }
+      // Hero text reveal cepat dan staggered
+      const revealItems = gsap.utils.toArray<HTMLElement>('.reveal-line > *');
+      revealItems.forEach((child, i) => {
+        gsap.to(child, {
+          y: 0,
+          opacity: 1,
+          duration: 0.65,
+          ease: 'power3.out',
+          delay: 0.05 + i * 0.08,
+        });
       });
 
-      // Hero CTA + viz + scroll hint fade in
-      gsap.to('#heroCta', { opacity: 1, duration: 0.8, delay: 1.0, ease: 'power2.out' });
-      gsap.to('#heroViz', { opacity: 1, duration: 1.2, delay: 0.6, ease: 'power2.out' });
-      gsap.to('#scrollHint', { opacity: 1, duration: 0.6, delay: 1.4, ease: 'power2.out' });
+      // Hero CTA + viz + scroll hint
+      gsap.to('#heroViz', { opacity: 1, duration: 0.8, delay: 0.15, ease: 'power2.out' });
+      gsap.to('#heroCta', { opacity: 1, y: 0, duration: 0.6, delay: 0.35, ease: 'power2.out' });
+      gsap.to('#scrollHint', { opacity: 1, duration: 0.5, delay: 0.55, ease: 'power2.out' });
 
       // Pipeline section fades
       gsap.utils.toArray<Element>('.pipeline-fade').forEach((el, i) => {
