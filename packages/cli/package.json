@@ -18,7 +18,7 @@
   "author": "Rijal RF <support@numa.dev>",
   "type": "module",
   "bin": {
-    "numa": "./dist/index.js"
+    "numa": "dist/index.js"
   },
   "files": [
     "dist",
@@ -48,6 +48,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/rijalrf/numa.git"
+    "url": "git+https://github.com/rijalrf/numa.git"
   }
 }
