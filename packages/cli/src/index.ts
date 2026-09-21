@@ -12,7 +12,7 @@ const program = new Command();
 program
   .name('numa')
   .description('CLI agent loop untuk numa (AI Planner). Dipakai oleh AI coding agent.')
-  .version('0.2.2');
+  .version('0.3.0');
 
 program
   .command('login <token>')

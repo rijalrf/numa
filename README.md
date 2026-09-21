@@ -109,7 +109,7 @@ Dev lokal boleh mengosongkan `VITE_API_URL` (default `http://localhost:6655`).
 CLI dipublish ke npm registry:
 
 ```bash
-npm install -g numa
+npm install -g numa-cli
 numa login <token PAT dari web UI> --api-url https://numa.mrijal.my.id
 numa next && numa start && numa context && numa done
 ```

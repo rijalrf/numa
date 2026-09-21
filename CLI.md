@@ -24,9 +24,9 @@ CLI `numa` adalah antarmuka command-line yang digunakan oleh pengembang maupun A
 ## 2. Instalasi CLI
 
 ```bash
-npm install -g numa
+npm install -g numa-cli
 ```
-Perintah dipasang secara global (`-g`), sehingga langsung tersedia di semua direktori tanpa perlu instalasi ulang untuk proyek lain.
+Perintah dipasang secara global (`-g`), sehingga langsung tersedia di semua direktori tanpa perlu instalasi ulang untuk proyek lain. Executable terminal tetap `numa`.
 
 ---
 

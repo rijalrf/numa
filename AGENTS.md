@@ -88,7 +88,7 @@ Setiap project melewati 8 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 - **PAT**: disimpan sebagai `sha256` di DB. Plaintext dikembalikan SEKALI saat generate.
 - **Isolasi project**: `requireAgent` middleware attach `projectId`. Agent hanya akses task project sendiri.
 - **Akses publik**: tunnel Cloudflare di `https://numa.mrijal.my.id` (ingress `/api/*` -> 6655, sisanya -> 3455).
-- **CLI remote**: `npm i -g numa`, set `NUMA_API_URL`.
+- **CLI remote**: `npm i -g numa-cli`, set `NUMA_API_URL`.
 - **Semua route** dideklarasikan flat di `apps/api/src/index.ts`. Pakai `requireUser` (cookie) atau `requireAgent` (PAT). Validasi body dengan Zod.
 - **Tool registry**: edit `apps/api/src/tools/registry.ts`, otomatis muncul di dashboard via `/api/tools`.
 

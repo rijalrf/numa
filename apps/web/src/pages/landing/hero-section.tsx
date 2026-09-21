@@ -6,7 +6,7 @@ export function HeroSection() {
   const [copied, setCopied] = useState(false);
 
   const handleCopyCli = () => {
-    navigator.clipboard.writeText('npm i -g numa');
+    navigator.clipboard.writeText('npm i -g numa-cli');
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -54,7 +54,7 @@ export function HeroSection() {
               title="Klik untuk menyalin perintah"
             >
               {copied ? <Check className="w-4 h-4 text-numa-accent" /> : <Terminal className="w-4 h-4" />}
-              <span className="font-mono text-xs">{copied ? 'Perintah disalin' : 'npm i -g numa'}</span>
+              <span className="font-mono text-xs">{copied ? 'Perintah disalin' : 'npm i -g numa-cli'}</span>
             </button>
           </div>
         </div>

@@ -1,14 +1,18 @@
-# numa
+# numa-cli
 
 CLI agent loop untuk autonomous AI coding agent. Execute tasks via bounded context isolation. Universal PAT support — satu token bisa akses multiple projects.
 
 ## Installation
 
 ```bash
-npx numa@latest login <token>
+npm install -g numa-cli
 ```
 
-No manual install needed — runs directly via npx!
+Atau jalankan langsung tanpa instalasi:
+
+```bash
+npx numa-cli@latest login <token>
+```
 
 ## Commands
 
@@ -17,7 +21,9 @@ Login dengan Personal Access Token (PAT) yang dibuat di web UI Settings.
 
 **Contoh:**
 ```bash
-npx numa login numa_abc123def456...
+numa login numa_abc123def456...
+# atau via npx:
+npx numa-cli login numa_abc123def456...
 ```
 
 Token universal ini bisa diakses ke beberapa project berbeda — cukup switch project sesuai kebutuhan.
@@ -27,12 +33,12 @@ Beralih project dari token universal. Tanpa parameter tampilkan bantuan, dengan 
 
 **Tampilkan bantuan:**
 ```bash
-npx numa switch
+numa switch
 ```
 
 **Switch ke project lain:**
 ```bash
-npx numa switch <project-id>
+numa switch <project-id>
 ```
 
 ### `whoami`
@@ -40,7 +46,7 @@ Tampilkan info project dari token saat ini.
 
 **Contoh:**
 ```bash
-npx numa whoami
+numa whoami
 ```
 
 ### `next`
@@ -64,9 +70,9 @@ Tandai task sebagai IN_PROGRESS. Gunakan setelah `next`.
 
 **Contoh:**
 ```bash
-npx numa start
+numa start
 # atau spesifik:
-npx numa start abc-123-def
+numa start abc-123-def
 ```
 
 ### `context [id]`
@@ -79,7 +85,7 @@ Cetak Markdown bounded context untuk task aktif. Berisi:
 
 **Contoh:**
 ```bash
-npx numa context
+numa context
 ```
 
 ### `done [id]`
@@ -133,14 +139,14 @@ Loop eksekusi standar:
 
 ```bash
 # 1. Login (sekali saja)
-npx numa login numa_your_token_here
+numa login numa_your_token_here
 
 # 2. Loop setiap task
-npx numa next      # Ambil task berikutnya
-npx numa start     # Tandai IN_PROGRESS
-npx numa context   # Baca bounded context (WAJIB!)
+numa next      # Ambil task berikutnya
+numa start     # Tandai IN_PROGRESS
+numa context   # Baca bounded context (WAJIB!)
 # ... kerjakan coding sesuai bounded context ...
-npx numa done      # Tanda selesai
+numa done      # Tanda selesai
 
 # Ulangi sampai CLI bilang "Tidak ada task tersisa"
 ```

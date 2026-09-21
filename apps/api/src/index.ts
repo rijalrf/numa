@@ -1189,7 +1189,7 @@ ${project.prd ? `- PRD: SEDIA — fetch via \`numa prd\` atau download manual` :
 ## Setup (jalankan 1x di awal)
 1. Install CLI:
    \`\`\`
-   npm install -g numa@latest
+   npm install -g numa-cli@latest
    \`\`\`
 2. Login dengan token di bawah ini sekaligus arahkan ke server (tersimpan di ~/.numa/config.json):
    \`\`\`

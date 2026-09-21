@@ -63,7 +63,7 @@ export function ExecutionDialog({ projectId, projectName, isOpen, onClose }: Exe
       ? window.location.origin
       : (import.meta.env.VITE_API_URL ?? 'http://localhost:6655');
 
-  const installCommand = 'npm install -g numa@latest';
+  const installCommand = 'npm install -g numa-cli@latest';
   const loginCommand = `numa login ${activeToken} --api-url ${apiUrl}`;
 
   const executionLoopText =

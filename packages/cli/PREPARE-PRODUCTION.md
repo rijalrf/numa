@@ -1,6 +1,6 @@
 # Persiapan Production - numa CLI
 
-Panduan lengkap untuk publish `numa` ke NPM Public Registry.
+Panduan lengkap untuk publish `numa-cli` ke NPM Public Registry.
 
 ---
 
@@ -14,10 +14,9 @@ File: `packages/cli/package.json`
 
 ```json
 {
-  "name": "numa",
-  "version": "0.2.0",
+  "name": "numa-cli",
+  "version": "0.3.0",
   "description": "CLI agent loop untuk AI coding agent...",
-  "main": "dist/index.js",
   "type": "module",
   
   "bin": {
