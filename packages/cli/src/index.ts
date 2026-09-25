@@ -18,10 +18,12 @@ program
   .command('login <token>')
   .description('Simpan Personal Access Token (PAT) dan verifikasi ke server.')
   .option('--api-url <url>', 'URL server API numa (default: http://localhost:6655)')
-  .action(async (token: string, opts: { apiUrl?: string }) => {
+  .option('-u, --url <url>', 'Alias untuk --api-url')
+  .action(async (token: string, opts: { apiUrl?: string; url?: string }) => {
     const cfg = loadConfig();
-    if (opts.apiUrl) {
-      cfg.apiUrl = opts.apiUrl;
+    const targetUrl = opts.url || opts.apiUrl;
+    if (targetUrl) {
+      cfg.apiUrl = targetUrl;
     }
     cfg.token = token;
     saveConfig(cfg);

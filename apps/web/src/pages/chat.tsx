@@ -1,12 +1,13 @@
 // Halaman chat: Brainstorming ide aplikasi dengan AI Numa
 import { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Send, Loader2, ArrowRight, RefreshCw, Sparkles, MessageSquare } from 'lucide-react';
 import { ChatBubble } from '@/components/chat/chat-bubble';
 import { StructuredForm } from '@/components/chat/structured-form';
 import { TypingIndicator } from '@/components/chat/typing-indicator';
+import { PricingDialog } from '@/components/billing/pricing-dialog';
 import { api } from '@/lib/http';
 
 export type ChatMessage = {
@@ -28,6 +29,15 @@ function parsePayload(val: any) {
   }
 }
 
+export interface UserPlanInfo {
+  plan: string;
+  planName: string;
+  quotaUsed: number;
+  quotaMax: number;
+  chatLimit: number;
+  charLimit: number;
+}
+
 export function ChatPage() {
   const { sessionId: routeSessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
@@ -38,7 +48,20 @@ export function ChatPage() {
   const [isTyping, setIsTyping] = useState(false);
   const [showFinishButton, setShowFinishButton] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const [userPlan, setUserPlan] = useState<UserPlanInfo | null>(null);
+  const [pricingOpen, setPricingOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const userMessageCount = messages.filter((m) => m.role === 'user').length;
+  const chatLimit = userPlan?.chatLimit ?? 10;
+  const charLimit = userPlan?.charLimit ?? 1000;
+  const isLimitReached = userMessageCount >= chatLimit;
+
+  useEffect(() => {
+    api<UserPlanInfo>('/api/user/plan')
+      .then(setUserPlan)
+      .catch((err) => console.warn('Gagal memuat info plan:', err));
+  }, []);
 
   useEffect(() => {
     setActiveSessionId(routeSessionId);
@@ -281,13 +304,14 @@ export function ChatPage() {
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={handleKeyDown}
                 disabled={isLoading}
+                maxLength={charLimit}
                 rows={3}
                 className="resize-none border-0 focus-visible:ring-0 shadow-none p-2 text-sm bg-transparent"
                 autoFocus
               />
               <div className="flex items-center justify-between pt-2 border-t border-border mt-2">
                 <span className="text-[11px] text-muted-foreground">
-                  Tekan <kbd className="px-1 py-0.5 rounded bg-muted font-mono text-[10px]">Enter</kbd> untuk kirim, <kbd className="px-1 py-0.5 rounded bg-muted font-mono text-[10px]">Shift+Enter</kbd> untuk baris baru
+                  Tekan <kbd className="px-1 py-0.5 rounded bg-muted font-mono text-[10px]">Enter</kbd> untuk kirim • {inputText.length}/{charLimit} karakter
                 </span>
                 <Button
                   onClick={sendMessage}
@@ -368,36 +392,68 @@ export function ChatPage() {
           {/* Input area yang dibungkus container */}
           <div className="border-t border-border px-4 sm:px-6 py-4 bg-background">
             <div className="max-w-4xl mx-auto">
+              {isLimitReached && (
+                <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-center">
+                  <p className="text-xs text-amber-900 dark:text-amber-200">
+                    Batas pesan untuk paket {userPlan?.planName || 'Free Trial'} ({chatLimit} pesan) telah tercapai.{' '}
+                    <button
+                      type="button"
+                      onClick={() => setPricingOpen(true)}
+                      className="underline font-semibold text-primary hover:text-primary/80 cursor-pointer ml-1 inline-flex items-center gap-1"
+                    >
+                      <Sparkles className="h-3 w-3" />
+                      Upgrade paket
+                    </button>{' '}
+                    untuk menambah batas pesan, atau lanjutkan ke tahap berikutnya.
+                  </p>
+                </div>
+              )}
               <div className="flex gap-3 items-end rounded-xl border border-border bg-card p-2 shadow-sm focus-within:ring-1 focus-within:ring-primary">
                 <Textarea
                   placeholder={
-                    showFinishButton
+                    isLimitReached
+                      ? 'Batas pesan chat telah tercapai. Lanjut ke Tech Stack untuk membuat proyek.'
+                      : showFinishButton
                       ? 'Masih ada yang ingin dikonfirmasi atau diubah? Ketik di sini...'
                       : 'Tulis pesan Anda... (Shift+Enter untuk baris baru)'
                   }
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  disabled={isLoading}
+                  disabled={isLoading || isLimitReached}
+                  maxLength={charLimit}
                   rows={2}
                   className="flex-1 resize-none border-0 focus-visible:ring-0 shadow-none p-2 text-sm bg-transparent"
                 />
                 <Button
                   onClick={sendMessage}
-                  disabled={isLoading || !inputText.trim()}
+                  disabled={isLoading || !inputText.trim() || isLimitReached}
                   size="icon"
                   className="shrink-0 mb-0.5"
                 >
                   <Send className="h-4 w-4" />
                 </Button>
               </div>
-              <p className="text-[11px] text-muted-foreground mt-2 text-center">
-                Tekan Enter untuk kirim, Shift+Enter untuk baris baru
-              </p>
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-2 px-1">
+                <span>
+                  Pesan {userMessageCount}/{chatLimit}
+                </span>
+                <span>
+                  {inputText.length}/{charLimit} karakter
+                </span>
+              </div>
             </div>
           </div>
         </>
       )}
+
+      {/* Modal Popup Harga jika limit chat atau hard stop */}
+      <PricingDialog
+        isOpen={pricingOpen}
+        onClose={() => setPricingOpen(false)}
+        title="Tingkatkan Kuota Chat & Proyek"
+        description="Batas putaran pesan chat untuk paket saat ini telah tercapai. Pilih paket yang lebih tinggi untuk melanjutkan brainstorming dengan AI tanpa batas."
+      />
     </div>
   );
 }

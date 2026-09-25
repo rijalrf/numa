@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -90,8 +91,8 @@ export function TaskDetailDialog({ task, isOpen, onClose, userStories }: TaskDet
     setTimeout(() => setCopiedCmd(false), 2000);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto no-scrollbar">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto no-scrollbar">
       <div className="bg-card border border-border rounded-2xl shadow-2xl max-w-3xl w-full p-6 space-y-5 my-8 text-foreground transition-all">
         {/* Header Dialog */}
         <div className="flex items-start justify-between gap-4 border-b border-border/80 pb-4">
@@ -366,6 +367,7 @@ export function TaskDetailDialog({ task, isOpen, onClose, userStories }: TaskDet
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

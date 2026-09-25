@@ -20,23 +20,23 @@ export function HeroSection() {
           <div className="reveal-line mb-6">
             <div className="inline-flex items-center gap-2 rounded-full border border-numa-primary/30 bg-numa-primary/10 px-3.5 py-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-numa-accent animate-pulse" />
-              <span className="font-mono text-xs uppercase tracking-wider text-numa-accent font-medium">AI Software Factory</span>
+              <span className="font-mono text-xs uppercase tracking-wider text-numa-primary dark:text-numa-accent font-semibold">AI Software Factory</span>
             </div>
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-[-0.03em] leading-[1.12]">
             <span className="reveal-line block">
-              <span className="inline-block text-white">Ubah ide</span>
+              <span className="inline-block text-foreground dark:text-white">Ubah ide</span>
             </span>
             <span className="reveal-line block mt-1">
-              <span className="inline-block text-numa-muted">
+              <span className="inline-block text-muted-foreground dark:text-numa-muted">
                 jadi software<span className="cursor-blink"></span>
               </span>
             </span>
           </h1>
 
           <div className="reveal-line mt-6 max-w-xl">
-            <p className="text-base sm:text-lg leading-relaxed text-numa-muted-light">
+            <p className="text-base sm:text-lg leading-relaxed text-muted-foreground dark:text-numa-muted-light">
               Workspace perencanaan dan eksekusi software yang mengubah ide produk menjadi arsitektur terstruktur dan task atomic yang siap dieksekusi oleh AI agent di terminal lokal.
             </p>
           </div>
@@ -50,10 +50,10 @@ export function HeroSection() {
             <button
               type="button"
               onClick={handleCopyCli}
-              className="inline-flex items-center gap-2 rounded-full border border-white/[.08] px-6 py-3.5 text-sm text-numa-text transition-all hover:border-white/20 hover:text-white"
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-6 py-3.5 text-sm text-foreground/80 shadow-sm transition-all hover:border-border hover:bg-accent/60 hover:text-foreground dark:border-white/[.08] dark:bg-transparent dark:text-numa-text dark:shadow-none dark:hover:border-white/20 dark:hover:text-white"
               title="Klik untuk menyalin perintah"
             >
-              {copied ? <Check className="w-4 h-4 text-numa-accent" /> : <Terminal className="w-4 h-4" />}
+              {copied ? <Check className="w-4 h-4 text-numa-primary dark:text-numa-accent" /> : <Terminal className="w-4 h-4 text-muted-foreground dark:text-inherit" />}
               <span className="font-mono text-xs">{copied ? 'Perintah disalin' : 'npm i -g numa-cli'}</span>
             </button>
           </div>
@@ -63,9 +63,9 @@ export function HeroSection() {
         <div className="relative flex items-center justify-center" id="heroViz" style={{ opacity: 0 }}>
           <div className="relative w-full max-w-lg aspect-square">
             {/* Orbital rings */}
-            <div className="absolute inset-8 rounded-full border border-numa-primary/10 pulse-ring"></div>
-            <div className="absolute inset-16 rounded-full border border-numa-primary/15 pulse-ring" style={{ animationDelay: '1s' }}></div>
-            <div className="absolute inset-24 rounded-full border border-numa-primary/20 pulse-ring" style={{ animationDelay: '2s' }}></div>
+            <div className="absolute inset-8 rounded-full border border-numa-primary/15 pulse-ring dark:border-numa-primary/10"></div>
+            <div className="absolute inset-16 rounded-full border border-numa-primary/20 pulse-ring dark:border-numa-primary/15" style={{ animationDelay: '1s' }}></div>
+            <div className="absolute inset-24 rounded-full border border-numa-primary/25 pulse-ring dark:border-numa-primary/20" style={{ animationDelay: '2s' }}></div>
 
             {/* Center logo */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
@@ -75,7 +75,7 @@ export function HeroSection() {
             </div>
 
             {/* SVG connection lines */}
-            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 400 400" fill="none" style={{ opacity: 0.3 }}>
+            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 400 400" fill="none" style={{ opacity: 0.35 }}>
               <line x1="200" y1="140" x2="200" y2="180" stroke="#2D7E79" strokeWidth="1" className="flow-line" />
               <line x1="260" y1="200" x2="220" y2="200" stroke="#2D7E79" strokeWidth="1" className="flow-line" style={{ animationDelay: '0.3s' }} />
               <line x1="200" y1="260" x2="200" y2="220" stroke="#2D7E79" strokeWidth="1" className="flow-line" style={{ animationDelay: '0.6s' }} />
@@ -84,51 +84,51 @@ export function HeroSection() {
 
             {/* Floating nodes */}
             <div className="absolute top-6 left-1/2 -translate-x-1/2 node-pop" style={{ animationDelay: '0.2s' }}>
-              <div className="flex items-center gap-2 rounded-xl bg-numa-card border border-numa-primary/25 px-3.5 py-2.5 shadow-[0_0_20px_rgba(45,126,121,0.1)]">
-                <MessageSquareText className="text-numa-accent" size={16} />
-                <span className="text-[11px] font-medium text-numa-text">Brief</span>
+              <div className="flex items-center gap-2 rounded-xl bg-card border border-numa-primary/30 px-3.5 py-2.5 shadow-[0_4px_20px_rgba(45,126,121,0.12)] dark:bg-numa-card dark:border-numa-primary/25 dark:shadow-[0_0_20px_rgba(45,126,121,0.1)]">
+                <MessageSquareText className="text-numa-primary dark:text-numa-accent" size={16} />
+                <span className="text-[11px] font-medium text-foreground dark:text-numa-text">Brief</span>
               </div>
             </div>
             <div className="absolute right-2 top-1/2 -translate-y-1/2 node-pop" style={{ animationDelay: '0.35s' }}>
-              <div className="flex items-center gap-2 rounded-xl bg-numa-card border border-numa-primary/25 px-3.5 py-2.5 shadow-[0_0_20px_rgba(45,126,121,0.1)]">
-                <FileText className="text-numa-accent" size={16} />
-                <span className="text-[11px] font-medium text-numa-text">Blueprint</span>
+              <div className="flex items-center gap-2 rounded-xl bg-card border border-numa-primary/30 px-3.5 py-2.5 shadow-[0_4px_20px_rgba(45,126,121,0.12)] dark:bg-numa-card dark:border-numa-primary/25 dark:shadow-[0_0_20px_rgba(45,126,121,0.1)]">
+                <FileText className="text-numa-primary dark:text-numa-accent" size={16} />
+                <span className="text-[11px] font-medium text-foreground dark:text-numa-text">Blueprint</span>
               </div>
             </div>
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 node-pop" style={{ animationDelay: '0.5s' }}>
-              <div className="flex items-center gap-2 rounded-xl bg-numa-card border border-numa-primary/25 px-3.5 py-2.5 shadow-[0_0_20px_rgba(45,126,121,0.1)]">
-                <Kanban className="text-numa-accent" size={16} />
-                <span className="text-[11px] font-medium text-numa-text">Forge</span>
+              <div className="flex items-center gap-2 rounded-xl bg-card border border-numa-primary/30 px-3.5 py-2.5 shadow-[0_4px_20px_rgba(45,126,121,0.12)] dark:bg-numa-card dark:border-numa-primary/25 dark:shadow-[0_0_20px_rgba(45,126,121,0.1)]">
+                <Kanban className="text-numa-primary dark:text-numa-accent" size={16} />
+                <span className="text-[11px] font-medium text-foreground dark:text-numa-text">Forge</span>
               </div>
             </div>
             <div className="absolute left-2 top-1/2 -translate-y-1/2 node-pop" style={{ animationDelay: '0.65s' }}>
-              <div className="flex items-center gap-2 rounded-xl bg-numa-card border border-numa-primary/25 px-3.5 py-2.5 shadow-[0_0_20px_rgba(45,126,121,0.1)]">
-                <GitBranch className="text-numa-accent" size={16} />
-                <span className="text-[11px] font-medium text-numa-text">Flow</span>
+              <div className="flex items-center gap-2 rounded-xl bg-card border border-numa-primary/30 px-3.5 py-2.5 shadow-[0_4px_20px_rgba(45,126,121,0.12)] dark:bg-numa-card dark:border-numa-primary/25 dark:shadow-[0_0_20px_rgba(45,126,121,0.1)]">
+                <GitBranch className="text-numa-primary dark:text-numa-accent" size={16} />
+                <span className="text-[11px] font-medium text-foreground dark:text-numa-text">Flow</span>
               </div>
             </div>
             <div className="absolute top-16 right-10 node-pop" style={{ animationDelay: '0.8s' }}>
-              <div className="flex items-center gap-2 rounded-xl bg-numa-card border border-white/[.06] px-3 py-2 shadow-[0_0_15px_rgba(45,126,121,0.05)]">
-                <Layers className="text-numa-muted" size={14} />
-                <span className="text-[10px] text-numa-muted">Stack</span>
+              <div className="flex items-center gap-2 rounded-xl bg-card border border-border px-3 py-2 shadow-sm dark:bg-numa-card dark:border-white/[.06] dark:shadow-[0_0_15px_rgba(45,126,121,0.05)]">
+                <Layers className="text-muted-foreground dark:text-numa-muted" size={14} />
+                <span className="text-[10px] text-muted-foreground dark:text-numa-muted">Stack</span>
               </div>
             </div>
             <div className="absolute bottom-16 left-10 node-pop" style={{ animationDelay: '0.95s' }}>
-              <div className="flex items-center gap-2 rounded-xl bg-numa-card border border-white/[.06] px-3 py-2 shadow-[0_0_15px_rgba(45,126,121,0.05)]">
-                <Terminal className="text-numa-muted" size={14} />
-                <span className="text-[10px] text-numa-muted">Agent CLI</span>
+              <div className="flex items-center gap-2 rounded-xl bg-card border border-border px-3 py-2 shadow-sm dark:bg-numa-card dark:border-white/[.06] dark:shadow-[0_0_15px_rgba(45,126,121,0.05)]">
+                <Terminal className="text-muted-foreground dark:text-numa-muted" size={14} />
+                <span className="text-[10px] text-muted-foreground dark:text-numa-muted">Agent CLI</span>
               </div>
             </div>
             <div className="absolute top-20 left-14 node-pop" style={{ animationDelay: '1.1s' }}>
-              <div className="flex items-center gap-2 rounded-xl bg-numa-card border border-white/[.06] px-3 py-2 shadow-[0_0_15px_rgba(45,126,121,0.05)]">
-                <ShieldCheck className="text-numa-muted" size={14} />
-                <span className="text-[10px] text-numa-muted">Gate</span>
+              <div className="flex items-center gap-2 rounded-xl bg-card border border-border px-3 py-2 shadow-sm dark:bg-numa-card dark:border-white/[.06] dark:shadow-[0_0_15px_rgba(45,126,121,0.05)]">
+                <ShieldCheck className="text-muted-foreground dark:text-numa-muted" size={14} />
+                <span className="text-[10px] text-muted-foreground dark:text-numa-muted">Gate</span>
               </div>
             </div>
             <div className="absolute bottom-20 right-14 node-pop" style={{ animationDelay: '1.25s' }}>
-              <div className="flex items-center gap-2 rounded-xl bg-numa-card border border-white/[.06] px-3 py-2 shadow-[0_0_15px_rgba(45,126,121,0.05)]">
-                <Cpu className="text-numa-muted" size={14} />
-                <span className="text-[10px] text-numa-muted">Agent</span>
+              <div className="flex items-center gap-2 rounded-xl bg-card border border-border px-3 py-2 shadow-sm dark:bg-numa-card dark:border-white/[.06] dark:shadow-[0_0_15px_rgba(45,126,121,0.05)]">
+                <Cpu className="text-muted-foreground dark:text-numa-muted" size={14} />
+                <span className="text-[10px] text-muted-foreground dark:text-numa-muted">Agent</span>
               </div>
             </div>
           </div>
@@ -137,7 +137,7 @@ export function HeroSection() {
 
       {/* Scroll indicator */}
       <div className="absolute bottom-10 left-1/2 -translate-x-1/2" id="scrollHint" style={{ opacity: 0 }}>
-        <div className="flex flex-col items-center gap-2 text-numa-dim">
+        <div className="flex flex-col items-center gap-2 text-muted-foreground/60 dark:text-numa-dim">
           <span className="text-[10px] uppercase tracking-[0.2em] font-mono">gulir</span>
           <div className="w-px h-8 bg-gradient-to-b from-numa-primary to-transparent"></div>
         </div>

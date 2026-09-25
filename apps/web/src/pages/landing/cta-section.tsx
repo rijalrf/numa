@@ -8,10 +8,10 @@ export function CtaSection() {
         <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-numa-primary/6 rounded-full blur-[100px]"></div>
       </div>
       <div className="relative z-10 mx-auto max-w-3xl px-6 text-center">
-        <h2 className="text-3xl font-bold tracking-tight sm:text-5xl cta-fade">
+        <h2 className="text-3xl font-bold tracking-tight sm:text-5xl cta-fade text-foreground dark:text-white">
           Ubah kejelasan ide jadi progres nyata.
         </h2>
-        <p className="mt-4 text-numa-muted-light text-base max-w-md mx-auto cta-fade">
+        <p className="mt-4 text-muted-foreground dark:text-numa-muted-light text-base max-w-md mx-auto cta-fade">
           Fondasi produk Anda sudah siap. Mulai perencanaan arsitektur dan eksekusi sekarang.
         </p>
         <div className="mt-8 cta-fade">

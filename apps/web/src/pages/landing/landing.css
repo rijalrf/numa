@@ -49,9 +49,12 @@
   height: 12px;
   border-radius: 50%;
   border: 2px solid #2D7E79;
-  background: #0A0F0F;
+  background: hsl(var(--card));
   position: relative;
   z-index: 2;
+}
+.dark [data-page="landing"] .pipeline-dot {
+  background: #0A0F0F;
 }
 [data-page="landing"] .pipeline-dot.active {
   background: #2D7E79;

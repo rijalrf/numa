@@ -10,6 +10,7 @@ import { PrdPage } from '@/pages/projects/prd';
 import { TreePage } from '@/pages/projects/tree';
 import { BoardPage } from '@/pages/projects/board';
 import { SettingsPage } from '@/pages/projects/settings';
+import { BillingPage } from '@/pages/settings/billing';
 import WizardLayout from '@/components/layout/wizard-layout';
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -42,7 +43,9 @@ export function App() {
         }
       >
         <Route path="/dashboard" element={<ChatPage />} />
+        <Route path="/chat" element={<ChatPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/settings/billing" element={<BillingPage />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/chat/:sessionId" element={<ChatPage />} />
         <Route path="/projects/:projectId/techstack" element={<TechStackPage />} />

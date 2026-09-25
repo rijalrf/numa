@@ -13,7 +13,7 @@ export default function WizardLayout() {
   return (
     <WizardNavProvider>
       <div className={cn('bg-background flex flex-col', isTree ? 'h-screen overflow-hidden' : 'min-h-screen')}>
-        <div className="sticky top-0 z-50 shrink-0">
+        <div className="sticky top-0 z-30 shrink-0">
           <Header />
           <WizardNav />
         </div>

@@ -32,15 +32,9 @@ export function LandingPage() {
     }
     updateGlow();
 
-    // Force dark mode untuk landing page, restore saat unmount
-    const root = document.documentElement;
-    const hadDark = root.classList.contains('dark');
-    root.classList.add('dark');
-
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       cancelAnimationFrame(rafId);
-      if (!hadDark) root.classList.remove('dark');
     };
   }, [handleMouseMove]);
 
@@ -48,7 +42,7 @@ export function LandingPage() {
     <div
       ref={containerRef}
       data-page="landing"
-      className="noise-overlay bg-[#0A0F0F] font-sans text-white antialiased"
+      className="noise-overlay bg-background font-sans text-foreground antialiased dark:bg-[#0A0F0F] dark:text-white"
       style={{ scrollBehavior: 'smooth' }}
     >
       <div ref={glowRef} className="cursor-glow" />

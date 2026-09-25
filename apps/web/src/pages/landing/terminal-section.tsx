@@ -31,11 +31,11 @@ export function TerminalSection() {
       <div className="mx-auto max-w-4xl px-6">
         <div className="mb-12 text-center">
           <p className="font-mono text-xs tracking-[0.3em] uppercase text-numa-primary mb-4">Numa Agent di Terminal Lokal</p>
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Tinjau arsitektur. Agent mengeksekusi.</h2>
-          <p className="mt-4 text-numa-muted-light text-base max-w-lg mx-auto">Master prompt terstruktur memandu AI coding agent menjalankan CLI numa secara otonom: mengambil task terisolasi, menghormati batas bounded context, dan memvalidasi hasil.</p>
+          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl text-foreground dark:text-white">Tinjau arsitektur. Agent mengeksekusi.</h2>
+          <p className="mt-4 text-muted-foreground dark:text-numa-muted-light text-base max-w-lg mx-auto">Master prompt terstruktur memandu AI coding agent menjalankan CLI numa secara otonom: mengambil task terisolasi, menghormati batas bounded context, dan memvalidasi hasil.</p>
         </div>
 
-        <div className="rounded-2xl border border-white/[.08] bg-[#080C0C] overflow-hidden shadow-2xl shadow-black/40">
+        <div className="rounded-2xl border border-border/80 bg-[#080C0C] overflow-hidden shadow-2xl shadow-black/10 dark:border-white/[.08] dark:shadow-black/40">
           {/* Window chrome */}
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/[.06] bg-[#0A0E0E]">
             <div className="flex items-center gap-2">
@@ -68,13 +68,13 @@ export function TerminalSection() {
         </div>
 
         {/* Supported agents */}
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-numa-dim">
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-muted-foreground/60 dark:text-numa-dim">
           <p className="text-xs font-mono uppercase tracking-wider">Kompatibel dengan:</p>
           <div className="flex items-center gap-5">
             {AGENTS.map((name, i) => (
-              <span key={i} className="text-xs text-numa-muted">{name}</span>
+              <span key={i} className="text-xs text-muted-foreground dark:text-numa-muted">{name}</span>
             )).reduce<React.ReactNode[]>((acc, el, i) => {
-              if (i > 0) acc.push(<span key={`sep-${i}`} className="text-numa-primary/20">|</span>);
+              if (i > 0) acc.push(<span key={`sep-${i}`} className="text-numa-primary/30 dark:text-numa-primary/20">|</span>);
               acc.push(el);
               return acc;
             }, [])}

@@ -3,7 +3,6 @@
 import { z } from 'zod';
 import { generateJson } from './ai-service.js';
 import type { RoadmapData } from './roadmap.js';
-import type { UiSpecData } from './ui-spec.js';
 import type { StackContract } from './stack-contract.js';
 
 export function defaultValidation(layer: string, stack?: StackContract): string[] {
@@ -157,7 +156,7 @@ export async function generateTasksFromRoadmap(args: {
   appRoot?: string; // mis. "apps/api", "apps/web"
   prd?: PrdTaskContext;
   brd?: PrdTaskContext; // Kompatibilitas ke belakang
-  uiSpec?: UiSpecData | null;
+  uiSpec?: unknown | null;
   projectId?: string;
   feedback?: string;
   stack?: StackContract;

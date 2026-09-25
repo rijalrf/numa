@@ -34,7 +34,7 @@ export function ProjectsPage() {
   return (
     <div className="space-y-6">
       <div className="flex justify-end">
-        <Button onClick={() => navigate('/')} className="gap-1.5">
+        <Button onClick={() => navigate('/chat')} className="gap-1.5">
           <Plus className="h-4 w-4" /> Buat Proyek Baru
         </Button>
       </div>
@@ -66,8 +66,7 @@ export function ProjectsPage() {
               <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{p.idea}</p>
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-3">
-                <span>Status: {p.status}</span>
+              <div className="flex items-center justify-end text-xs text-muted-foreground border-t pt-3">
                 <span className="flex items-center gap-1 text-primary font-medium hover:underline text-[11px]">
                   Buka Tahap Terakhir <ArrowRight className="h-3 w-3" />
                 </span>

@@ -28,6 +28,8 @@ model User {
   projects       Project[]
   agentTokens    AgentToken[]
   chatSessions   ChatSession[]
+  subscription   Subscription?
+  payments       Payment[]
 }
 
 model Session {
@@ -373,3 +375,38 @@ model AiCallLog {
   @@index([agentName])
   @@index([createdAt])
 }
+
+// ============================================================
+// SaaS Monetisasi & Billing (Midtrans)
+// ============================================================
+
+model Subscription {
+  id        String    @id @default(cuid())
+  userId    String    @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan      String    @default("free") // "free" | "starter" | "pro"
+  quotaUsed Int       @default(0)
+  quotaMax  Int       @default(1)
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model Payment {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  midtransId    String?   @unique
+  amount        Int
+  plan          String
+  status        String    @default("pending") // pending | success | failed | expired
+  paymentType   String?
+  transactionAt DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([userId])
+  @@index([midtransId])
+}
+

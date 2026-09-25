@@ -1,5 +1,6 @@
 // Tree Diagram page: Visualisasi diagram arsitektur pohon modern horizontal (full-width & interaktif)
 import { useEffect, useState, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -125,7 +126,7 @@ export function TreePage() {
   // Hitung tata letak pohon horizontal dengan kurva bezier modern
   const layout = useMemo(() => {
     if (!nodes || nodes.length === 0) {
-      return { roots: [], allNodes: [], lines: [], width: 1200, height: 700, nodeWidth: 240, nodeHeight: 76 };
+      return { roots: [], allNodes: [], lines: [], width: 1200, height: 700, nodeWidth: 260, nodeHeight: 88 };
     }
 
     // Filter node berdasarkan mode tampilan
@@ -175,11 +176,11 @@ export function TreePage() {
       computeLeafCount(root);
     }
 
-    // 2. Tentukan posisi node (x, y)
-    const nodeWidth = 240;
-    const nodeHeight = 76;
+    // 2. Tentukan posisi node (x, y) - nodeHeight diperbesar menjadi 88 agar teks 2 baris tidak terpotong
+    const nodeWidth = 260;
+    const nodeHeight = 88;
     const gapX = 120;
-    const gapY = 22;
+    const gapY = 24;
     const slotHeight = nodeHeight + gapY;
 
     function assignPositions(node: ProcessedNode, startY: number, level: number) {
@@ -374,22 +375,6 @@ export function TreePage() {
             <ListTree className="h-3.5 w-3.5" />
             <span>Semua Task ({nodes.length})</span>
           </button>
-
-          {!isLocked && (
-            <>
-              <div className="h-4 w-px bg-border mx-0.5" />
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={generateTree}
-                disabled={generating}
-                className="gap-1.5 text-xs h-7 px-2.5 font-medium cursor-pointer hover:bg-accent"
-              >
-                <Sparkles className="h-3.5 w-3.5 text-primary" />
-                <span>Generate Ulang</span>
-              </Button>
-            </>
-          )}
         </div>
       </div>
 
@@ -534,12 +519,12 @@ export function TreePage() {
                   style={{
                     position: 'absolute',
                     left: `${node.x}px`,
-                    top: `${node.y - (layout.nodeHeight || 76) / 2}px`,
-                    width: `${layout.nodeWidth || 240}px`,
-                    height: `${layout.nodeHeight || 76}px`,
+                    top: `${node.y - (layout.nodeHeight || 88) / 2}px`,
+                    width: `${layout.nodeWidth || 260}px`,
+                    height: `${layout.nodeHeight || 88}px`,
                   }}
                   className={cn(
-                    'tree-node-card cursor-pointer rounded-xl p-3.5 flex flex-col justify-between transition-all duration-200',
+                    'tree-node-card cursor-pointer rounded-xl p-3 flex flex-col justify-between transition-all duration-200',
                     'hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.98]',
                     isApp
                       ? 'bg-gradient-to-br from-primary to-primary/90 text-primary-foreground border border-primary/50 shadow-md shadow-primary/20 ring-1 ring-primary/30'
@@ -599,114 +584,116 @@ export function TreePage() {
         </div>
 
         {/* Modal Detail Node (Read-Only) */}
-      {selectedNode && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150"
-          onClick={() => setSelectedNode(null)}
-        >
+      {selectedNode &&
+        createPortal(
           <div
-            className="bg-card border border-border rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4 relative animate-in zoom-in-95 duration-150"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+            onClick={() => setSelectedNode(null)}
           >
-            {/* Tombol Tutup */}
-            <button
-              type="button"
-              onClick={() => setSelectedNode(null)}
-              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors"
+            <div
+              className="bg-card border border-border rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4 relative animate-in zoom-in-95 duration-150"
+              onClick={(e) => e.stopPropagation()}
             >
-              <X className="h-5 w-5" />
-            </button>
+              {/* Tombol Tutup */}
+              <button
+                type="button"
+                onClick={() => setSelectedNode(null)}
+                className="absolute top-4 right-4 text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
 
-            {/* Header Dialog */}
-            <div className="space-y-1.5 pr-6">
-              <div className="flex items-center gap-2">
-                <Badge
-                  variant="outline"
-                  className={cn('text-xs font-semibold uppercase', getKindBadge(selectedNode.kind).color)}
-                >
-                  {getKindBadge(selectedNode.kind).label}
-                </Badge>
-                <span className="text-xs text-muted-foreground font-mono">
-                  Order #{selectedNode.order}
-                </span>
-              </div>
-              <h3 className="text-lg font-semibold text-foreground leading-snug">
-                {selectedNode.label}
-              </h3>
-            </div>
-
-            {/* Rincian Hierarki */}
-            <div className="space-y-3.5 text-sm pt-3 border-t border-border">
-              {selectedNode.parent ? (
-                <div>
-                  <span className="text-xs font-medium text-muted-foreground block mb-1">
-                    Induk (Parent Node):
-                  </span>
-                  <div
-                    onClick={() => setSelectedNode(selectedNode.parent!)}
-                    className="p-3 rounded-xl bg-muted/40 hover:bg-muted/80 border border-border flex items-center justify-between cursor-pointer transition-colors"
+              {/* Header Dialog */}
+              <div className="space-y-1.5 pr-6">
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className={cn('text-xs font-semibold uppercase', getKindBadge(selectedNode.kind).color)}
                   >
-                    <span className="text-xs font-medium text-foreground truncate mr-2">
-                      {selectedNode.parent.label}
-                    </span>
-                    <Badge variant="outline" className="text-[10px] shrink-0">
-                      {getKindBadge(selectedNode.parent.kind).label}
-                    </Badge>
-                  </div>
+                    {getKindBadge(selectedNode.kind).label}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground font-mono">
+                    Order #{selectedNode.order}
+                  </span>
                 </div>
-              ) : (
-                <div className="text-xs text-muted-foreground italic flex items-center gap-1.5">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
-                  <span>Node ini adalah Root Aplikasi (puncak arsitektur).</span>
-                </div>
-              )}
+                <h3 className="text-lg font-semibold text-foreground leading-snug">
+                  {selectedNode.label}
+                </h3>
+              </div>
 
-              {/* Daftar Sub-komponen */}
-              <div>
-                <span className="text-xs font-medium text-muted-foreground block mb-1.5">
-                  Sub-Komponen Langsung ({selectedNode.children.length}):
-                </span>
-                {selectedNode.children.length > 0 ? (
-                  <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1">
-                    {selectedNode.children.map((child) => (
-                      <div
-                        key={child.id}
-                        onClick={() => setSelectedNode(child)}
-                        className="p-2.5 rounded-xl bg-muted/20 hover:bg-muted/60 border border-border/60 text-xs flex items-center justify-between cursor-pointer transition-colors"
-                      >
-                        <div className="flex items-center gap-2 min-w-0 pr-2">
-                          <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
-                          <span className="font-medium text-foreground truncate">
-                            {child.label}
-                          </span>
-                        </div>
-                        <Badge variant="outline" className="text-[10px] shrink-0">
-                          {getKindBadge(child.kind).label}
-                        </Badge>
-                      </div>
-                    ))}
+              {/* Rincian Hierarki */}
+              <div className="space-y-3.5 text-sm pt-3 border-t border-border">
+                {selectedNode.parent ? (
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground block mb-1">
+                      Induk (Parent Node):
+                    </span>
+                    <div
+                      onClick={() => setSelectedNode(selectedNode.parent!)}
+                      className="p-3 rounded-xl bg-muted/40 hover:bg-muted/80 border border-border flex items-center justify-between cursor-pointer transition-colors"
+                    >
+                      <span className="text-xs font-medium text-foreground truncate mr-2">
+                        {selectedNode.parent.label}
+                      </span>
+                      <Badge variant="outline" className="text-[10px] shrink-0">
+                        {getKindBadge(selectedNode.parent.kind).label}
+                      </Badge>
+                    </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground italic py-1">
-                    Tidak memiliki sub-komponen (node daun).
-                  </p>
+                  <div className="text-xs text-muted-foreground italic flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                    <span>Node ini adalah Root Aplikasi (puncak arsitektur).</span>
+                  </div>
                 )}
+
+                {/* Daftar Sub-komponen */}
+                <div>
+                  <span className="text-xs font-medium text-muted-foreground block mb-1.5">
+                    Sub-Komponen Langsung ({selectedNode.children.length}):
+                  </span>
+                  {selectedNode.children.length > 0 ? (
+                    <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1">
+                      {selectedNode.children.map((child) => (
+                        <div
+                          key={child.id}
+                          onClick={() => setSelectedNode(child)}
+                          className="p-2.5 rounded-xl bg-muted/20 hover:bg-muted/60 border border-border/60 text-xs flex items-center justify-between cursor-pointer transition-colors"
+                        >
+                          <div className="flex items-center gap-2 min-w-0 pr-2">
+                            <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                            <span className="font-medium text-foreground truncate">
+                              {child.label}
+                            </span>
+                          </div>
+                          <Badge variant="outline" className="text-[10px] shrink-0">
+                            {getKindBadge(child.kind).label}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic py-1">
+                      Tidak memiliki sub-komponen (node daun).
+                    </p>
+                  )}
+                </div>
+
+                <div className="rounded-xl bg-muted/40 p-3 text-[11px] text-muted-foreground">
+                  Detail struktur ini bersifat <strong>read-only</strong>. Seluruh task pengerjaan otomatis tersedia pada Board Task dan dapat dijalankan melalui CLI <code>numa</code>.
+                </div>
               </div>
 
-              <div className="rounded-xl bg-muted/40 p-3 text-[11px] text-muted-foreground">
-                Detail struktur ini bersifat <strong>read-only</strong>. Seluruh task pengerjaan otomatis tersedia pada Board Task dan dapat dijalankan melalui CLI <code>numa</code>.
+              {/* Footer Dialog */}
+              <div className="flex justify-end pt-2 border-t border-border">
+                <Button size="sm" onClick={() => setSelectedNode(null)}>
+                  Tutup
+                </Button>
               </div>
             </div>
-
-            {/* Footer Dialog */}
-            <div className="flex justify-end pt-2 border-t border-border">
-              <Button size="sm" onClick={() => setSelectedNode(null)}>
-                Tutup
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

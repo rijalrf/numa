@@ -9,6 +9,8 @@ export const FormQuestionSchema = z.object({
   id: z.string().optional().default(() => Math.random().toString(36).substring(7)),
   label: z.string().optional(),
   question: z.string().optional(),
+  title: z.string().optional(),
+  text: z.string().optional(),
   type: z.enum(['radio', 'checkbox']).optional().default('radio'),
   options: z.array(z.string()).default([]),
   allowOther: z.boolean().optional().default(true),
@@ -17,9 +19,12 @@ export const FormQuestionSchema = z.object({
   const filtered = q.options
     .filter((opt) => !/^lainnya/i.test(opt.trim()) && !/^other/i.test(opt.trim()))
     .slice(0, 3);
+  const rawText = q.question || q.label || q.title || q.text;
+  const validText = rawText && rawText.trim() !== '' && rawText.trim() !== 'Pertanyaan' ? rawText.trim() : undefined;
   return {
     id: q.id || Math.random().toString(36).substring(7),
-    label: q.label || q.question || 'Pertanyaan',
+    label: validText || 'Pertanyaan',
+    question: validText || undefined,
     type: q.type,
     options: filtered,
     allowOther: true,

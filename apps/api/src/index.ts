@@ -27,7 +27,7 @@ const __dirname = path.dirname(__filename);
 import { generatePRDFromDiscovery, PrdSchema } from './lib/ai/prd.js';
 import { generateRoadmapFromPRD } from './lib/ai/roadmap.js';
 import { generateTasksFromRoadmap } from './lib/ai/tasks.js';
-import { generateUiSpec, UiSpecSchema } from './lib/ai/ui-spec.js';
+import { getUserPlan, checkQuota, incrementQuota, PLANS } from './lib/billing.js';
 import { validateAndNormalizeDAG } from './lib/ai/dag-validator.js';
 import { validateApiCoverage } from './lib/ai/api-coverage-validator.js';
 import { validateCleanup } from './lib/ai/cleanup-validator.js';
@@ -1073,6 +1073,11 @@ function buildTasksMarkdown(project: { name: string }, tasks: any[]): string {
 // User endpoint: download PRD sebagai .md file (juga dukung alias /brd/download)
 // ============================================================
 app.get(['/api/projects/:id/prd/download', '/api/projects/:id/brd/download'], requireUser, async (req: AuthedRequest, res) => {
+  const { plan } = await getUserPlan(req.userId);
+  if (plan === 'free') {
+    return res.status(403).json({ error: 'Fitur ekspor dokumen hanya tersedia untuk paket Starter dan Pro. Silakan upgrade paket.' });
+  }
+
   const project = await prisma.project.findFirst({
     where: { id: req.params.id, userId: req.userId },
     include: { prd: true },
@@ -1094,6 +1099,11 @@ app.get(['/api/projects/:id/prd/download', '/api/projects/:id/brd/download'], re
 // User endpoint: download paket lengkap (.zip) -> PRD.md, USER-STORIES.md, TASKS.md
 // ============================================================
 app.get('/api/projects/:id/export.zip', requireUser, async (req: AuthedRequest, res) => {
+  const { plan } = await getUserPlan(req.userId);
+  if (plan !== 'pro') {
+    return res.status(403).json({ error: 'Ekspor paket lengkap (.zip) hanya tersedia untuk paket Pro. Silakan upgrade paket.' });
+  }
+
   const project = await prisma.project.findFirst({
     where: { id: req.params.id, userId: req.userId },
     include: {
@@ -1378,39 +1388,19 @@ app.get('/api/projects/:id/roadmap', requireUser, async (req: AuthedRequest, res
   res.json({ phases: project.roadmap });
 });
 
-// UX/UI Specification Agent (Bab 14)
-app.get('/api/projects/:id/ui-spec', requireUser, async (req: AuthedRequest, res) => {
-  const project = await prisma.project.findFirst({
-    where: { id: req.params.id, userId: req.userId },
-    select: { id: true, name: true, uiSpec: true },
+// User plan & quota info
+app.get('/api/user/plan', requireUser, async (req: AuthedRequest, res) => {
+  const { plan, config, subscription } = await getUserPlan(req.userId);
+  res.json({
+    plan,
+    planName: config.name,
+    quotaUsed: subscription.quotaUsed,
+    quotaMax: config.quotaMax,
+    chatLimit: config.chatLimit,
+    charLimit: config.charLimit,
+    price: config.price,
+    expiresAt: subscription.expiresAt,
   });
-  if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
-  res.json({ uiSpec: project.uiSpec });
-});
-
-app.post('/api/projects/:id/ui-spec/generate', requireUser, async (req: AuthedRequest, res) => {
-  const project = await prisma.project.findFirst({
-    where: { id: req.params.id, userId: req.userId },
-    include: { prd: true },
-  });
-  if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
-  if (!project.prd) return res.status(400).json({ error: 'PRD belum ada. Generate PRD dulu.' });
-
-  try {
-    const parsedPrd = PrdSchema.parse(project.prd.content);
-    const spec = await generateUiSpec({
-      prd: parsedPrd,
-      projectName: project.name,
-      projectId: project.id,
-    });
-    const updated = await prisma.project.update({
-      where: { id: project.id },
-      data: { uiSpec: spec as any },
-    });
-    res.json({ ok: true, uiSpec: updated.uiSpec });
-  } catch (err) {
-    res.status(502).json({ error: 'AI gagal menghasilkan UI Spec.', detail: (err as Error).message });
-  }
 });
 
 // Step 4: generate atomic tasks dari roadmap (auto generate roadmap jika belum ada).
@@ -1428,6 +1418,20 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
   const existingTasksCount = await prisma.task.count({ where: { projectId: project.id } });
   if (existingTasksCount > 0 && isStageLocked(project.wizardStep, 'board')) {
     return res.status(403).json({ error: 'Tasks telah selesai dibuat dan terkunci (Read-Only).' });
+  }
+
+  const isFirstGeneration = existingTasksCount === 0;
+  if (isFirstGeneration) {
+    const quotaCheck = await checkQuota(req.userId);
+    if (!quotaCheck.allowed) {
+      return res.status(403).json({
+        error: 'Kuota proyek Anda telah habis. Silakan upgrade paket untuk melanjutkan.',
+        plan: quotaCheck.plan,
+        quotaUsed: quotaCheck.quotaUsed,
+        quotaMax: quotaCheck.quotaMax,
+        upgradeUrl: '/pricing',
+      });
+    }
   }
 
   // Auto-generate roadmap jika belum ada tapi PRD ada
@@ -1519,32 +1523,12 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
       techRequirements?: string[];
     } | undefined;
 
-    // Dedicated UX/UI Specification Agent (Bab 14)
-    let uiSpecData = project.uiSpec as any;
-    if (!uiSpecData && project.prd) {
-      try {
-        const parsedPrd = PrdSchema.parse(project.prd.content);
-        uiSpecData = await generateUiSpec({
-          prd: parsedPrd,
-          projectName: project.name,
-          projectId: project.id,
-        });
-        await prisma.project.update({
-          where: { id: project.id },
-          data: { uiSpec: uiSpecData },
-        });
-      } catch (err) {
-        console.warn('[ui-spec-warn] Gagal auto-generate UI Spec, lanjutkan tanpa UI spec:', (err as Error).message);
-      }
-    }
-
     const stackContract = resolveStackContract(project.stacks || []);
 
     let generated = await generateTasksFromRoadmap({
       roadmap: { phases: phasesForAI },
       projectName: project.name,
       prd: prdData,
-      uiSpec: uiSpecData,
       projectId: project.id,
       stack: stackContract,
     });
@@ -1653,6 +1637,9 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
     }
 
     await prisma.project.update({ where: { id: project.id }, data: { wizardStep: 'board' } });
+    if (isFirstGeneration) {
+      await incrementQuota(req.userId);
+    }
 
     const tasks = await prisma.task.findMany({
       where: { projectId: project.id },
@@ -1912,6 +1899,27 @@ app.post('/api/chat/sessions/:id/messages', requireUser, async (req: AuthedReque
   });
   if (!session) return res.status(404).json({ error: 'Sesi chat tidak ditemukan.' });
 
+  const { plan, config } = await getUserPlan(req.userId);
+
+  if (parsed.data.content.length > config.charLimit) {
+    return res.status(400).json({
+      error: `Pesan terlalu panjang (${parsed.data.content.length} karakter). Maksimal ${config.charLimit} karakter untuk paket ${config.name}.`,
+    });
+  }
+
+  const userMsgCount = await prisma.chatMessage.count({
+    where: { sessionId: session.id, role: 'user' },
+  });
+
+  if (userMsgCount >= config.chatLimit) {
+    return res.status(403).json({
+      error: `Batas pesan chat telah tercapai (${config.chatLimit} pesan untuk paket ${config.name}). Silakan finalisasi proyek atau upgrade paket.`,
+      chatLimit: config.chatLimit,
+      plan,
+      upgradeUrl: '/pricing',
+    });
+  }
+
   // Simpan pesan user (text saja; formAnswers dianggap sudah jadi text di content)
   await prisma.chatMessage.create({
     data: { sessionId: session.id, role: 'user', content: parsed.data.content },
@@ -2071,6 +2079,183 @@ app.get('/api/projects/:id/tree', requireUser, async (req: AuthedRequest, res) =
     orderBy: { order: 'asc' },
   });
   res.json({ nodes });
+});
+
+// ============================================================
+// SaaS Monetisasi & Midtrans Checkout / Webhook
+// ============================================================
+
+const CheckoutBodySchema = z.object({
+  plan: z.enum(['starter', 'pro']),
+});
+
+app.post('/api/billing/checkout', requireUser, async (req: AuthedRequest, res) => {
+  const parsed = CheckoutBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Paket yang dipilih tidak valid.' });
+  }
+
+  const selectedPlan = parsed.data.plan;
+  const config = PLANS[selectedPlan];
+  const serverKey = process.env.MIDTRANS_SERVER_KEY;
+  const isProd = process.env.MIDTRANS_IS_PRODUCTION === 'true';
+
+  if (!serverKey) {
+    return res.status(503).json({ error: 'Gateway pembayaran belum dikonfigurasi di server.' });
+  }
+
+  const orderId = `NUMA-${Date.now()}-${req.userId.slice(-6)}`;
+  const snapUrl = isProd
+    ? 'https://app.midtrans.com/snap/v1/transactions'
+    : 'https://app.sandbox.midtrans.com/snap/v1/transactions';
+
+  const authHeader = `Basic ${Buffer.from(`${serverKey}:`).toString('base64')}`;
+
+  const payload = {
+    transaction_details: {
+      order_id: orderId,
+      gross_amount: config.price,
+    },
+    customer_details: {
+      email: req.userEmail || `${req.userId}@numa.local`,
+    },
+    item_details: [
+      {
+        id: selectedPlan,
+        price: config.price,
+        quantity: 1,
+        name: `Langganan Numa ${config.name} (1 Bulan)`,
+      },
+    ],
+  };
+
+  try {
+    const snapRes = await fetch(snapUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Authorization: authHeader,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!snapRes.ok) {
+      const errText = await snapRes.text();
+      console.error('[midtrans-error]', snapRes.status, errText);
+      return res.status(502).json({ error: 'Gagal membuat transaksi ke Midtrans.' });
+    }
+
+    const snapData = (await snapRes.json()) as { token: string; redirect_url: string };
+
+    await prisma.payment.create({
+      data: {
+        userId: req.userId,
+        midtransId: orderId,
+        amount: config.price,
+        plan: selectedPlan,
+        status: 'pending',
+      },
+    });
+
+    res.json({
+      orderId,
+      token: snapData.token,
+      redirectUrl: snapData.redirect_url,
+    });
+  } catch (err) {
+    console.error('[checkout-error]', err);
+    res.status(500).json({ error: 'Terjadi kesalahan sistem saat proses checkout.' });
+  }
+});
+
+app.post('/api/billing/webhook', async (req, res) => {
+  const {
+    order_id,
+    status_code,
+    gross_amount,
+    signature_key,
+    transaction_status,
+    payment_type,
+    fraud_status,
+  } = req.body || {};
+
+  const serverKey = process.env.MIDTRANS_SERVER_KEY;
+  if (!serverKey || !order_id || !signature_key) {
+    return res.status(400).json({ error: 'Data webhook tidak valid atau server key belum diatur.' });
+  }
+
+  // Verifikasi signature Midtrans SHA512(order_id + status_code + gross_amount + ServerKey)
+  const hash = crypto
+    .createHash('sha512')
+    .update(`${order_id}${status_code}${gross_amount}${serverKey}`)
+    .digest('hex');
+
+  if (hash !== signature_key) {
+    console.warn('[midtrans-webhook] Signature verification mismatch untuk order:', order_id);
+    return res.status(401).json({ error: 'Signature tidak cocok.' });
+  }
+
+  const payment = await prisma.payment.findUnique({
+    where: { midtransId: order_id },
+  });
+
+  if (!payment) {
+    console.warn('[midtrans-webhook] Order tidak ditemukan:', order_id);
+    return res.status(404).json({ error: 'Order tidak ditemukan.' });
+  }
+
+  const isSuccess =
+    transaction_status === 'settlement' ||
+    (transaction_status === 'capture' && fraud_status === 'accept');
+
+  const isFailed =
+    transaction_status === 'deny' ||
+    transaction_status === 'cancel' ||
+    transaction_status === 'expire';
+
+  if (isSuccess) {
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: 'success',
+        paymentType: payment_type || 'midtrans',
+        transactionAt: new Date(),
+      },
+    });
+
+    const targetPlan = (payment.plan in PLANS ? payment.plan : 'starter') as 'starter' | 'pro';
+    const config = PLANS[targetPlan];
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 hari
+
+    await prisma.subscription.upsert({
+      where: { userId: payment.userId },
+      create: {
+        userId: payment.userId,
+        plan: targetPlan,
+        quotaUsed: 0,
+        quotaMax: config.quotaMax,
+        expiresAt,
+      },
+      update: {
+        plan: targetPlan,
+        quotaUsed: 0,
+        quotaMax: config.quotaMax,
+        expiresAt,
+      },
+    });
+    console.log(`[billing] User ${payment.userId} berhasil di-upgrade ke paket ${targetPlan}`);
+  } else if (isFailed) {
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: 'failed',
+        paymentType: payment_type || 'midtrans',
+      },
+    });
+  }
+
+  res.json({ ok: true });
 });
 
 // ============================================================

@@ -1,6 +1,6 @@
 // Board page: papan Kanban task implementasi project dengan kolom User Story & kolom card.
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '@/lib/http';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,9 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import {
   Loader2,
   RefreshCw,
-  Activity,
-  Zap,
-  Clock,
   CheckCircle2,
   AlertCircle,
   Sparkles,
@@ -19,21 +16,13 @@ import {
 } from 'lucide-react';
 import { useWizardNav } from '@/components/layout/wizard-nav';
 import { ExecutionDialog } from '@/components/execution/execution-dialog';
+import { PricingDialog } from '@/components/billing/pricing-dialog';
 import {
   TaskDetailDialog,
   type TaskDetail,
   type UserStory,
 } from '@/components/kanban/task-detail-dialog';
 import { UserStoryTasksDialog } from '@/components/kanban/user-story-tasks-dialog';
-
-type AiMetricsSummary = {
-  totalCalls: number;
-  totalTokens: number;
-  inputTokens: number;
-  outputTokens: number;
-  avgLatencyMs: number;
-  successRate: number;
-};
 
 type Task = TaskDetail;
 
@@ -43,12 +32,12 @@ export function BoardPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [userStories, setUserStories] = useState<UserStory[]>([]);
   const [selectedStoryForModal, setSelectedStoryForModal] = useState<UserStory | null>(null);
-  const [metrics, setMetrics] = useState<AiMetricsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [executionDialogOpen, setExecutionDialogOpen] = useState(false);
+  const [pricingOpen, setPricingOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [projectName, setProjectName] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -96,14 +85,6 @@ export function BoardPage() {
       hideIcon: true,
     },
   });
-
-  const loadMetrics = useCallback(async () => {
-    if (!projectId) return;
-    try {
-      const res = await api<{ summary: AiMetricsSummary }>(`/api/projects/${projectId}/ai-metrics`);
-      if (res.summary) setMetrics(res.summary);
-    } catch {}
-  }, [projectId]);
 
   const generateTasks = useCallback(async () => {
     if (!projectId) return;
@@ -160,9 +141,8 @@ export function BoardPage() {
     } finally {
       setGenerating(false);
       setLoading(false);
-      loadMetrics();
     }
-  }, [projectId, loadMetrics]);
+  }, [projectId]);
 
   const loadTasks = useCallback(
     async (mode: 'initial' | 'manual' | 'silent' = 'initial') => {
@@ -180,7 +160,6 @@ export function BoardPage() {
         } else if (mode === 'initial') {
           await generateTasks();
         }
-        loadMetrics();
       } catch (err) {
         console.error('Gagal load tasks:', err);
         if (mode !== 'silent') {
@@ -192,7 +171,7 @@ export function BoardPage() {
         if (mode === 'manual') setRefreshing(false);
       }
     },
-    [projectId, loadMetrics, generateTasks]
+    [projectId, generateTasks]
   );
 
   // Load tasks on mount
@@ -274,23 +253,36 @@ export function BoardPage() {
             <span className="truncate">{error}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => loadTasks('manual')}
-              className="h-7 text-xs gap-1 border-destructive/30 hover:bg-destructive/10 text-destructive"
-            >
-              <RefreshCw className="h-3 w-3" />
-              Periksa Ulang
-            </Button>
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={generateTasks}
-              className="h-7 text-xs"
-            >
-              Coba Lagi
-            </Button>
+            {error.includes('Kuota proyek') ? (
+              <Button
+                size="sm"
+                onClick={() => setPricingOpen(true)}
+                className="h-7 px-3 text-xs font-medium gap-1"
+              >
+                <Sparkles className="h-3 w-3" />
+                Upgrade Paket
+              </Button>
+            ) : (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => loadTasks('manual')}
+                  className="h-7 text-xs gap-1 border-destructive/30 hover:bg-destructive/10 text-destructive"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  Periksa Ulang
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={generateTasks}
+                  className="h-7 text-xs"
+                >
+                  Coba Lagi
+                </Button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -313,16 +305,7 @@ export function BoardPage() {
       )}
 
       {/* Action Bar Atas */}
-      <div className="flex items-center justify-between gap-3">
-        {tasks.length > 0 ? (
-          <Button onClick={generateTasks} variant="outline" size="sm" className="gap-1.5 font-medium h-8">
-            <Sparkles className="h-3.5 w-3.5 text-primary" />
-            <span>Generate Ulang Tasks</span>
-          </Button>
-        ) : (
-          <div />
-        )}
-
+      <div className="flex items-center justify-end gap-3">
         <div className="flex items-center gap-3 ml-auto">
           {/* Toggle Auto Refresh */}
           <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
@@ -357,40 +340,6 @@ export function BoardPage() {
         </div>
       </div>
 
-      {/* Widget Observabilitas AI (Bab 39) */}
-      {metrics && metrics.totalCalls > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Card className="p-3">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Panggilan AI</span>
-              <Activity className="h-4 w-4 text-primary" />
-            </div>
-            <div className="text-xl font-bold mt-1 font-mono">{metrics.totalCalls}</div>
-          </Card>
-          <Card className="p-3">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Total Token</span>
-              <Zap className="h-4 w-4 text-amber-500" />
-            </div>
-            <div className="text-xl font-bold mt-1 font-mono">{metrics.totalTokens.toLocaleString('id-ID')}</div>
-          </Card>
-          <Card className="p-3">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Rata-rata Latensi</span>
-              <Clock className="h-4 w-4 text-blue-500" />
-            </div>
-            <div className="text-xl font-bold mt-1 font-mono">{(metrics.avgLatencyMs / 1000).toFixed(1)}s</div>
-          </Card>
-          <Card className="p-3">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Tingkat Keberhasilan</span>
-              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-            </div>
-            <div className="text-xl font-bold mt-1 font-mono">{metrics.successRate}%</div>
-          </Card>
-        </div>
-      )}
-
       {/* Tampilan Empty State jika tasks kosong */}
       {!tasks.length ? (
         <div className="flex flex-col items-center justify-center p-12 text-center border border-dashed rounded-xl bg-card/50 space-y-4 min-h-[420px]">
@@ -410,13 +359,7 @@ export function BoardPage() {
         </div>
       ) : (
         /* Papan Kanban Terpadu (User Story + Status Task) */
-        <div
-          className={`w-full overflow-x-auto no-scrollbar ${
-            metrics && metrics.totalCalls > 0
-              ? 'h-[calc(100vh-320px)] min-h-[520px]'
-              : 'h-[calc(100vh-230px)] min-h-[560px]'
-          }`}
-        >
+        <div className="w-full overflow-x-auto no-scrollbar h-[calc(100vh-230px)] min-h-[560px]">
           <div className="grid grid-cols-5 gap-3.5 h-full min-w-[1000px]">
             {/* Kolom 1: User Story */}
             <Card className="border-border flex flex-col h-full overflow-hidden">
@@ -567,6 +510,13 @@ export function BoardPage() {
           setSelectedStoryForModal(null);
           setSelectedTask(task);
         }}
+      />
+
+      <PricingDialog
+        isOpen={pricingOpen}
+        onClose={() => setPricingOpen(false)}
+        title="Tingkatkan Kuota Proyek Anda"
+        description="Batas kuota proyek untuk paket Anda saat ini telah tercapai. Upgrade ke paket yang lebih tinggi untuk merancang dan mengeksekusi lebih banyak proyek."
       />
     </div>
   );

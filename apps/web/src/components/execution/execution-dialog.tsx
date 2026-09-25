@@ -1,9 +1,11 @@
 // Dialog Popup Panduan Eksekusi: Download PRD, Download Paket ZIP, dan Master Prompt Coding Agent
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation } from '@tanstack/react-query';
-import { api, downloadFile } from '@/lib/http';
+import { api, downloadFile, resolveApiUrl } from '@/lib/http';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { PricingDialog } from '@/components/billing/pricing-dialog';
 import {
   FileText,
   Archive,
@@ -32,6 +34,7 @@ export function ExecutionDialog({ projectId, projectName, isOpen, onClose }: Exe
   const [downloadingPrd, setDownloadingPrd] = useState(false);
   const [downloadingZip, setDownloadingZip] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [pricingOpen, setPricingOpen] = useState(false);
 
   const [inputToken, setInputToken] = useState(() => {
     return localStorage.getItem('numa_active_pat') || '';
@@ -58,10 +61,7 @@ export function ExecutionDialog({ projectId, projectName, isOpen, onClose }: Exe
   if (!isOpen) return null;
 
   const activeToken = inputToken.trim() || '<TOKEN_PAT_ANDA>';
-  const apiUrl =
-    typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
-      ? window.location.origin
-      : (import.meta.env.VITE_API_URL ?? 'http://localhost:6655');
+  const apiUrl = resolveApiUrl();
 
   const installCommand = 'npm install -g numa-cli@latest';
   const loginCommand = `numa login ${activeToken} --api-url ${apiUrl}`;
@@ -146,8 +146,8 @@ ${executionLoopText}
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto no-scrollbar">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto no-scrollbar">
       <div className="bg-card border border-border rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-5 my-8 text-foreground transition-all">
         {/* Header Modal */}
         <div className="flex items-center justify-between border-b border-border/80 pb-3">
@@ -186,7 +186,18 @@ ${executionLoopText}
         {/* Banner Pesan Error Unduhan */}
         {downloadError && (
           <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-center justify-between gap-2">
-            <span>{downloadError}</span>
+            <div className="flex items-center gap-2">
+              <span>{downloadError}</span>
+              {downloadError.includes('upgrade') && (
+                <button
+                  type="button"
+                  onClick={() => setPricingOpen(true)}
+                  className="underline font-semibold ml-1 hover:text-foreground cursor-pointer"
+                >
+                  Lihat Paket
+                </button>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => setDownloadError(null)}
@@ -394,7 +405,16 @@ ${executionLoopText}
             Tutup
           </Button>
         </div>
+
+        {/* Popup Harga jika terkena batas paket Pro */}
+        <PricingDialog
+          isOpen={pricingOpen}
+          onClose={() => setPricingOpen(false)}
+          title="Upgrade ke Paket Pro"
+          description="Fitur ekspor paket lengkap (.zip & .md) hanya tersedia untuk pengguna paket Pro."
+        />
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

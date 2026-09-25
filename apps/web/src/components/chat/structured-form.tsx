@@ -32,6 +32,19 @@ export function StructuredForm({ questions, onSubmit, disabled }: StructuredForm
     return q.required !== undefined ? q.required : idx === 0;
   };
 
+  // Helper untuk label pertanyaan yang human-readable
+  const getQuestionLabel = (q: Question, idx: number) => {
+    const text = q.question?.trim() || q.label?.trim();
+    if (text && text.toLowerCase() !== 'pertanyaan') {
+      return text;
+    }
+    if (q.id && !q.id.startsWith('q-') && !q.id.startsWith('form-')) {
+      const formatted = q.id.replace(/[_-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+      return formatted;
+    }
+    return `Pertanyaan ${idx + 1}`;
+  };
+
   // Toggle pilihan: single-choice (radio) atau multiple-choice (checkbox)
   const handleToggleOption = (q: Question, idx: number, optionValue: string) => {
     if (submitted || disabled) return;
@@ -142,7 +155,7 @@ export function StructuredForm({ questions, onSubmit, disabled }: StructuredForm
 
       if (selected.length === 0) continue;
 
-      const questionLabel = q.label || q.question || `Pertanyaan ${i + 1}`;
+      const questionLabel = getQuestionLabel(q, i);
       const formatted = selected
         .map((val) => {
           if (val === `other:${qId}`) {
@@ -189,7 +202,7 @@ export function StructuredForm({ questions, onSubmit, disabled }: StructuredForm
           <div className="space-y-3 pt-1">
             {questions.map((q, idx) => {
               const qId = q.id || `q-${idx}`;
-              const label = q.label || q.question || `Pertanyaan ${idx + 1}`;
+              const label = getQuestionLabel(q, idx);
               const mandatory = isQuestionMandatory(q, idx);
               const selected = answers[qId] || [];
               const answerText = selected
@@ -235,7 +248,7 @@ export function StructuredForm({ questions, onSubmit, disabled }: StructuredForm
       <CardContent className="space-y-6 pt-5">
         {questions.map((q, idx) => {
           const qId = q.id || `q-${idx}`;
-          const qLabel = q.label || q.question || `Pertanyaan ${idx + 1}`;
+          const qLabel = getQuestionLabel(q, idx);
           const isMultiple = q.type === 'checkbox';
           const mandatory = isQuestionMandatory(q, idx);
           const hasOther = isOtherSelected(qId);
