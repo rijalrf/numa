@@ -26,7 +26,7 @@ export function LandingHeader() {
           <ThemeToggle />
           {isAuthenticated ? (
             <Link
-              to="/dashboard"
+              to="/chat"
               className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-b from-numa-primary to-[#237069] px-4 py-2 text-[13px] font-semibold text-white shadow-[0_0_16px_rgba(45,126,121,.3),inset_0_1px_0_rgba(255,255,255,.1)] transition-all hover:shadow-[0_0_24px_rgba(45,126,121,.5)] active:translate-y-px"
             >
               Dashboard

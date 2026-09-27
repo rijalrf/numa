@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 export default function WizardLayout() {
   const location = useLocation();
   const isChat = location.pathname.startsWith('/chat/');
-  const isHome = location.pathname === '/dashboard';
+  const isHome = location.pathname === '/chat';
   const isTree = location.pathname.includes('/tree');
 
   return (

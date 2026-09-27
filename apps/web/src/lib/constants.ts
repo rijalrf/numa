@@ -2,20 +2,22 @@
 
 export const STAGE_ORDER: Record<string, number> = {
   chat: 0,
+  survey: 1,
   interview: 1, // backward compat: project lama yang masih ber-wizardStep 'interview'
-  techstack: 1,
-  prd: 2,
-  brd: 2, // backward compat
-  tree: 3,
-  board: 4,
-  guide: 5,
-  done: 6,
+  techstack: 2,
+  prd: 3,
+  brd: 3, // backward compat
+  tree: 4,
+  board: 5,
+  guide: 6,
+  done: 7,
 };
 
 export const STAGE_LABELS: Record<string, string> = {
   chat: 'Brainstorming',
-  interview: 'Interview',
-  techstack: 'Tech Stack',
+  survey: 'Survey Kebutuhan',
+  interview: 'Survey Kebutuhan',
+  techstack: 'Pilih Teknologi',
   prd: 'Dokumen PRD',
   brd: 'Dokumen PRD', // backward compat
   tree: 'Diagram Struktur',

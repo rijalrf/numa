@@ -1,61 +1,69 @@
-// Halaman chat: Brainstorming ide aplikasi dengan AI Numa
-import { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+// Halaman input ide awal aplikasi (Pintu masuk Numa)
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Send, Loader2, ArrowRight, RefreshCw, Sparkles, MessageSquare } from 'lucide-react';
-import { ChatBubble } from '@/components/chat/chat-bubble';
-import { StructuredForm } from '@/components/chat/structured-form';
-import { TypingIndicator } from '@/components/chat/typing-indicator';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { PricingDialog } from '@/components/billing/pricing-dialog';
+import {
+  Sparkles,
+  ArrowRight,
+  Loader2,
+  FileQuestion,
+  FileText,
+  Terminal,
+  Store,
+  CalendarCheck,
+  GraduationCap,
+} from 'lucide-react';
 import { api } from '@/lib/http';
-
-export type ChatMessage = {
-  id: string;
-  role: 'user' | 'assistant';
-  kind: 'text' | 'form' | 'done';
-  content: string;
-  payload?: any;
-  createdAt: Date;
-};
-
-function parsePayload(val: any) {
-  if (!val) return undefined;
-  if (typeof val === 'object') return val;
-  try {
-    return JSON.parse(val);
-  } catch {
-    return undefined;
-  }
-}
 
 export interface UserPlanInfo {
   plan: string;
   planName: string;
   quotaUsed: number;
   quotaMax: number;
-  chatLimit: number;
+  surveyRounds: number;
   charLimit: number;
 }
 
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  kind?: string;
+  content: string;
+  payload?: any;
+  createdAt?: Date;
+}
+
+const EXAMPLE_IDEAS = [
+  {
+    icon: Store,
+    title: 'Kasir Warung & Toko',
+    text: 'Aplikasi kasir warung kelontong berbasis web dengan pencatatan inventaris barang, kasir POS cepat dengan scan barcode, dan rekap omzet harian.',
+  },
+  {
+    icon: CalendarCheck,
+    title: 'Reservasi Pasien Klinik',
+    text: 'Sistem reservasi dan antrean pasien klinik gigi online dengan pemilihan jadwal dokter, reminder notifikasi WhatsApp, dan riwayat rekam medis.',
+  },
+  {
+    icon: GraduationCap,
+    title: 'LMS & Tugas Sekolah',
+    text: 'Platform kelas dan tugas untuk guru dan murid dengan fitur kuis interaktif, upload tugas file PDF, dan rekap penilaian otomatis.',
+  },
+];
+
 export function ChatPage() {
-  const { sessionId: routeSessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
-  const [activeSessionId, setActiveSessionId] = useState<string | undefined>(routeSessionId);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isTyping, setIsTyping] = useState(false);
-  const [showFinishButton, setShowFinishButton] = useState(false);
-  const [isFinalizing, setIsFinalizing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [userPlan, setUserPlan] = useState<UserPlanInfo | null>(null);
   const [pricingOpen, setPricingOpen] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const userMessageCount = messages.filter((m) => m.role === 'user').length;
-  const chatLimit = userPlan?.chatLimit ?? 10;
   const charLimit = userPlan?.charLimit ?? 1000;
-  const isLimitReached = userMessageCount >= chatLimit;
 
   useEffect(() => {
     api<UserPlanInfo>('/api/user/plan')
@@ -63,396 +71,209 @@ export function ChatPage() {
       .catch((err) => console.warn('Gagal memuat info plan:', err));
   }, []);
 
-  useEffect(() => {
-    setActiveSessionId(routeSessionId);
-  }, [routeSessionId]);
+  const handleSubmitIdea = async () => {
+    const trimmed = inputText.trim();
+    if (!trimmed || isSubmitting) return;
 
-  // Load pesan saat mount
-  useEffect(() => {
-    if (!activeSessionId) {
-      setMessages([]);
-      setShowFinishButton(false);
-      return;
-    }
+    setIsSubmitting(true);
+    setErrorMessage(null);
 
-    const loadMessages = async () => {
-      try {
-        const json = await api<{ messages?: any[] }>(`/api/chat/sessions/${activeSessionId}/messages`);
-        const rawMsgs = json.messages || [];
-        const msgs = rawMsgs.map((m: any) => ({
-          ...m,
-          payload: parsePayload(m.payload),
-        }));
-        setMessages(msgs);
-        const lastMsg = msgs[msgs.length - 1];
-        if (lastMsg?.role === 'assistant' && lastMsg?.kind === 'done') {
-          setShowFinishButton(true);
-        }
-      } catch (err) {
-        console.error('Gagal load pesan:', err);
+    try {
+      // 1. Buat sesi chat baru
+      const sessionRes = await api<{ sessionId: string }>('/api/chat/sessions', {
+        method: 'POST',
+      });
+
+      if (!sessionRes.sessionId) {
+        throw new Error('Gagal menginisialisasi sesi.');
       }
-    };
 
-    loadMessages();
-  }, [activeSessionId]);
-
-  // Auto-scroll ke bawah saat ada pesan baru
-  useEffect(() => {
-    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isTyping]);
-
-  const sendMessage = async () => {
-    if (!inputText.trim() || isLoading) return;
-
-    const textToSend = inputText.trim();
-    const userMessage: ChatMessage = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      kind: 'text',
-      content: textToSend,
-      createdAt: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setInputText('');
-    setIsLoading(true);
-    setIsTyping(true);
-    setShowFinishButton(false);
-
-    let targetSessionId = activeSessionId;
-    if (!targetSessionId) {
-      try {
-        const sessionRes = await api<{ sessionId: string }>('/api/chat/sessions', {
+      // 2. Langsung finalisasi sesi dengan ide mentah user -> buat draft project & redirect ke survey
+      const finalizeRes = await api<{ projectId: string }>(
+        `/api/chat/sessions/${sessionRes.sessionId}/finalize`,
+        {
           method: 'POST',
-        });
-        if (!sessionRes.sessionId) {
-          throw new Error('Sesi gagal dibuat.');
+          body: JSON.stringify({ idea: trimmed }),
         }
-        targetSessionId = sessionRes.sessionId;
-        setActiveSessionId(targetSessionId);
-        window.history.replaceState(null, '', `/chat/${targetSessionId}`);
-      } catch (err) {
-        console.error('Gagal membuat sesi chat:', err);
-        setIsLoading(false);
-        setIsTyping(false);
-        alert('Terjadi kesalahan saat memulai sesi chat.');
-        return;
-      }
-    }
+      );
 
-    try {
-      const aiResponse = await api<any>(`/api/chat/sessions/${targetSessionId}/messages`, {
-        method: 'POST',
-        body: JSON.stringify({ content: textToSend }),
-      });
-
-      const aiMessage: ChatMessage = {
-        id: `ai-${Date.now()}`,
-        role: 'assistant',
-        kind: aiResponse.kind || 'text',
-        content: aiResponse.content,
-        payload: parsePayload(aiResponse.payload),
-        createdAt: new Date(),
-      };
-
-      setMessages((prev) => [...prev, aiMessage]);
-      setIsTyping(false);
-      setShowFinishButton(aiResponse.kind === 'done');
-    } catch (err) {
-      console.error('Error mengirim pesan:', err);
-      setIsTyping(false);
-      alert('Terjadi kesalahan saat mengirim pesan.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const retryLastMessage = async () => {
-    if (!activeSessionId) return;
-    setIsLoading(true);
-    setIsTyping(true);
-    setShowFinishButton(false);
-    try {
-      const aiResponse = await api<any>(`/api/chat/sessions/${activeSessionId}/retry`, {
-        method: 'POST',
-      });
-      setMessages((prev) => {
-        const next = [...prev];
-        if (next.length > 0 && next[next.length - 1].role === 'assistant') {
-          next.pop();
-        }
-        return [
-          ...next,
-          {
-            id: aiResponse.id || `ai-${Date.now()}`,
-            role: 'assistant',
-            kind: aiResponse.kind || 'text',
-            content: aiResponse.content,
-            payload: parsePayload(aiResponse.payload),
-            createdAt: new Date(),
-          },
-        ];
-      });
-      setShowFinishButton(aiResponse.kind === 'done');
-    } catch (err) {
-      console.error('Error saat retry:', err);
-    } finally {
-      setIsLoading(false);
-      setIsTyping(false);
-    }
-  };
-
-  const handleFormSubmit = async (answers: Record<string, string>) => {
-    if (!activeSessionId) return;
-    const serialized = Object.entries(answers)
-      .map(([key, value]) => `${key}: ${value}`)
-      .join(', ');
-
-    const userMessage: ChatMessage = {
-      id: `form-${Date.now()}`,
-      role: 'user',
-      kind: 'text',
-      content: serialized,
-      createdAt: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
-    setIsTyping(true);
-    setShowFinishButton(false);
-
-    try {
-      const aiResponse = await api<any>(`/api/chat/sessions/${activeSessionId}/messages`, {
-        method: 'POST',
-        body: JSON.stringify({ content: serialized, formAnswers: answers }),
-      });
-
-      const aiMessage: ChatMessage = {
-        id: `ai-${Date.now()}`,
-        role: 'assistant',
-        kind: aiResponse.kind || 'text',
-        content: aiResponse.content,
-        payload: parsePayload(aiResponse.payload),
-        createdAt: new Date(),
-      };
-
-      setMessages((prev) => [...prev, aiMessage]);
-      setIsTyping(false);
-      setShowFinishButton(aiResponse.kind === 'done');
-    } catch (err) {
-      console.error('Error mengirim jawaban form:', err);
-      setIsTyping(false);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const finalizeProject = async () => {
-    if (!activeSessionId) return;
-    setIsFinalizing(true);
-
-    try {
-      const json = await api<{ projectId?: string }>(`/api/chat/sessions/${activeSessionId}/finalize`, {
-        method: 'POST',
-      });
-
-      if (json.projectId) {
-        navigate(`/projects/${json.projectId}/techstack`);
+      if (finalizeRes.projectId) {
+        navigate(`/projects/${finalizeRes.projectId}/survey`);
       } else {
-        setIsFinalizing(false);
-        console.error('Gagal finalisasi project:', json);
-        alert('Terjadi kesalahan saat membuat project.');
+        throw new Error('Gagal membuat proyek baru.');
       }
-    } catch (err) {
-      setIsFinalizing(false);
-      console.error('Error finalisasi:', err);
-      alert('Terjadi kesalahan saat membuat project.');
+    } catch (err: any) {
+      console.error('Error membuat proyek dari ide:', err);
+      if (err?.code === 'project_limit_reached') {
+        setPricingOpen(true);
+      } else {
+        setErrorMessage(err?.message || 'Terjadi kesalahan saat memproses ide aplikasi Anda.');
+      }
+      setIsSubmitting(false);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      sendMessage();
+      handleSubmitIdea();
     }
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex flex-col bg-background">
-      {/* Tampilan awal: Jika belum ada pesan, kolom chat muncul di tengah layar */}
-      {messages.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 py-12">
-          <div className="max-w-2xl w-full text-center space-y-6">
-            <div className="space-y-2">
-              <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 text-primary mb-2">
-                <Sparkles className="h-6 w-6" />
-              </div>
-              <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
-                Mulai Brainstorming Ide
-              </h1>
-              <p className="text-sm text-muted-foreground max-w-lg mx-auto leading-relaxed">
-                Ceritakan konsep, fitur utama, atau masalah yang ingin diselesaikan oleh aplikasi Anda.
-                AI Numa akan membantu memperjelas kebutuhan sebelum disusun menjadi PRD.
-              </p>
-            </div>
+    <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center px-4 sm:px-6 py-10 bg-background">
+      <div className="max-w-2xl w-full space-y-8">
+        {/* Headline & Subhead */}
+        <div className="text-center space-y-3">
+          <Badge
+            variant="outline"
+            className="border-primary/30 text-primary text-xs px-3 py-1 gap-1.5 inline-flex items-center"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span>AI Software Factory</span>
+          </Badge>
 
-            {/* Kotak chat di tengah */}
-            <div className="rounded-xl border border-border bg-card p-3 shadow-sm focus-within:ring-1 focus-within:ring-primary text-left transition-all">
-              <Textarea
-                placeholder="Contoh: Saya ingin buat aplikasi manajemen toko kelontong dengan kasir POS dan inventaris barang..."
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={isLoading}
-                maxLength={charLimit}
-                rows={3}
-                className="resize-none border-0 focus-visible:ring-0 shadow-none p-2 text-sm bg-transparent"
-                autoFocus
-              />
-              <div className="flex items-center justify-between pt-2 border-t border-border mt-2">
-                <span className="text-[11px] text-muted-foreground">
-                  Tekan <kbd className="px-1 py-0.5 rounded bg-muted font-mono text-[10px]">Enter</kbd> untuk kirim • {inputText.length}/{charLimit} karakter
-                </span>
-                <Button
-                  onClick={sendMessage}
-                  disabled={isLoading || !inputText.trim()}
-                  size="sm"
-                  className="gap-1.5"
-                >
-                  {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                  Mulai
-                </Button>
-              </div>
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
+            Dari ide mentah jadi aplikasi siap eksekusi
+          </h1>
+
+          <p className="text-sm text-muted-foreground max-w-lg mx-auto leading-relaxed">
+            Ceritakan ide aplikasi Anda. Numa akan memandu perancangan kebutuhan, memilih teknologi, menyusun PRD lengkap, dan menyiapkan task untuk coding agent.
+          </p>
+        </div>
+
+        {/* Stepper Ringkas 4 Langkah */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 py-1">
+          <div className="p-3 rounded-xl border border-primary/40 bg-primary/5 space-y-1">
+            <div className="flex items-center gap-1.5 text-primary text-xs font-semibold">
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>1. Ide</span>
             </div>
+            <p className="text-[11px] text-muted-foreground leading-tight">
+              Tulis konsep awal
+            </p>
+          </div>
+
+          <div className="p-3 rounded-xl border border-border/70 bg-card/50 space-y-1">
+            <div className="flex items-center gap-1.5 text-foreground/80 text-xs font-semibold">
+              <FileQuestion className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>2. Survey</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-tight">
+              Wawancara kebutuhan
+            </p>
+          </div>
+
+          <div className="p-3 rounded-xl border border-border/70 bg-card/50 space-y-1">
+            <div className="flex items-center gap-1.5 text-foreground/80 text-xs font-semibold">
+              <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>3. PRD & Rencana</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-tight">
+              Spesifikasi & roadmap
+            </p>
+          </div>
+
+          <div className="p-3 rounded-xl border border-border/70 bg-card/50 space-y-1">
+            <div className="flex items-center gap-1.5 text-foreground/80 text-xs font-semibold">
+              <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>4. Coding Agent</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-tight">
+              Eksekusi CLI numa
+            </p>
           </div>
         </div>
-      ) : (
-        /* Tampilan percakapan: list pesan di atas, input di bawah dalam wrap container */
-        <>
-          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6">
-            <div className="max-w-4xl mx-auto space-y-4">
-              {messages.map((msg) => (
-                <div key={msg.id} className="space-y-2">
-                  <ChatBubble message={msg} />
-                  {msg.role === 'assistant' && msg.content.includes('Maaf, saya mengalami kesalahan') && (
-                    <div className="flex justify-start ml-11">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={retryLastMessage}
-                        disabled={isLoading}
-                        className="gap-2 text-xs"
-                      >
-                        <RefreshCw className="h-3 w-3" />
-                        Coba Lagi
-                      </Button>
-                    </div>
-                  )}
-                  {msg.kind === 'form' && msg.payload && (
-                    <div className="ml-11 max-w-2xl">
-                      <StructuredForm
-                        questions={msg.payload.questions}
-                        onSubmit={handleFormSubmit}
-                        disabled={isLoading}
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
 
-              {isTyping && <TypingIndicator />}
+        {/* Pesan Error jika ada */}
+        {errorMessage && (
+          <div className="p-3 rounded-xl border border-destructive/30 bg-destructive/10 text-xs text-destructive flex items-center justify-between">
+            <span>{errorMessage}</span>
+            <button
+              type="button"
+              onClick={() => setErrorMessage(null)}
+              className="text-xs underline ml-2 cursor-pointer"
+            >
+              Tutup
+            </button>
+          </div>
+        )}
 
-              {showFinishButton && (
-                <div className="flex flex-col items-center gap-3 pt-6 pb-2 text-center">
-                  <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 max-w-lg">
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      Kebutuhan aplikasi sudah dirumuskan secara detail. Anda masih bisa melanjutkan percakapan jika ada detail tambahan, atau langsung klik tombol di bawah untuk memilih tech stack.
-                    </p>
-                  </div>
-                  <Button
-                    size="lg"
-                    onClick={finalizeProject}
-                    disabled={isLoading || isFinalizing}
-                    className="gap-2 font-medium"
-                  >
-                    {isFinalizing ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <ArrowRight className="h-4 w-4" />
-                    )}
-                    Lanjut ke Tech Stack
-                  </Button>
-                </div>
+        {/* Input Card */}
+        <div className="rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs focus-within:border-primary transition-all space-y-3">
+          <Textarea
+            placeholder="Jelaskan aplikasi yang ingin Anda bangun, masalah yang diselesaikan, atau fitur utamanya..."
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={isSubmitting}
+            maxLength={charLimit}
+            rows={4}
+            className="resize-none border-0 focus-visible:ring-0 shadow-none p-1 text-sm bg-transparent leading-relaxed"
+            autoFocus
+          />
+
+          <div className="flex items-center justify-between pt-3 border-t border-border/60">
+            <span className="text-[11px] text-muted-foreground">
+              Tekan <kbd className="px-1.5 py-0.5 rounded bg-muted font-mono text-[10px]">Enter</kbd> untuk kirim • {inputText.length}/{charLimit} karakter
+            </span>
+
+            <Button
+              onClick={handleSubmitIdea}
+              disabled={isSubmitting || !inputText.trim()}
+              size="sm"
+              className="gap-2 px-4"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Menyiapkan Wawancara...</span>
+                </>
+              ) : (
+                <>
+                  <span>Kirim Ide</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </>
               )}
+            </Button>
+          </div>
+        </div>
 
-              <div ref={scrollRef} />
-            </div>
+        {/* Contoh Ide Cepat */}
+        <div className="space-y-2.5">
+          <div className="text-xs font-medium text-muted-foreground">
+            Atau pilih contoh ide untuk memulai cepat:
           </div>
 
-          {/* Input area yang dibungkus container */}
-          <div className="border-t border-border px-4 sm:px-6 py-4 bg-background">
-            <div className="max-w-4xl mx-auto">
-              {isLimitReached && (
-                <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-center">
-                  <p className="text-xs text-amber-900 dark:text-amber-200">
-                    Batas pesan untuk paket {userPlan?.planName || 'Free Trial'} ({chatLimit} pesan) telah tercapai.{' '}
-                    <button
-                      type="button"
-                      onClick={() => setPricingOpen(true)}
-                      className="underline font-semibold text-primary hover:text-primary/80 cursor-pointer ml-1 inline-flex items-center gap-1"
-                    >
-                      <Sparkles className="h-3 w-3" />
-                      Upgrade paket
-                    </button>{' '}
-                    untuk menambah batas pesan, atau lanjutkan ke tahap berikutnya.
-                  </p>
-                </div>
-              )}
-              <div className="flex gap-3 items-end rounded-xl border border-border bg-card p-2 shadow-sm focus-within:ring-1 focus-within:ring-primary">
-                <Textarea
-                  placeholder={
-                    isLimitReached
-                      ? 'Batas pesan chat telah tercapai. Lanjut ke Tech Stack untuk membuat proyek.'
-                      : showFinishButton
-                      ? 'Masih ada yang ingin dikonfirmasi atau diubah? Ketik di sini...'
-                      : 'Tulis pesan Anda... (Shift+Enter untuk baris baru)'
-                  }
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  disabled={isLoading || isLimitReached}
-                  maxLength={charLimit}
-                  rows={2}
-                  className="flex-1 resize-none border-0 focus-visible:ring-0 shadow-none p-2 text-sm bg-transparent"
-                />
-                <Button
-                  onClick={sendMessage}
-                  disabled={isLoading || !inputText.trim() || isLimitReached}
-                  size="icon"
-                  className="shrink-0 mb-0.5"
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            {EXAMPLE_IDEAS.map((ex) => {
+              const Icon = ex.icon;
+              return (
+                <Card
+                  key={ex.title}
+                  onClick={() => setInputText(ex.text)}
+                  className="p-3 cursor-pointer hover:border-primary/50 hover:bg-muted/40 transition-all border-border/70 group"
                 >
-                  <Send className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-2 px-1">
-                <span>
-                  Pesan {userMessageCount}/{chatLimit}
-                </span>
-                <span>
-                  {inputText.length}/{charLimit} karakter
-                </span>
-              </div>
-            </div>
+                  <div className="flex items-center gap-2 mb-1.5 text-xs font-semibold group-hover:text-primary transition-colors">
+                    <Icon className="h-3.5 w-3.5 shrink-0 text-primary" />
+                    <span>{ex.title}</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground line-clamp-2 leading-snug">
+                    {ex.text}
+                  </p>
+                </Card>
+              );
+            })}
           </div>
-        </>
-      )}
+        </div>
+      </div>
 
-      {/* Modal Popup Harga jika limit chat atau hard stop */}
+      {/* Modal Popup Harga jika limit kuota proyek tercapai */}
       <PricingDialog
         isOpen={pricingOpen}
         onClose={() => setPricingOpen(false)}
-        title="Tingkatkan Kuota Chat & Proyek"
-        description="Batas putaran pesan chat untuk paket saat ini telah tercapai. Pilih paket yang lebih tinggi untuk melanjutkan brainstorming dengan AI tanpa batas."
+        title="Batas Proyek Tercapai"
+        description="Jumlah proyek aktif untuk paket Anda telah mencapai batas maksimal. Upgrade ke paket Starter atau Pro untuk membuka kuota proyek baru dan kedalaman survey lebih tinggi."
       />
     </div>
   );

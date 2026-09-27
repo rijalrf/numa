@@ -270,6 +270,14 @@ program
         throw new ApiError('PRD belum ada di project ini.', 400);
       }
       const content: Record<string, unknown> = prdObj.content as unknown as Record<string, unknown>;
+      if (typeof content === 'string') {
+        console.log(content);
+        return;
+      }
+      if (typeof content?.markdown === 'string') {
+        console.log(content.markdown);
+        return;
+      }
       const mdParts: string[] = [];
 
       mdParts.push('# Product Requirements Document');

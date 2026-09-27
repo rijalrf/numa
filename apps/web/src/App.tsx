@@ -5,6 +5,7 @@ import { LandingPage } from '@/pages/landing';
 import { ProfilePage } from '@/pages/profile';
 import { ProjectsPage } from '@/pages/projects/index';
 import { ChatPage } from '@/pages/chat';
+import { SurveyPage } from '@/pages/projects/survey';
 import { TechStackPage } from '@/pages/projects/techstack';
 import { PrdPage } from '@/pages/projects/prd';
 import { TreePage } from '@/pages/projects/tree';
@@ -20,11 +21,11 @@ function Protected({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-// Redirect cerdas: auth -> /dashboard, unauth -> /
+// Redirect cerdas: auth -> /chat, unauth -> /
 function SmartRedirect() {
   const { data, isPending } = useSession();
   if (isPending) return <div className="p-8 text-muted-foreground">Memuat...</div>;
-  return <Navigate to={data?.user ? '/dashboard' : '/'} replace />;
+  return <Navigate to={data?.user ? '/chat' : '/'} replace />;
 }
 
 export function App() {
@@ -42,12 +43,14 @@ export function App() {
           </Protected>
         }
       >
-        <Route path="/dashboard" element={<ChatPage />} />
+        <Route path="/dashboard" element={<Navigate to="/chat" replace />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/settings/billing" element={<BillingPage />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/chat/:sessionId" element={<ChatPage />} />
+        <Route path="/projects/:projectId/survey" element={<SurveyPage />} />
+        <Route path="/projects/:projectId/interview" element={<SurveyPage />} />
         <Route path="/projects/:projectId/techstack" element={<TechStackPage />} />
         <Route path="/projects/:projectId/prd" element={<PrdPage />} />
         <Route path="/projects/:projectId/brd" element={<PrdPage />} />

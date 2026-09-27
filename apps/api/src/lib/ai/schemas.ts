@@ -71,20 +71,24 @@ export type ChatMessage = z.infer<typeof ChatMessageSchema>;
 
 const SubTaskSchema = z.object({
   label: z.string(),
+  requirementIds: z.array(z.string()).default([]),
 });
 
 const TreeTaskSchema = z.object({
   label: z.string(),
+  requirementIds: z.array(z.string()).default([]),
   subtasks: z.array(SubTaskSchema).default([]),
 });
 
 const SubFeatureSchema = z.object({
   label: z.string(),
+  requirementIds: z.array(z.string()).default([]),
   tasks: z.array(TreeTaskSchema).default([]),
 });
 
 const FeatureSchema = z.object({
   label: z.string(),
+  requirementIds: z.array(z.string()).default([]),
   subfeatures: z.array(SubFeatureSchema).default([]),
   tasks: z.array(TreeTaskSchema).default([]),
 });

@@ -20,9 +20,7 @@ import { PricingDialog } from '@/components/billing/pricing-dialog';
 import {
   TaskDetailDialog,
   type TaskDetail,
-  type UserStory,
 } from '@/components/kanban/task-detail-dialog';
-import { UserStoryTasksDialog } from '@/components/kanban/user-story-tasks-dialog';
 
 type Task = TaskDetail;
 
@@ -30,8 +28,6 @@ export function BoardPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [userStories, setUserStories] = useState<UserStory[]>([]);
-  const [selectedStoryForModal, setSelectedStoryForModal] = useState<UserStory | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -97,7 +93,6 @@ export function BoardPage() {
         ok: boolean;
         count?: number;
         tasks?: Task[];
-        userStories?: UserStory[];
         error?: string;
       }>(`/api/projects/${projectId}/tasks/generate`, {
         method: 'POST',
@@ -105,16 +100,14 @@ export function BoardPage() {
 
       if (res.tasks && res.tasks.length > 0) {
         setTasks(res.tasks);
-        if (res.userStories) setUserStories(res.userStories);
         setSuccessMessage(`${res.tasks.length} task berhasil dirancang.`);
         setError(null);
       } else {
-        const refreshJson = await api<{ tasks: Task[]; userStories?: UserStory[] }>(
+        const refreshJson = await api<{ tasks: Task[] }>(
           `/api/projects/${projectId}/tasks`
         );
         const fetchedTasks = refreshJson.tasks || [];
         setTasks(fetchedTasks);
-        if (refreshJson.userStories) setUserStories(refreshJson.userStories);
         if (fetchedTasks.length > 0) {
           setSuccessMessage(`${fetchedTasks.length} task berhasil dirancang.`);
           setError(null);
@@ -124,12 +117,11 @@ export function BoardPage() {
       console.error('Error generating tasks:', err);
       // Auto-recovery: periksa apakah backend sebenarnya sudah selesai menyimpan task ke DB
       try {
-        const recoveryJson = await api<{ tasks: Task[]; userStories?: UserStory[] }>(
+        const recoveryJson = await api<{ tasks: Task[] }>(
           `/api/projects/${projectId}/tasks`
         );
         if (recoveryJson.tasks && recoveryJson.tasks.length > 0) {
           setTasks(recoveryJson.tasks);
-          if (recoveryJson.userStories) setUserStories(recoveryJson.userStories);
           setSuccessMessage(`${recoveryJson.tasks.length} task berhasil dimuat.`);
           setError(null);
           return;
@@ -150,12 +142,11 @@ export function BoardPage() {
       if (mode === 'manual') setRefreshing(true);
 
       try {
-        const json = await api<{ tasks: Task[]; userStories?: UserStory[] }>(
+        const json = await api<{ tasks: Task[] }>(
           `/api/projects/${projectId}/tasks`
         );
         if (json.tasks && json.tasks.length > 0) {
           setTasks(json.tasks);
-          if (json.userStories) setUserStories(json.userStories);
           setError(null);
         } else if (mode === 'initial') {
           await generateTasks();
@@ -224,8 +215,8 @@ export function BoardPage() {
     return (
       <div className="space-y-6">
         <div className="w-full h-[calc(100vh-230px)] min-h-[560px] overflow-x-auto no-scrollbar">
-          <div className="grid grid-cols-5 gap-3.5 h-full min-w-[1000px]">
-            {[1, 2, 3, 4, 5].map((colIdx) => (
+          <div className="grid grid-cols-4 gap-3.5 h-full min-w-[900px]">
+            {[1, 2, 3, 4].map((colIdx) => (
               <Card key={colIdx} className="h-full flex flex-col">
                 <CardHeader className="shrink-0">
                   <div className="h-5 bg-muted w-2/3 rounded animate-pulse" />
@@ -358,62 +349,10 @@ export function BoardPage() {
           </Button>
         </div>
       ) : (
-        /* Papan Kanban Terpadu (User Story + Status Task) */
+        /* Papan Kanban Status Task */
         <div className="w-full overflow-x-auto no-scrollbar h-[calc(100vh-230px)] min-h-[560px]">
-          <div className="grid grid-cols-5 gap-3.5 h-full min-w-[1000px]">
-            {/* Kolom 1: User Story */}
-            <Card className="border-border flex flex-col h-full overflow-hidden">
-              <CardHeader className="pb-2 pt-3 px-3.5 border-b border-border/50 shrink-0">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    USER STORY
-                  </CardTitle>
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">
-                    {userStories.length}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="p-2.5 space-y-2.5 flex-1 min-h-0 overflow-y-auto no-scrollbar">
-                {/* Daftar User Story */}
-                {userStories.map((story) => {
-                  const storyTasks = tasks.filter((t) => t.aiContext?.userStoryId === story.id);
-                  const doneCount = storyTasks.filter((t) => t.status === 'DONE').length;
-                  const cleanAction = story.action.replace(/^saya\s+ingin\s+/i, '');
-
-                  return (
-                    <Card
-                      key={story.id}
-                      onClick={() => setSelectedStoryForModal(story)}
-                      className="cursor-pointer hover:shadow-md hover:border-primary/50 transition-all border-border bg-card"
-                    >
-                      <CardHeader className="p-2.5 space-y-1.5">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="font-mono text-[10px] font-bold text-primary">
-                            {story.id}
-                          </span>
-                        </div>
-                        <p className="text-xs text-foreground/90 font-medium leading-snug line-clamp-3">
-                          Saya ingin {cleanAction}, sehingga {story.benefit}.
-                        </p>
-                        <div className="pt-1 flex items-center justify-start border-t border-border/40">
-                          <span className="font-mono text-[10px] text-muted-foreground font-semibold">
-                            {doneCount}/{storyTasks.length} tasks
-                          </span>
-                        </div>
-                      </CardHeader>
-                    </Card>
-                  );
-                })}
-
-                {userStories.length === 0 && (
-                  <p className="text-xs text-muted-foreground text-center py-6 italic select-none">
-                    Kosong
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Kolom 2-6: Status Kanban */}
+          <div className="grid grid-cols-4 gap-3.5 h-full min-w-[900px]">
+            {/* Kolom 1-4: Status Kanban */}
             {columns.map((col) => {
               const colTasks = displayedTasks.filter((t) => t.status === col.status);
               return (
@@ -431,7 +370,7 @@ export function BoardPage() {
                   <CardContent className="p-2.5 space-y-2.5 flex-1 min-h-0 overflow-y-auto no-scrollbar">
                     {colTasks.map((task) => {
                       const taskIdLabel = task.aiContext?.taskId || (task.order ? `#${task.order}` : undefined);
-                      const storyId = task.aiContext?.userStoryId;
+                      const reqIds = task.aiContext?.requirement_ids;
 
                       return (
                         <Card
@@ -455,14 +394,23 @@ export function BoardPage() {
                                 {task.description}
                               </p>
                             )}
-                            <div className="flex items-center gap-2 mt-2">
+                            <div className="flex flex-wrap items-center gap-1.5 mt-2">
                               <Badge variant="outline" className="text-[9px] px-1.5 py-0">
                                 {task.layer}
                               </Badge>
-                              {storyId && (
-                                <span className="font-mono text-[10px] font-bold text-primary">
-                                  {storyId}
-                                </span>
+                              {reqIds && reqIds.length > 0 && (
+                                <div className="flex flex-wrap gap-1 items-center">
+                                  {reqIds.slice(0, 2).map((r) => (
+                                    <span key={r} className="font-mono text-[9px] font-bold text-primary bg-primary/10 px-1 py-0.5 rounded border border-primary/20">
+                                      {r}
+                                    </span>
+                                  ))}
+                                  {reqIds.length > 2 && (
+                                    <span className="font-mono text-[9px] text-muted-foreground">
+                                      +{reqIds.length - 2}
+                                    </span>
+                                  )}
+                                </div>
                               )}
                             </div>
                           </CardContent>
@@ -494,22 +442,6 @@ export function BoardPage() {
         isOpen={!!selectedTask}
         onClose={() => setSelectedTask(null)}
         onStatusChange={handleTaskStatusChange}
-        userStories={userStories}
-      />
-
-      <UserStoryTasksDialog
-        story={selectedStoryForModal}
-        tasks={
-          selectedStoryForModal
-            ? tasks.filter((t) => t.aiContext?.userStoryId === selectedStoryForModal.id)
-            : []
-        }
-        isOpen={!!selectedStoryForModal}
-        onClose={() => setSelectedStoryForModal(null)}
-        onSelectTask={(task) => {
-          setSelectedStoryForModal(null);
-          setSelectedTask(task);
-        }}
       />
 
       <PricingDialog

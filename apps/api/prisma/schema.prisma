@@ -121,11 +121,17 @@ model Stack {
 }
 
 model DiscoveryQuestion {
-  id        String  @id @default(cuid())
-  projectId String
-  order     Int
-  question  String
-  context   String?
+  id               String  @id @default(cuid())
+  projectId        String
+  round            Int     @default(1)
+  order            Int
+  question         String
+  context          String?
+  kind             String  @default("radio") // radio | checkbox
+  options          Json    @default("[]")
+  required         Boolean @default(true)
+  suggestion       String?
+  suggestionReason String?
 
   project Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   answers DiscoveryAnswer[]
@@ -136,7 +142,8 @@ model DiscoveryQuestion {
 model DiscoveryAnswer {
   id         String   @id @default(cuid())
   questionId String
-  answer     String
+  answer     String   @default("")
+  value      Json?
   createdAt  DateTime @default(now())
 
   question DiscoveryQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
@@ -343,9 +350,10 @@ model TreeNode {
   parentId  String?
   parent    TreeNode?  @relation("TreeHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
   children  TreeNode[] @relation("TreeHierarchy")
-  label     String
-  kind      String     // "app" | "feature" | "subfeature" | "task" | "subtask"
-  order     Int        @default(0)
+  label          String
+  kind           String     // "app" | "feature" | "subfeature" | "task" | "subtask"
+  requirementIds String[]   @default([])
+  order          Int        @default(0)
   createdAt DateTime   @default(now())
 
   @@index([projectId, parentId])
@@ -358,7 +366,7 @@ model TreeNode {
 model AiCallLog {
   id            String   @id @default(cuid())
   projectId     String?
-  agentName     String   // e.g. "generateTasks", "generatePRD", "generateRoadmap", "replyChat", dsb.
+  agentName     String   // e.g. "generateTasks", "generatePRD", "generateRoadmap", "generateSurveyRound", dsb.
   model         String   // e.g. "ai-builder"
   inputTokens   Int      @default(0)
   outputTokens  Int      @default(0)

@@ -17,20 +17,6 @@ import {
   BookOpen,
 } from 'lucide-react';
 
-export type UserStory = {
-  id: string;
-  persona: string;
-  action: string;
-  benefit: string;
-  acceptanceCriteria?: string[];
-  gherkin?: Array<{
-    scenario: string;
-    given: string;
-    when: string;
-    then: string;
-  }>;
-};
-
 export type TaskDetail = {
   id: string;
   order?: number;
@@ -43,7 +29,6 @@ export type TaskDetail = {
   outputSummary?: string | null;
   aiContext?: {
     taskId?: string;
-    userStoryId?: string;
     requirement_ids?: string[];
     depends_on?: string[];
     files_to_create?: string[];
@@ -71,17 +56,15 @@ interface TaskDetailDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onStatusChange?: (taskId: string, newStatus: TaskDetail['status']) => void;
-  userStories?: UserStory[];
 }
 
-export function TaskDetailDialog({ task, isOpen, onClose, userStories }: TaskDetailDialogProps) {
+export function TaskDetailDialog({ task, isOpen, onClose }: TaskDetailDialogProps) {
   const [copiedCmd, setCopiedCmd] = useState(false);
 
   if (!isOpen || !task) return null;
 
   const ctx = task.aiContext;
   const taskIdLabel = ctx?.taskId || (task.order ? `#${task.order}` : task.id.slice(0, 8));
-  const parentStory = userStories?.find((s) => s.id === ctx?.userStoryId);
 
   const handleCopyCommands = () => {
     const cmds = ctx?.validation_commands ?? [];
@@ -108,11 +91,15 @@ export function TaskDetailDialog({ task, isOpen, onClose, userStories }: TaskDet
               <Badge variant="outline" className="text-xs font-semibold bg-muted/50">
                 {task.status}
               </Badge>
-              {ctx?.userStoryId && (
-                <Badge variant="outline" className="text-xs font-semibold bg-primary/10 text-primary border-primary/20">
-                  <BookOpen className="h-3 w-3 mr-1" />
-                  {ctx.userStoryId}
-                </Badge>
+              {ctx?.requirement_ids && ctx.requirement_ids.length > 0 && (
+                <div className="flex flex-wrap gap-1 items-center">
+                  {ctx.requirement_ids.map((reqId) => (
+                    <Badge key={reqId} variant="outline" className="text-xs font-semibold bg-primary/10 text-primary border-primary/20">
+                      <BookOpen className="h-3 w-3 mr-1" />
+                      {reqId}
+                    </Badge>
+                  ))}
+                </div>
               )}
             </div>
             <h2 className="text-lg font-bold leading-snug">{task.title}</h2>
@@ -129,47 +116,21 @@ export function TaskDetailDialog({ task, isOpen, onClose, userStories }: TaskDet
 
         {/* Konten Scrollable */}
         <div className="space-y-5 max-h-[60vh] overflow-y-auto no-scrollbar text-sm">
-          {/* User Story */}
-          {parentStory ? (
+          {/* Requirements PRD */}
+          {ctx?.requirement_ids && ctx.requirement_ids.length > 0 && (
             <div className="space-y-1.5">
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <BookOpen className="h-3.5 w-3.5" /> User Story ({parentStory.id})
+                <BookOpen className="h-3.5 w-3.5" /> Requirements PRD
               </h3>
-              <div className="p-3 rounded-lg border border-border bg-muted/20 space-y-2">
-                <p className="text-xs text-foreground/90 font-medium leading-relaxed">
-                  Saya ingin {parentStory.action.replace(/^saya\s+ingin\s+/i, '')}, sehingga {parentStory.benefit.replace(/^sehingga\s+/i, '')}.
-                </p>
-                {parentStory.gherkin && parentStory.gherkin.length > 0 && (
-                  <div className="pt-2 border-t border-border/60 space-y-1">
-                    <span className="text-[11px] font-semibold text-muted-foreground block">Skenario Gherkin:</span>
-                    <div className="bg-background/80 p-2.5 rounded text-[11px] font-mono space-y-0.5 border border-border/60">
-                      {parentStory.gherkin[0].scenario && (
-                        <div className="font-semibold text-primary">Skenario: {parentStory.gherkin[0].scenario}</div>
-                      )}
-                      <div className="text-muted-foreground">
-                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Given</span> {parentStory.gherkin[0].given}
-                      </div>
-                      <div className="text-muted-foreground">
-                        <span className="text-blue-600 dark:text-blue-400 font-semibold">When</span> {parentStory.gherkin[0].when}
-                      </div>
-                      <div className="text-muted-foreground">
-                        <span className="text-purple-600 dark:text-purple-400 font-semibold">Then</span> {parentStory.gherkin[0].then}
-                      </div>
-                    </div>
-                  </div>
-                )}
+              <div className="flex flex-wrap gap-2 p-3 rounded-lg border border-border bg-muted/20">
+                {ctx.requirement_ids.map((id) => (
+                  <span key={id} className="font-mono text-xs font-bold text-primary px-2 py-0.5 rounded bg-primary/10 border border-primary/20">
+                    {id}
+                  </span>
+                ))}
               </div>
             </div>
-          ) : ctx?.userStoryId ? (
-            <div className="space-y-1.5">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <BookOpen className="h-3.5 w-3.5" /> User Story
-              </h3>
-              <div className="p-3 rounded-lg border border-border bg-muted/20 text-xs">
-                <span className="font-mono font-bold text-primary">{ctx.userStoryId}</span>
-              </div>
-            </div>
-          ) : null}
+          )}
 
           {/* Deskripsi */}
           {task.description && (
