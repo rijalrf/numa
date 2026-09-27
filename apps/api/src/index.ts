@@ -24,33 +24,35 @@ import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-import { generatePRDFromDiscovery, PrdSchema } from './lib/ai/prd.js';
+import { generatePrdMarkdownStream, generatePRDFromDiscovery, readPrdContent, PrdSchema } from './lib/ai/prd.js';
 import { generateRoadmapFromPRD } from './lib/ai/roadmap.js';
 import { generateTasksFromRoadmap } from './lib/ai/tasks.js';
-import { getUserPlan, checkQuota, incrementQuota, PLANS } from './lib/billing.js';
+import { getUserPlan, checkQuota, incrementQuota, checkProjectLimit, PLANS } from './lib/billing.js';
 import { validateAndNormalizeDAG } from './lib/ai/dag-validator.js';
 import { validateApiCoverage } from './lib/ai/api-coverage-validator.js';
 import { validateCleanup } from './lib/ai/cleanup-validator.js';
-import { replyChat, finalizeChatSession, recommendTechStack, generateTreeFromPrd } from './lib/ai/chat.js';
+import { finalizeChatSession, recommendTechStack, generateTreeFromPrd } from './lib/ai/chat.js';
 import { buildZip } from './lib/zip.js';
 import { parseStackEntry, resolveStackContract } from './lib/ai/stack-contract.js';
+import { generateSurveyRound, generateSurveySummary } from './lib/survey.js';
 
 // Hash token utility (mirrors requireAgent.middleware)
 function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-// Urutan tahapan wizard proyek (interview dihapus, langsung chat -> techstack -> prd)
+// Urutan tahapan wizard proyek (chat -> survey -> techstack -> prd -> tree -> board)
 const STAGE_ORDER: Record<string, number> = {
   chat: 0,
+  survey: 1,
   interview: 1, // backward compat
-  techstack: 1,
-  prd: 2,
-  brd: 2, // backward compat
-  tree: 3,
-  board: 4,
-  guide: 5, // Kompatibilitas data lama
-  done: 6,
+  techstack: 2,
+  prd: 3,
+  brd: 3, // backward compat
+  tree: 4,
+  board: 5,
+  guide: 6, // Kompatibilitas data lama
+  done: 7,
 };
 
 function isStageLocked(currentStep: string | undefined | null, targetStage: string): boolean {
@@ -168,6 +170,19 @@ app.post('/api/projects', requireUser, async (req: AuthedRequest, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: 'Data tidak valid', detail: parsed.error.flatten() });
   }
+
+  const limitCheck = await checkProjectLimit(req.userId);
+  if (!limitCheck.allowed) {
+    return res.status(403).json({
+      error: `Batas jumlah proyek telah tercapai (maksimal ${limitCheck.quotaMax} proyek aktif untuk paket ${limitCheck.plan}). Silakan upgrade paket untuk membuat proyek baru.`,
+      code: 'project_limit_reached',
+      plan: limitCheck.plan,
+      currentCount: limitCheck.currentCount,
+      quotaMax: limitCheck.quotaMax,
+      upgradeUrl: '/pricing',
+    });
+  }
+
   const project = await prisma.project.create({
     data: { userId: req.userId, name: parsed.data.name, idea: parsed.data.idea, status: 'ACTIVE' },
   });
@@ -602,7 +617,6 @@ app.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentRequest, 
 
   const ctx = (task.aiContext ?? {}) as {
     taskId?: string;
-    userStoryId?: string;
     requirement_ids?: string[];
     depends_on?: string[];
     files_to_create?: string[];
@@ -615,14 +629,7 @@ app.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentRequest, 
     out_of_scope?: string[];
   };
 
-  const prd = task.project.prd?.content as {
-    userStories?: Array<{ id: string; persona: string; action: string; benefit: string }>;
-    functionalRequirements?: Array<{ id: string; title: string; description: string }>;
-    productRules?: Array<{ id: string; description: string }>;
-    businessRules?: Array<{ id: string; description: string }>;
-    dataModels?: Array<{ name: string; description?: string; fields: Array<{ name: string; type: string; required?: boolean }>; relations?: string[] }>;
-    apiEndpoints?: Array<{ method: string; path: string; description: string; requestBody?: string; responseBody?: string }>;
-  } | undefined;
+  const prdDoc = readPrdContent(task.project.prd?.content);
 
   // Query completed tasks di project yang sama untuk context enrichment
   const completedTasks = await prisma.task.findMany({
@@ -641,9 +648,7 @@ app.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentRequest, 
 
   // Filter requirement yang bersangkutan untuk hemat token dan cegah distorsi context
   const reqIds = new Set(ctx.requirement_ids ?? []);
-  const relevantReqs = (prd?.functionalRequirements ?? []).filter((r) => reqIds.has(r.id));
-  const rulesList = prd?.productRules?.length ? prd.productRules : prd?.businessRules;
-  const relevantRules = (rulesList ?? []).filter((b) => reqIds.has(b.id));
+  const relevantReqs = prdDoc.requirementIndex.filter((r) => reqIds.has(r.id));
 
   const mdParts: string[] = [
     `### [TASK ${task.order}] ${task.title}`,
@@ -651,13 +656,8 @@ app.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentRequest, 
     `**Layer**: ${task.layer} | **Project**: ${task.project.name} | **Status**: ${task.status}`,
   ];
 
-  if (ctx.userStoryId) {
-    const matchedStory = (prd?.userStories ?? []).find((s: any) => s.id === ctx.userStoryId);
-    if (matchedStory) {
-      mdParts.push(`**User Story**: [${matchedStory.id}] Sebagai ${matchedStory.persona}, ${matchedStory.action}, ${matchedStory.benefit}`);
-    } else {
-      mdParts.push(`**User Story**: ${ctx.userStoryId}`);
-    }
+  if (ctx.requirement_ids && ctx.requirement_ids.length > 0) {
+    mdParts.push(`**Requirements PRD**: ${ctx.requirement_ids.join(', ')}`);
   }
 
   if (task.dependsOn && task.dependsOn.length > 0) {
@@ -710,7 +710,7 @@ app.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentRequest, 
 
   const displayEndpoints = completedContracts.length > 0
     ? completedContracts
-    : (prd?.apiEndpoints ?? []);
+    : ((prdDoc as any)?.apiEndpoints ?? []);
 
   if (displayEndpoints.length > 0) {
     mdParts.push(``, `#### API Endpoints Tersedia (Kontrak Integrasi)`);
@@ -721,11 +721,12 @@ app.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentRequest, 
     }
   }
 
-  // Referensi Model Data / Schema untuk task DATABASE dan BACKEND
-  if (prd?.dataModels && prd.dataModels.length > 0) {
+  // Referensi Model Data / Schema untuk task DATABASE dan BACKEND jika tersedia
+  const dataModels = (prdDoc as any)?.dataModels;
+  if (Array.isArray(dataModels) && dataModels.length > 0) {
     mdParts.push(``, `#### Kontrak Model Data (Database Schema)`);
-    for (const m of prd.dataModels.slice(0, 8)) {
-      const fieldsStr = m.fields.map((f) => `${f.name}: ${f.type}${f.required === false ? '?' : ''}`).join(', ');
+    for (const m of dataModels.slice(0, 8)) {
+      const fieldsStr = m.fields?.map((f: any) => `${f.name}: ${f.type}${f.required === false ? '?' : ''}`).join(', ') ?? '';
       mdParts.push(`- **${m.name}**${m.description ? ` (${m.description})` : ''}: \`{ ${fieldsStr} }\``);
       if (m.relations?.length) {
         mdParts.push(`  - Relasi: ${m.relations.join(', ')}`);
@@ -740,13 +741,10 @@ app.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentRequest, 
     ``
   );
 
-  if (relevantReqs.length > 0 || relevantRules.length > 0) {
-    mdParts.push(`#### Kebutuhan & Aturan Terkait`);
+  if (relevantReqs.length > 0) {
+    mdParts.push(`#### Kebutuhan Terkait PRD`);
     for (const r of relevantReqs) {
-      mdParts.push(`- [${r.id}] **${r.title}**: ${r.description}`);
-    }
-    for (const b of relevantRules) {
-      mdParts.push(`- [${b.id}] ${b.description}`);
+      mdParts.push(`- [${r.id}] **${r.title}**`);
     }
     mdParts.push(``);
   }
@@ -889,127 +887,11 @@ app.get(['/api/agent/prd', '/api/agent/brd'], requireAgent, async (req: AgentReq
 // Helper format markdown export dokumen proyek
 // ============================================================
 function buildPrdMarkdown(project: { name: string }, prd: { generatedAt: Date | string; version: number; content: any }): string {
-  const content = (prd.content ?? {}) as any;
-  const rulesList = content.productRules?.length ? content.productRules : content.businessRules;
-  return [
-    `# Product Requirements Document (${project.name})`,
-    ``,
-    `**Generated:** ${new Date(prd.generatedAt).toLocaleString('id-ID')}`,
-    `**Version:** ${prd.version}`,
-    ``,
-    `---`,
-    ``,
-    `## Ringkasan`,
-    ``,
-    content.overview ?? `(tidak ada)`,
-    ``,
-    `---`,
-    ``,
-    `## Tujuan`,
-    ``,
-    ...(content.goals?.map((g: string) => `- ${g}`) ?? []),
-    ``,
-    `---`,
-    ``,
-    `## Fitur`,
-    ``,
-    ...(content.features?.map((f: { name: string; description?: string }) =>
-      `### ${f.name}\n${f.description ? f.description : '(tidak ada deskripsi)'}`
-    ) ?? []),
-    ``,
-    `---`,
-    ``,
-    `## User Stories (Format Gherkin)`,
-    ``,
-    ...(content.userStories?.map((us: any) => {
-      const gherkinLines = us.gherkin?.map((g: any) =>
-        `#### Scenario: ${g.title || 'Skenario'}\n- **Given** ${g.given}\n- **When** ${g.when}\n- **Then** ${g.then}`
-      ).join('\n\n') ?? '';
-      return `### ${us.id}: ${us.persona || 'Pengguna'}\n- **Aksi:** ${us.action || '-'}\n- **Manfaat:** ${us.benefit || '-'}\n${us.acceptanceCriteria?.length ? `\n**Acceptance Criteria:**\n` + us.acceptanceCriteria.map((ac: string) => `- ${ac}`).join('\n') : ''}\n\n${gherkinLines}`;
-    }) ?? []),
-    ``,
-    `---`,
-    ``,
-    `## Kebutuhan Fungsional`,
-    ``,
-    ...(content.functionalRequirements?.map((r: any) => `- **[${r.id}] ${r.title}** (${r.priority || 'MUST'}${r.actor ? `, Aktor: ${r.actor}` : ''}): ${r.description}`) ?? []),
-    ``,
-    `---`,
-    ``,
-    `## Aturan Produk`,
-    ``,
-    ...(rulesList?.map((r: any) => `- **[${r.id}]** ${r.description}`) ?? []),
-    ``,
-    `---`,
-    ``,
-    `## Tech Requirements`,
-    ``,
-    ...(content.techRequirements?.map((t: string) => `- ${t}`) ?? []),
-    ``,
-    `---`,
-    ``,
-    `## Non-Functional Requirements`,
-    ``,
-    ...(content.nonFunctional?.map((n: string) => `- ${n}`) ?? []),
-    ``,
-    `---`,
-    ``,
-    `## Out of Scope`,
-    ``,
-    ...(content.outOfScope?.map((o: string) => `- ${o}`) ?? []),
-  ].join('\n');
+  const prdDoc = readPrdContent(prd.content);
+  return prdDoc.markdown || `# Product Requirements Document (${project.name})\n\n(tidak ada konten)`;
 }
 
 const buildBrdMarkdown = buildPrdMarkdown; // Backward compatibility alias
-
-function buildUserStoriesMarkdown(project: { name: string }, prdDoc: { content: any } | null): string {
-  const content = (prdDoc?.content ?? {}) as any;
-  const stories = content.userStories ?? [];
-  const lines = [
-    `# User Stories — ${project.name}`,
-    ``,
-    `Dokumen spesifikasi user story terperinci dengan skenario Gherkin (Given/When/Then).`,
-    ``,
-  ];
-
-  if (stories.length === 0) {
-    lines.push(`(Belum ada user story yang dibuat)`);
-    return lines.join('\n');
-  }
-
-  for (const us of stories) {
-    lines.push(`## [${us.id}] ${us.persona || 'Pengguna'}`);
-    lines.push(`- **Sebagai:** ${us.persona || '-'}`);
-    lines.push(`- **Saya ingin:** ${us.action || '-'}`);
-    lines.push(`- **Supaya:** ${us.benefit || '-'}`);
-    lines.push(``);
-
-    if (us.acceptanceCriteria && us.acceptanceCriteria.length > 0) {
-      lines.push(`### Acceptance Criteria`);
-      for (const ac of us.acceptanceCriteria) {
-        lines.push(`- ${ac}`);
-      }
-      lines.push(``);
-    }
-
-    if (us.gherkin && us.gherkin.length > 0) {
-      lines.push(`### Skenario Gherkin`);
-      for (const g of us.gherkin) {
-        lines.push(`#### Scenario: ${g.title || 'Skenario'}`);
-        lines.push(`\`\`\`gherkin`);
-        lines.push(`Given ${g.given}`);
-        lines.push(`When ${g.when}`);
-        lines.push(`Then ${g.then}`);
-        lines.push(`\`\`\``);
-        lines.push(``);
-      }
-    }
-    lines.push(`---`);
-    lines.push(``);
-  }
-
-  return lines.join('\n');
-}
 
 function buildTasksMarkdown(project: { name: string }, tasks: any[]): string {
   const lines = [
@@ -1028,8 +910,8 @@ function buildTasksMarkdown(project: { name: string }, tasks: any[]): string {
     const aiCtx = (t.aiContext ?? {}) as any;
     lines.push(`## [${t.order}] ${t.title} (${t.layer})`);
     lines.push(`- **ID:** \`${t.id}\``);
-    if (aiCtx.userStoryId) {
-      lines.push(`- **User Story:** \`${aiCtx.userStoryId}\``);
+    if (aiCtx.requirement_ids?.length) {
+      lines.push(`- **Requirements PRD:** ${aiCtx.requirement_ids.join(', ')}`);
     }
     lines.push(`- **Status:** ${t.status}`);
     lines.push(`- **Deskripsi:** ${t.description || '-'}`);
@@ -1096,7 +978,7 @@ app.get(['/api/projects/:id/prd/download', '/api/projects/:id/brd/download'], re
 });
 
 // ============================================================
-// User endpoint: download paket lengkap (.zip) -> PRD.md, USER-STORIES.md, TASKS.md
+// User endpoint: download paket lengkap (.zip) -> PRD.md, TASKS.md
 // ============================================================
 app.get('/api/projects/:id/export.zip', requireUser, async (req: AuthedRequest, res) => {
   const { plan } = await getUserPlan(req.userId);
@@ -1116,12 +998,10 @@ app.get('/api/projects/:id/export.zip', requireUser, async (req: AuthedRequest, 
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
 
   const prdMd = project.prd ? buildPrdMarkdown(project, project.prd) : '# PRD Belum Dibuat\n';
-  const userStoriesMd = buildUserStoriesMarkdown(project, project.prd);
   const tasksMd = buildTasksMarkdown(project, project.tasks);
 
   const zipBuffer = buildZip([
     { name: 'PRD.md', content: prdMd },
-    { name: 'USER-STORIES.md', content: userStoriesMd },
     { name: 'TASKS.md', content: tasksMd },
   ]);
 
@@ -1269,7 +1149,7 @@ Tempel token di placeholder di bawah SEBELUM menyalin prompt ini.
   res.json({ projectName: project.name, prompt: md });
 });
 
-// Step 2: generate PRD dari ide + tech stack + chat history (juga dukung alias /brd/generate)
+// Step 2: generate PRD dari ide + tech stack + chat history (SSE streaming)
 app.post(['/api/projects/:id/prd/generate', '/api/projects/:id/brd/generate'], requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({
     where: { id: req.params.id, userId: req.userId },
@@ -1279,10 +1159,29 @@ app.post(['/api/projects/:id/prd/generate', '/api/projects/:id/brd/generate'], r
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
 
+  const { plan } = await getUserPlan(req.userId);
+  if (plan === 'free') {
+    return res.status(403).json({
+      error: 'Paket Free tidak dapat menghasilkan dokumen PRD. Silakan upgrade paket untuk melanjutkan.',
+      code: 'plan_upgrade_required',
+      plan,
+      upgradeUrl: '/pricing',
+    });
+  }
+
   const existing = await prisma.prd.findUnique({ where: { projectId: project.id } });
   if (existing && isStageLocked(project.wizardStep, 'prd')) {
     return res.status(403).json({ error: 'Dokumen PRD telah selesai dan terkunci (Read-Only).' });
   }
+
+  const surveyQuestions = await prisma.discoveryQuestion.findMany({
+    where: { projectId: project.id },
+    include: { answers: { orderBy: { createdAt: 'desc' }, take: 1 } },
+    orderBy: [{ round: 'asc' }, { order: 'asc' }],
+  });
+  const surveyQA = surveyQuestions
+    .filter((q) => q.answers.length > 0 && q.answers[0].answer)
+    .map((q) => ({ question: q.question, answer: q.answers[0].answer }));
 
   const chatSession = await prisma.chatSession.findFirst({
     where: { projectId: project.id },
@@ -1296,26 +1195,42 @@ app.post(['/api/projects/:id/prd/generate', '/api/projects/:id/brd/generate'], r
     ? project.stacks.map((s) => `${s.category}: ${s.name}${s.version ? ` (${s.version})` : ''}`)
     : undefined;
 
+  // SSE response headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
   try {
-    const prd = await generatePRDFromDiscovery({
-      idea: project.idea,
-      projectId: project.id,
-      techStack: techStackList,
-      chatHistory,
-    });
+    const prd = await generatePrdMarkdownStream(
+      {
+        idea: project.idea,
+        questions: surveyQA,
+        projectId: project.id,
+        techStack: techStackList,
+        chatHistory,
+      },
+      (delta) => {
+        res.write(`data: ${JSON.stringify({ delta })}\n\n`);
+      }
+    );
+
+    let savedPrd;
     if (existing) {
-      const updated = await prisma.prd.update({
+      savedPrd = await prisma.prd.update({
         where: { projectId: project.id },
         data: { content: prd, version: existing.version + 1 },
       });
-      await prisma.project.update({ where: { id: project.id }, data: { wizardStep: 'tree' } });
-      return res.json({ prd: updated, brd: updated });
+    } else {
+      savedPrd = await prisma.prd.create({ data: { projectId: project.id, content: prd } });
     }
-    const created = await prisma.prd.create({ data: { projectId: project.id, content: prd } });
     await prisma.project.update({ where: { id: project.id }, data: { wizardStep: 'tree' } });
-    res.status(201).json({ prd: created, brd: created });
+
+    res.write(`data: ${JSON.stringify({ done: true, prd: savedPrd, brd: savedPrd })}\n\n`);
+    res.end();
   } catch (err) {
-    res.status(502).json({ error: 'AI gagal menghasilkan PRD.', detail: (err as Error).message });
+    res.write(`data: ${JSON.stringify({ error: 'AI gagal menghasilkan PRD.', detail: (err as Error).message })}\n\n`);
+    res.end();
   }
 });
 
@@ -1396,7 +1311,7 @@ app.get('/api/user/plan', requireUser, async (req: AuthedRequest, res) => {
     planName: config.name,
     quotaUsed: subscription.quotaUsed,
     quotaMax: config.quotaMax,
-    chatLimit: config.chatLimit,
+    surveyRounds: config.surveyRounds,
     charLimit: config.charLimit,
     price: config.price,
     expiresAt: subscription.expiresAt,
@@ -1405,6 +1320,16 @@ app.get('/api/user/plan', requireUser, async (req: AuthedRequest, res) => {
 
 // Step 4: generate atomic tasks dari roadmap (auto generate roadmap jika belum ada).
 app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequest, res) => {
+  const { plan } = await getUserPlan(req.userId);
+  if (plan === 'free') {
+    return res.status(403).json({
+      error: 'Paket Free hanya dapat mengakses hingga pembuatan PRD. Silakan upgrade paket untuk membuat task board dan mengeksekusi agen.',
+      code: 'plan_upgrade_required',
+      plan,
+      upgradeUrl: '/pricing',
+    });
+  }
+
   let project = await prisma.project.findFirst({
     where: { id: req.params.id, userId: req.userId },
     include: {
@@ -1512,29 +1437,29 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
   }));
 
   try {
-    const prdData = project.prd?.content as {
-      userStories?: Array<{ id: string; persona: string; action: string; benefit: string }>;
-      functionalRequirements?: Array<{ id: string; title: string; description: string; priority?: string }>;
-      productRules?: Array<{ id: string; description: string }>;
-      businessRules?: Array<{ id: string; description: string }>;
-      dataModels?: Array<{ name: string; description?: string; fields: Array<{ name: string; type: string; required?: boolean }>; relations?: string[] }>;
-      apiEndpoints?: Array<{ method: string; path: string; description: string; requestBody?: string; responseBody?: string; authRequired?: boolean }>;
-      edgeCases?: Array<{ id: string; scenario: string; expectedBehavior: string }>;
-      techRequirements?: string[];
-    } | undefined;
+    const prdDoc = readPrdContent(project.prd?.content);
 
     const stackContract = resolveStackContract(project.stacks || []);
 
     let generated = await generateTasksFromRoadmap({
       roadmap: { phases: phasesForAI },
       projectName: project.name,
-      prd: prdData,
+      prd: prdDoc as any,
       projectId: project.id,
       stack: stackContract,
     });
 
+    // Coverage check ringan: tiap requirement FR di index muncul di requirement_ids minimal satu task
+    if (prdDoc.requirementIndex.length > 0) {
+      const allTaskReqIds = new Set(generated.flatMap((t) => t.requirement_ids || []));
+      const uncoveredReqs = prdDoc.requirementIndex.filter((r) => r.id.startsWith('FR-') && !allTaskReqIds.has(r.id));
+      if (uncoveredReqs.length > 0) {
+        console.warn(`[REQ-COVERAGE] Catatan: ${uncoveredReqs.length} FR belum terpetakan ke task: ${uncoveredReqs.map((r) => r.id).join(', ')}`);
+      }
+    }
+
     // Validasi coverage API ke UI: catat jika ada endpoint mutasi tanpa pemanggil di frontend
-    const coverage = validateApiCoverage(generated, prdData?.apiEndpoints ?? []);
+    const coverage = validateApiCoverage(generated, (prdDoc as any)?.apiEndpoints ?? []);
     if (coverage.uncovered.length > 0) {
       console.warn(`[API-COVERAGE] Catatan: Ditemukan ${coverage.uncovered.length} endpoint mutasi tanpa UI pemanggil.`);
     }
@@ -1585,7 +1510,6 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
           apiContracts: (t as any).apiContracts ?? [],
           aiContext: {
             taskId: t.taskId,
-            userStoryId: t.userStoryId,
             requirement_ids: t.requirement_ids,
             depends_on: t.depends_on,
             files_to_create: t.files_to_create,
@@ -1652,13 +1576,11 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
       },
       orderBy: { order: 'asc' },
     });
-    const userStories = (project.prd?.content as any)?.userStories ?? [];
 
     res.json({
       ok: true,
       count: tasks.length,
       tasks,
-      userStories,
       cleanupWarnings: cleanupResult.warnings,
     });
   } catch (err) {
@@ -1670,7 +1592,6 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
 app.get('/api/projects/:id/tasks', requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({
     where: { id: req.params.id, userId: req.userId },
-    include: { prd: true },
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
   const tasks = await prisma.task.findMany({
@@ -1684,44 +1605,8 @@ app.get('/api/projects/:id/tasks', requireUser, async (req: AuthedRequest, res) 
     },
     orderBy: { order: 'asc' },
   });
-  const userStories = (project.prd?.content as any)?.userStories ?? [];
 
-  // Normalisasi backwards compatibility untuk task lama yang belum punya userStoryId
-  let needPersist = false;
-  const normalizedTasks = tasks.map((t, idx) => {
-    const ctx = ((t.aiContext as any) || {}) as Record<string, any>;
-    if (!ctx.userStoryId && userStories.length > 0) {
-      needPersist = true;
-      let matchedStoryId = userStories[0]?.id || 'US-001';
-      const titleLower = t.title.toLowerCase();
-      const matched = userStories.find((s: any) => {
-        const words = `${s.action} ${s.persona}`.toLowerCase().split(/\s+/).filter((w: string) => w.length >= 4);
-        return words.some((w: string) => titleLower.includes(w));
-      });
-      if (matched) {
-        matchedStoryId = matched.id;
-      } else {
-        const storyIdx = Math.min(Math.floor((idx / tasks.length) * userStories.length), userStories.length - 1);
-        matchedStoryId = userStories[storyIdx]?.id || matchedStoryId;
-      }
-      ctx.userStoryId = matchedStoryId;
-      return { ...t, aiContext: ctx };
-    }
-    return t;
-  });
-
-  if (needPersist) {
-    Promise.all(
-      normalizedTasks.map((t) =>
-        prisma.task.update({
-          where: { id: t.id },
-          data: { aiContext: t.aiContext as any },
-        }).catch(() => {})
-      )
-    ).catch(() => {});
-  }
-
-  res.json({ tasks: normalizedTasks, userStories });
+  res.json({ tasks });
 });
 
 app.patch('/api/tasks/:taskId', requireUser, async (req: AuthedRequest, res) => {
@@ -1907,81 +1792,16 @@ app.post('/api/chat/sessions/:id/messages', requireUser, async (req: AuthedReque
     });
   }
 
-  const userMsgCount = await prisma.chatMessage.count({
-    where: { sessionId: session.id, role: 'user' },
-  });
-
-  if (userMsgCount >= config.chatLimit) {
-    return res.status(403).json({
-      error: `Batas pesan chat telah tercapai (${config.chatLimit} pesan untuk paket ${config.name}). Silakan finalisasi proyek atau upgrade paket.`,
-      chatLimit: config.chatLimit,
-      plan,
-      upgradeUrl: '/pricing',
-    });
-  }
-
-  // Simpan pesan user (text saja; formAnswers dianggap sudah jadi text di content)
-  await prisma.chatMessage.create({
+  // Simpan pesan user untuk arsip ide awal
+  const msg = await prisma.chatMessage.create({
     data: { sessionId: session.id, role: 'user', content: parsed.data.content },
   });
 
-  // Dapatkan AI response
-  let aiResult: { kind: string; content: string; payload?: unknown };
-  try {
-    aiResult = await replyChat(session.id);
-  } catch (err) {
-    console.warn('[chat] replyChat gagal:', (err as Error).message);
-    aiResult = { kind: 'text', content: "Maaf, terjadi kesalahan saat merespons." };
-  }
-
-  // Simpan AI response (payload bisa null atau JSON serializable object)
-  await prisma.chatMessage.create({
-    data: {
-      sessionId: session.id,
-      role: 'assistant',
-      kind: aiResult.kind,
-      content: aiResult.content,
-      payload: aiResult.payload ? JSON.stringify(aiResult.payload) : undefined,
-    },
-  });
-
-  res.json(aiResult);
+  res.json({ ok: true, id: msg.id, content: msg.content });
 });
 
 app.post('/api/chat/sessions/:id/retry', requireUser, async (req: AuthedRequest, res) => {
-  const session = await prisma.chatSession.findFirst({
-    where: { id: req.params.id, userId: req.userId },
-  });
-  if (!session) return res.status(404).json({ error: 'Sesi chat tidak ditemukan.' });
-
-  // Hapus pesan asisten terakhir yang error
-  const lastMsg = await prisma.chatMessage.findFirst({
-    where: { sessionId: session.id },
-    orderBy: { createdAt: 'desc' },
-  });
-  if (lastMsg && lastMsg.role === 'assistant') {
-    await prisma.chatMessage.delete({ where: { id: lastMsg.id } });
-  }
-
-  let aiResult: { kind: string; content: string; payload?: unknown };
-  try {
-    aiResult = await replyChat(session.id);
-  } catch (err) {
-    console.warn('[chat] retry replyChat gagal:', (err as Error).message);
-    aiResult = { kind: 'text', content: "Maaf, terjadi kesalahan saat merespons." };
-  }
-
-  const created = await prisma.chatMessage.create({
-    data: {
-      sessionId: session.id,
-      role: 'assistant',
-      kind: aiResult.kind,
-      content: aiResult.content,
-      payload: aiResult.payload ? JSON.stringify(aiResult.payload) : undefined,
-    },
-  });
-
-  res.json({ ...aiResult, id: created.id });
+  res.json({ ok: true });
 });
 
 app.post('/api/chat/sessions/:id/finalize', requireUser, async (req: AuthedRequest, res) => {
@@ -1991,8 +1811,27 @@ app.post('/api/chat/sessions/:id/finalize', requireUser, async (req: AuthedReque
   });
   if (!session) return res.status(404).json({ error: 'Sesi chat tidak ditemukan.' });
 
+  const limitCheck = await checkProjectLimit(req.userId);
+  if (!limitCheck.allowed) {
+    return res.status(403).json({
+      error: `Batas jumlah proyek telah tercapai (maksimal ${limitCheck.quotaMax} proyek aktif untuk paket ${limitCheck.plan}). Silakan upgrade paket untuk membuat proyek baru.`,
+      code: 'project_limit_reached',
+      plan: limitCheck.plan,
+      currentCount: limitCheck.currentCount,
+      quotaMax: limitCheck.quotaMax,
+      upgradeUrl: '/pricing',
+    });
+  }
+
+  const rawIdea = typeof req.body?.idea === 'string' && req.body.idea.trim() ? req.body.idea.trim() : undefined;
+  if (rawIdea) {
+    await prisma.chatMessage.create({
+      data: { sessionId: session.id, role: 'user', content: rawIdea },
+    });
+  }
+
   try {
-    const result = await finalizeChatSession(session.id, req.userId);
+    const result = await finalizeChatSession(session.id, req.userId, rawIdea);
     res.json(result);
   } catch (err) {
     res.status(502).json({ error: 'Gagal finalisasi project.', detail: (err as Error).message });
@@ -2002,6 +1841,279 @@ app.post('/api/chat/sessions/:id/finalize', requireUser, async (req: AuthedReque
 // ============================================================
 // WIZARD FLOW — Langkah-langkah setelah project created dari chat
 // ============================================================
+
+// 1. Survey Wizard
+app.get('/api/projects/:id/survey', requireUser, async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findFirst({
+    where: { id: req.params.id, userId: req.userId },
+  });
+  if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
+
+  const { plan } = await getUserPlan(req.userId);
+  const totalRounds = PLANS[plan]?.surveyRounds ?? 1;
+
+  let existingQuestions = await prisma.discoveryQuestion.findMany({
+    where: { projectId: project.id },
+    include: { answers: { orderBy: { createdAt: 'desc' }, take: 1 } },
+    orderBy: [{ round: 'asc' }, { order: 'asc' }],
+  });
+
+  // Jika belum ada pertanyaan sama sekali, buat putaran pertama (Round 1)
+  if (existingQuestions.length === 0) {
+    try {
+      const generated = await generateSurveyRound({
+        idea: project.idea,
+        priorAnswers: [],
+        round: 1,
+        totalRounds,
+        projectId: project.id,
+      });
+
+      for (let i = 0; i < generated.length; i++) {
+        const q = generated[i];
+        await prisma.discoveryQuestion.create({
+          data: {
+            projectId: project.id,
+            round: 1,
+            order: i + 1,
+            question: q.label,
+            context: q.id,
+            kind: q.kind,
+            options: q.options,
+            required: q.required,
+            suggestion: q.suggestion,
+            suggestionReason: q.suggestionReason,
+          },
+        });
+      }
+
+      existingQuestions = await prisma.discoveryQuestion.findMany({
+        where: { projectId: project.id },
+        include: { answers: { orderBy: { createdAt: 'desc' }, take: 1 } },
+        orderBy: [{ round: 'asc' }, { order: 'asc' }],
+      });
+    } catch (err) {
+      console.error('[survey] Gagal generate round 1:', err);
+      return res.status(502).json({ error: 'Gagal menyusun pertanyaan survey tahap 1.' });
+    }
+  }
+
+  // Cari round aktif saat ini (round terkecil yang pertanyaannya belum lengkap dijawab)
+  const roundNumbers = Array.from(new Set(existingQuestions.map((q) => q.round))).sort((a, b) => a - b);
+  let activeRound = roundNumbers[0] || 1;
+
+  for (const r of roundNumbers) {
+    const roundQuestions = existingQuestions.filter((q) => q.round === r);
+    const allAnswered = roundQuestions.every((q) => q.answers.length > 0 && q.answers[0].answer);
+    if (!allAnswered) {
+      activeRound = r;
+      break;
+    }
+    activeRound = r;
+  }
+
+  // Cek apakah seluruh putaran sudah tuntas
+  const maxExistingRound = Math.max(...roundNumbers, 1);
+  const maxRoundQuestions = existingQuestions.filter((q) => q.round === maxExistingRound);
+  const maxRoundAnswered = maxRoundQuestions.length > 0 && maxRoundQuestions.every((q) => q.answers.length > 0 && q.answers[0].answer);
+  const isComplete = (maxExistingRound >= totalRounds && maxRoundAnswered) || (project.description && project.description !== project.idea && project.wizardStep !== 'survey');
+
+  res.json({
+    projectId: project.id,
+    projectName: project.name,
+    idea: project.idea,
+    round: activeRound,
+    totalRounds,
+    isComplete: Boolean(isComplete),
+    summary: project.description,
+    wizardStep: project.wizardStep,
+    plan,
+    questions: existingQuestions.map((q) => ({
+      id: q.id,
+      round: q.round,
+      order: q.order,
+      label: q.question,
+      context: q.context,
+      kind: q.kind,
+      options: q.options,
+      required: q.required,
+      suggestion: q.suggestion,
+      suggestionReason: q.suggestionReason,
+      answer: q.answers[0]?.answer || '',
+      value: q.answers[0]?.value ?? null,
+    })),
+  });
+});
+
+const SurveySubmitSchema = z.object({
+  round: z.number().int().min(1),
+  answers: z.array(
+    z.object({
+      questionId: z.string(),
+      value: z.union([z.string(), z.array(z.string())]),
+    })
+  ).min(1),
+});
+
+app.post('/api/projects/:id/survey/submit', requireUser, async (req: AuthedRequest, res) => {
+  const parsed = SurveySubmitSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'Data jawaban survey tidak valid.' });
+
+  const project = await prisma.project.findFirst({
+    where: { id: req.params.id, userId: req.userId },
+  });
+  if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
+
+  const { plan } = await getUserPlan(req.userId);
+  const totalRounds = PLANS[plan]?.surveyRounds ?? 1;
+  const currentRound = parsed.data.round;
+
+  // 1. Simpan/update jawaban setiap pertanyaan
+  for (const item of parsed.data.answers) {
+    const strAnswer = Array.isArray(item.value) ? item.value.join(', ') : String(item.value);
+    const existing = await prisma.discoveryAnswer.findFirst({
+      where: { questionId: item.questionId },
+    });
+    if (existing) {
+      await prisma.discoveryAnswer.update({
+        where: { id: existing.id },
+        data: { answer: strAnswer, value: item.value as any },
+      });
+    } else {
+      await prisma.discoveryAnswer.create({
+        data: {
+          questionId: item.questionId,
+          answer: strAnswer,
+          value: item.value as any,
+        },
+      });
+    }
+  }
+
+  // 2. Jika masih ada putaran berikutnya
+  if (currentRound < totalRounds) {
+    const nextRound = currentRound + 1;
+
+    // Bersihkan pertanyaan round berikutnya jika user mundur dan submit ulang (regenerate)
+    const futureQuestions = await prisma.discoveryQuestion.findMany({
+      where: { projectId: project.id, round: { gte: nextRound } },
+      select: { id: true },
+    });
+    if (futureQuestions.length > 0) {
+      const qIds = futureQuestions.map((q) => q.id);
+      await prisma.discoveryAnswer.deleteMany({ where: { questionId: { in: qIds } } });
+      await prisma.discoveryQuestion.deleteMany({ where: { id: { in: qIds } } });
+    }
+
+    // Ambil seluruh jawaban hingga round saat ini untuk konteks adaptif
+    const allAnsweredQuestions = await prisma.discoveryQuestion.findMany({
+      where: { projectId: project.id, round: { lte: currentRound } },
+      include: { answers: { orderBy: { createdAt: 'desc' }, take: 1 } },
+      orderBy: [{ round: 'asc' }, { order: 'asc' }],
+    });
+    const priorAnswers = allAnsweredQuestions
+      .filter((q) => q.answers.length > 0 && q.answers[0].answer)
+      .map((q) => ({ question: q.question, answer: q.answers[0].answer }));
+
+    try {
+      const nextGenerated = await generateSurveyRound({
+        idea: project.idea,
+        priorAnswers,
+        round: nextRound,
+        totalRounds,
+        projectId: project.id,
+      });
+
+      for (let i = 0; i < nextGenerated.length; i++) {
+        const nq = nextGenerated[i];
+        await prisma.discoveryQuestion.create({
+          data: {
+            projectId: project.id,
+            round: nextRound,
+            order: i + 1,
+            question: nq.label,
+            context: nq.id,
+            kind: nq.kind,
+            options: nq.options,
+            required: nq.required,
+            suggestion: nq.suggestion,
+            suggestionReason: nq.suggestionReason,
+          },
+        });
+      }
+
+      return res.json({
+        done: false,
+        nextRound,
+        totalRounds,
+      });
+    } catch (err) {
+      console.error(`[survey] Gagal generate pertanyaan round ${nextRound}:`, err);
+      return res.status(502).json({ error: `Gagal menyusun pertanyaan tahap ${nextRound}.` });
+    }
+  }
+
+  // 3. Putaran terakhir telah selesai -> Susun Ringkasan Produk Terstruktur
+  const allFinalQuestions = await prisma.discoveryQuestion.findMany({
+    where: { projectId: project.id },
+    include: { answers: { orderBy: { createdAt: 'desc' }, take: 1 } },
+    orderBy: [{ round: 'asc' }, { order: 'asc' }],
+  });
+  const allAnswers = allFinalQuestions
+    .filter((q) => q.answers.length > 0 && q.answers[0].answer)
+    .map((q) => ({ question: q.question, answer: q.answers[0].answer }));
+
+  try {
+    const summary = await generateSurveySummary({
+      idea: project.idea,
+      answers: allAnswers,
+      projectId: project.id,
+    });
+
+    await prisma.project.update({
+      where: { id: project.id },
+      data: {
+        name: summary.name,
+        description: summary.summary,
+      },
+    });
+
+    return res.json({
+      done: true,
+      totalRounds,
+      name: summary.name,
+      summary: summary.summary,
+    });
+  } catch (err) {
+    console.error('[survey] Gagal generate survey summary:', err);
+    return res.status(502).json({ error: 'Gagal menyusun ringkasan produk.', detail: (err as Error).message });
+  }
+});
+
+// Selesaikan survey dan lanjut ke tech stack (dengan gate upgrade akun Free)
+app.post('/api/projects/:id/survey/complete', requireUser, async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findFirst({
+    where: { id: req.params.id, userId: req.userId },
+  });
+  if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
+
+  const { plan } = await getUserPlan(req.userId);
+  if (plan === 'free') {
+    return res.status(403).json({
+      error: 'Paket Free hanya dapat mengakses hingga survey kebutuhan. Silakan upgrade paket untuk melanjutkan ke pemilihan teknologi dan PRD.',
+      code: 'plan_upgrade_required',
+      plan,
+      upgradeUrl: '/pricing',
+    });
+  }
+
+  await prisma.project.update({
+    where: { id: project.id },
+    data: { wizardStep: 'techstack' },
+  });
+
+  res.json({ ok: true, wizardStep: 'techstack' });
+});
 
 // Tech stack
 app.post('/api/projects/:id/techstack/recommend', requireUser, async (req: AuthedRequest, res) => {
@@ -2049,6 +2161,16 @@ app.put('/api/projects/:id/techstack', requireUser, async (req: AuthedRequest, r
 });
 
 app.post('/api/projects/:id/tree/generate', requireUser, async (req: AuthedRequest, res) => {
+  const { plan } = await getUserPlan(req.userId);
+  if (plan === 'free') {
+    return res.status(403).json({
+      error: 'Paket Free hanya dapat mengakses hingga pembuatan PRD. Silakan upgrade paket untuk melihat diagram struktur dan mengeksekusi agen.',
+      code: 'plan_upgrade_required',
+      plan,
+      upgradeUrl: '/pricing',
+    });
+  }
+
   const project = await prisma.project.findFirst({
     where: { id: req.params.id, userId: req.userId },
     include: { prd: true },

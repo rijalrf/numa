@@ -260,7 +260,7 @@ ${executionLoopText}
                     </Badge>
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">
-                    Arsip ZIP berisi PRD.md, USER-STORIES.md (skenario Gherkin), dan TASKS.md
+                    Arsip ZIP berisi PRD.md dan TASKS.md
                   </div>
                 </div>
               </div>

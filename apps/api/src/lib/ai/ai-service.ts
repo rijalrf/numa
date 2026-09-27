@@ -24,7 +24,8 @@ const REASONING_AGENTS = new Set([
   'FeatureExecutionGraph',
   'UiSpecArchitect',
   'TechStackArchitect',
-  'replyChat',
+  'generateSurveyRound',
+  'generateSurveySummary',
   'finalizeChatSession',
   'generateTreeFromPrd',
   'generateTreeFromBrd',
@@ -221,3 +222,87 @@ export async function generateText(
     throw err;
   }
 }
+
+export async function generateTextStream(
+  system: string,
+  user: string,
+  opts?: {
+    agentName?: string;
+    projectId?: string;
+    tier?: ModelTier;
+    model?: string;
+    onChunk?: (delta: string) => void;
+  }
+): Promise<string> {
+  const startTime = Date.now();
+  const agentName = opts?.agentName ?? 'stream-agent';
+  const model = resolveModel({ tier: opts?.tier, agentName, modelOverride: opts?.model });
+
+  try {
+    const stream = await client.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      stream: true,
+      temperature: 0.5,
+    });
+
+    let fullText = '';
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta?.content ?? '';
+      if (delta) {
+        fullText += delta;
+        opts?.onChunk?.(delta);
+      }
+    }
+
+    const latencyMs = Date.now() - startTime;
+    // ponytail: Estimasi token streaming ~ 4 karakter per token jika provider tidak mengirim usage di chunk final.
+    const estTokens = Math.ceil(fullText.length / 4);
+
+    console.log(
+      `[ai-call-stream] agent=${agentName} model=${model} latency=${latencyMs}ms estTokens=${estTokens}`
+    );
+
+    prisma.aiCallLog
+      .create({
+        data: {
+          projectId: opts?.projectId ?? null,
+          agentName,
+          model,
+          inputTokens: 0,
+          outputTokens: estTokens,
+          totalTokens: estTokens,
+          latencyMs,
+          retryCount: 0,
+          success: true,
+        },
+      })
+      .catch((err) => console.error('[ai-log-error]', err.message));
+
+    return fullText;
+  } catch (err) {
+    const latencyMs = Date.now() - startTime;
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[ai-call-stream-failed] agent=${agentName} model=${model} latency=${latencyMs}ms error=${msg}`);
+
+    prisma.aiCallLog
+      .create({
+        data: {
+          projectId: opts?.projectId ?? null,
+          agentName,
+          model,
+          latencyMs,
+          retryCount: 0,
+          success: false,
+          failureReason: msg,
+        },
+      })
+      .catch((err) => console.error('[ai-log-error]', err.message));
+
+    throw new Error(`AI generate stream gagal: ${msg}`);
+  }
+}
+

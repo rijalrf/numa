@@ -19,6 +19,12 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ChevronDown, LogOut, FolderGit2, User, CreditCard, Sparkles } from 'lucide-react';
 
 function getPageHeaderInfo(pathname: string): { title: string; subtitle?: string } | null {
+  if (pathname.includes('/survey') || pathname.includes('/interview')) {
+    return {
+      title: 'Survey Kebutuhan',
+      subtitle: 'Wawancara terstruktur untuk merumuskan spesifikasi produk',
+    };
+  }
   if (pathname.includes('/board')) {
     return {
       title: 'Board Task',
@@ -61,7 +67,7 @@ function getPageHeaderInfo(pathname: string): { title: string; subtitle?: string
       subtitle: 'Pengaturan konfigurasi dan token akses proyek',
     };
   }
-  if (pathname === '/dashboard' || pathname.startsWith('/chat/')) {
+  if (pathname === '/chat' || pathname.startsWith('/chat/')) {
     return {
       title: 'Brainstorming Ide',
       subtitle: 'Diskusi ide aplikasi untuk menyusun kebutuhan awal',
@@ -121,7 +127,7 @@ export function Header() {
       <div className="px-6 py-2.5 flex items-center justify-between gap-4">
         {/* Kiri: Logo Numa + Pemisah + Nama Aplikasi (menggantikan judul halaman) */}
         <div className="flex items-center gap-3.5 min-w-0">
-          <Link to="/dashboard" className="flex items-center gap-2 shrink-0">
+          <Link to="/chat" className="flex items-center gap-2 shrink-0">
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-[#2D7E79] to-[#76B8A7]">
               <span className="text-xs font-bold text-white">N</span>
             </div>

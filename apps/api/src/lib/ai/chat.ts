@@ -1,110 +1,62 @@
-// Fungsi AI untuk chat session: replyChat, finalizeChatSession, recommendTechStack, dll
-import { generateJson, generateText } from './ai-service';
-import { ChatMessageSchema, TreeDataSchema, type TreeData, RecommendTechStackSchema } from './schemas';
-import z from 'zod';
+// Fungsi AI untuk sesi chat ide awal dan struktur dekomposisi: finalizeChatSession, recommendTechStack, generateTreeFromPrd
+import { generateJson } from './ai-service';
+import { TreeDataSchema, type TreeData, RecommendTechStackSchema } from './schemas';
 import crypto from 'node:crypto';
 import {
-  CHAT_PERSONA_PROMPT,
   RECOMMEND_TECH_STACK_PROMPT,
   GENERATE_TREE_PROMPT,
 } from './prompts';
 import { prisma } from '../prisma';
-
-// ===============================================
-// REPLY CHAT — AI membalas pesan user
-// ===============================================
-
-type AiMessage = { role: 'user' | 'assistant'; content: string };
-
-export async function replyChat(sessionId: string): Promise<{ kind: string; content: string; payload?: unknown }> {
-  // Ambil riwayat messages dari DB
-  const messages = await prisma.chatMessage.findMany({
-    where: { sessionId },
-    orderBy: { createdAt: 'asc' },
-  });
-
-  // Convert ke format OpenAI-compatible (exclude system prompt)
-  const aiMessages: AiMessage[] = messages.map((m) => ({
-    role: m.role as 'user' | 'assistant',
-    content: m.content,
-  }));
-
-  // System + history
-  const userPrompt = aiMessages.length > 0 ? `Riwayat chat:\n${aiMessages.map(m => `${m.role}: ${m.content}`).join('\n')}` : '';
-
-  try {
-    const result = await generateJson({
-      system: CHAT_PERSONA_PROMPT,
-      user: userPrompt,
-      schema: ChatMessageSchema,
-      maxRetries: 2,
-    });
-    return result;
-  } catch (err) {
-    console.error('Error generateJson chat:', err);
-    // Fallback jika JSON parse/retry gagal: kirim teks biasa minta coba lagi
-    const fallbackMsg = {
-      kind: 'text',
-      content: "Maaf, saya mengalami kesalahan. Silakan coba kirim ulang jawaban Anda atau klik tombol 'Coba Lagi'.",
-    };
-    return fallbackMsg;
-  }
-}
+import { checkProjectLimit } from '../billing';
 
 // ===============================================
 // FINALIZE PROJECT DARI CHAT SESSION
 // ===============================================
 
-export async function finalizeChatSession(sessionId: string, userId: string): Promise<{ projectId: string }> {
-  // 1. Ringkaskan chat -> nama project + summary
-  const messages = await prisma.chatMessage.findMany({
-    where: { sessionId },
-    select: { content: true, role: true },
-    orderBy: { createdAt: 'asc' },
-  });
+export async function finalizeChatSession(sessionId: string, userId: string, initialIdea?: string): Promise<{ projectId: string }> {
+  // 1. Cek batasan kuota project
+  const limitCheck = await checkProjectLimit(userId);
+  if (!limitCheck.allowed) {
+    const err: any = new Error(`Kuota proyek tercapai (maksimal ${limitCheck.quotaMax} proyek aktif untuk paket ${limitCheck.plan}).`);
+    err.status = 403;
+    err.code = 'project_limit_reached';
+    throw err;
+  }
 
-  const chatText = messages.map(m => `${m.role}: ${m.content}`).join('\n');
-  const finalization = await generateJson({
-    system: `Anda adalah Principal Product Architect AI.
-Input: Riwayat percakapan chat brainstorming ide aplikasi user.
-Tugas:
-1. Hasilkan nama project yang menarik, ringkas, dan relevan ("name").
-2. Buat ringkasan komprehensif 1-2 paragraf padat ("summary") yang merangkum:
-   - Masalah spesifik yang ingin dipecahkan
-   - Target pengguna utama dan persona pengguna
-   - Goals vs Non-Goals MVP
-   - Fitur-fitur inti aplikasi (MVP)
-   - Entitas/data utama yang dikelola
-   - Alur kerja utama aplikasi dari sudut pandang pengguna
-   - Edge cases & failure states kritis
-   - Success metrics utama
-Output JSON WAJIB:
-{
-  "name": "Nama Project",
-  "summary": "Ringkasan komprehensif mencakup masalah, pengguna & persona, goals/non-goals, fitur utama, entitas data, alur aplikasi, edge cases, dan success metrics."
-}`,
-    user: chatText,
-    schema: z.object({ name: z.string(), summary: z.string() }),
-    maxRetries: 2,
-  });
+  // 2. Ambil ide dari parameter atau chat message
+  let rawIdea = initialIdea?.trim();
+  if (!rawIdea) {
+    const firstUserMsg = await prisma.chatMessage.findFirst({
+      where: { sessionId, role: 'user' },
+      orderBy: { createdAt: 'asc' },
+      select: { content: true },
+    });
+    rawIdea = firstUserMsg?.content?.trim();
+  }
 
-  // 2. Buat project baru (wizardStep langsung ke techstack karena interview digabung ke chat)
+  if (!rawIdea) {
+    rawIdea = 'Aplikasi Baru';
+  }
+
+  const tempName = rawIdea.length > 50 ? rawIdea.slice(0, 47) + '...' : rawIdea;
+
+  // 3. Buat project baru dengan wizardStep 'survey'
   const project = await prisma.project.create({
     data: {
       userId,
-      name: finalization.name,
-      idea: finalization.summary,
-      description: finalization.summary,
-      wizardStep: 'techstack',
+      name: tempName,
+      idea: rawIdea,
+      description: rawIdea,
+      wizardStep: 'survey',
     },
   });
 
-  // 3. Update chatSession jadi finalized & link projectId
+  // 4. Update chatSession jadi finalized & link projectId
   await prisma.chatSession.update({
     where: { id: sessionId },
     data: {
       status: 'finalized',
-      summary: finalization.summary,
+      summary: rawIdea,
       projectId: project.id,
     },
   });
@@ -140,7 +92,7 @@ export async function recommendTechStack(projectId: string): Promise<{ techStack
 // TREE GENERATION
 // ===============================================
 
-export async function generateTreeFromPrd(projectId: string): Promise<{ id: string; parentId: string | null; label: string; kind: string; order: number }[]> {
+export async function generateTreeFromPrd(projectId: string): Promise<{ id: string; parentId: string | null; label: string; kind: string; requirementIds: string[]; order: number }[]> {
   const [project, prd] = await Promise.all([
     prisma.project.findUnique({ where: { id: projectId } }),
     prisma.prd.findUnique({ where: { projectId } }),
@@ -177,7 +129,16 @@ export const generateTreeFromBrd = generateTreeFromPrd;
 
 // Helper: recursive flatten dari TreeDataSchema
 function flattenTree(data: TreeData, projectId: string) {
-  const nodes: Array<{ id: string; projectId: string; parentId: string | null; label: string; kind: string; order: number; createdAt: Date }> = [];
+  const nodes: Array<{
+    id: string;
+    projectId: string;
+    parentId: string | null;
+    label: string;
+    kind: string;
+    requirementIds: string[];
+    order: number;
+    createdAt: Date;
+  }> = [];
   let orderCounter = 0;
 
   // App root
@@ -188,6 +149,7 @@ function flattenTree(data: TreeData, projectId: string) {
     parentId: null,
     label: data.appName,
     kind: 'app',
+    requirementIds: [],
     order: orderCounter++,
     createdAt: new Date(),
   };
@@ -202,6 +164,7 @@ function flattenTree(data: TreeData, projectId: string) {
         parentId,
         label: feature.label,
         kind: 'feature',
+        requirementIds: feature.requirementIds || [],
         order: orderCounter++,
         createdAt: new Date(),
       };
@@ -217,7 +180,18 @@ function flattenTree(data: TreeData, projectId: string) {
     });
   }
 
-  function traverseSubFeatures(subfeatures: Array<{ label: string; tasks?: Array<{ label: string; subtasks?: Array<{ label: string }> }> }>, parentId: string) {
+  function traverseSubFeatures(
+    subfeatures: Array<{
+      label: string;
+      requirementIds?: string[];
+      tasks?: Array<{
+        label: string;
+        requirementIds?: string[];
+        subtasks?: Array<{ label: string; requirementIds?: string[] }>;
+      }>;
+    }>,
+    parentId: string
+  ) {
     subfeatures.forEach((sf) => {
       const sfId = crypto.randomUUID();
       const sfNode = {
@@ -226,6 +200,7 @@ function flattenTree(data: TreeData, projectId: string) {
         parentId,
         label: sf.label,
         kind: 'subfeature',
+        requirementIds: sf.requirementIds || [],
         order: orderCounter++,
         createdAt: new Date(),
       };
@@ -237,7 +212,14 @@ function flattenTree(data: TreeData, projectId: string) {
     });
   }
 
-  function traverseTasks(tasks: Array<{ label: string; subtasks?: Array<{ label: string }> }>, parentId: string) {
+  function traverseTasks(
+    tasks: Array<{
+      label: string;
+      requirementIds?: string[];
+      subtasks?: Array<{ label: string; requirementIds?: string[] }>;
+    }>,
+    parentId: string
+  ) {
     tasks.forEach((task) => {
       const taskId = crypto.randomUUID();
       const taskNode = {
@@ -246,6 +228,7 @@ function flattenTree(data: TreeData, projectId: string) {
         parentId,
         label: task.label,
         kind: 'task',
+        requirementIds: task.requirementIds || [],
         order: orderCounter++,
         createdAt: new Date(),
       };
@@ -260,6 +243,7 @@ function flattenTree(data: TreeData, projectId: string) {
             parentId: taskId,
             label: st.label,
             kind: 'subtask',
+            requirementIds: st.requirementIds || [],
             order: orderCounter++,
             createdAt: new Date(),
           };

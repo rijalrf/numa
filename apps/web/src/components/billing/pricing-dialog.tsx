@@ -11,7 +11,7 @@ interface UserPlanData {
   planName: string;
   quotaUsed: number;
   quotaMax: number;
-  chatLimit: number;
+  surveyRounds: number;
   charLimit: number;
   expiresAt: string | null;
 }
@@ -22,14 +22,13 @@ const PLANS = [
     name: 'Free Trial',
     price: 'Rp 0',
     period: '',
-    description: 'Coba siklus penuh untuk 1 proyek pertama Anda.',
+    description: 'Coba siklus wawancara kebutuhan dan ringkasan produk.',
     features: [
-      '1 proyek (sekali coba)',
-      '10 putaran chat brainstorming',
-      'Maksimal 1.000 karakter per pesan',
-      'Rekomendasi Tech Stack & PRD',
-      'Board task atomik',
-      'Akses CLI numa aktif',
+      '1 proyek aktif',
+      '1 putaran survey kebutuhan',
+      'Maksimal 1.000 karakter ide awal',
+      'Ringkasan kebutuhan produk',
+      'Wawancara Konsultan Produk',
     ],
     tier: 'free' as const,
     cta: 'Paket Dasar',
@@ -42,8 +41,8 @@ const PLANS = [
     description: 'Cocok untuk solo developer dan indie hacker.',
     features: [
       '2 proyek aktif per bulan',
-      '15 putaran chat per proyek',
-      'Maksimal 2.000 karakter per pesan',
+      '3 putaran survey kebutuhan adaptif',
+      'Maksimal 2.000 karakter ide awal',
       'Rekomendasi Tech Stack & PRD',
       'Board task atomik',
       'Ekspor dokumen PRD (.md)',
@@ -60,9 +59,9 @@ const PLANS = [
     period: '/bln',
     description: 'Untuk freelancer dan pengembang aktif.',
     features: [
-      '6 proyek aktif per bulan',
-      '25 putaran chat per proyek',
-      'Maksimal 4.000 karakter per pesan',
+      '5 proyek aktif per bulan',
+      '4 putaran survey mendalam',
+      'Maksimal 4.000 karakter ide awal',
       'Rekomendasi Tech Stack & PRD',
       'Board task atomik + edge cases',
       'Ekspor paket lengkap (.zip & .md)',

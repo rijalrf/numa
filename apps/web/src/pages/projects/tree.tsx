@@ -32,6 +32,7 @@ type TreeNode = {
   parentId: string | null;
   label: string;
   kind: 'app' | 'feature' | 'subfeature' | 'task' | 'subtask';
+  requirementIds?: string[];
   order: number;
 };
 
@@ -577,6 +578,35 @@ export function TreePage() {
                   >
                     {node.label}
                   </div>
+
+                  {/* Badges Requirement ID */}
+                  {node.requirementIds && node.requirementIds.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {node.requirementIds.slice(0, 2).map((reqId) => (
+                        <span
+                          key={reqId}
+                          className={cn(
+                            'text-[9px] font-mono px-1 py-0.5 rounded font-semibold',
+                            isApp
+                              ? 'bg-primary-foreground/20 text-primary-foreground'
+                              : 'bg-primary/10 text-primary border border-primary/20'
+                          )}
+                        >
+                          {reqId}
+                        </span>
+                      ))}
+                      {node.requirementIds.length > 2 && (
+                        <span
+                          className={cn(
+                            'text-[9px] font-mono font-medium',
+                            isApp ? 'text-primary-foreground/80' : 'text-muted-foreground'
+                          )}
+                        >
+                          +{node.requirementIds.length - 2}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -644,6 +674,26 @@ export function TreePage() {
                   <div className="text-xs text-muted-foreground italic flex items-center gap-1.5">
                     <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
                     <span>Node ini adalah Root Aplikasi (puncak arsitektur).</span>
+                  </div>
+                )}
+
+                {/* Badges Requirement ID */}
+                {selectedNode.requirementIds && selectedNode.requirementIds.length > 0 && (
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground block mb-1">
+                      Terkait Requirement PRD:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedNode.requirementIds.map((reqId) => (
+                        <Badge
+                          key={reqId}
+                          variant="outline"
+                          className="font-mono text-xs bg-primary/10 text-primary border-primary/20"
+                        >
+                          {reqId}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
                 )}
 

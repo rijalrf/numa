@@ -35,7 +35,7 @@ export function LoginPage() {
     setErr(null);
     setLoading(true);
     try {
-      const callbackURL = typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : '/dashboard';
+      const callbackURL = typeof window !== 'undefined' ? `${window.location.origin}/chat` : '/chat';
       await signIn.social({ provider: 'google', callbackURL });
       // signIn.social mengalihkan ke halaman persetujuan Google secara otomatis.
     } catch {

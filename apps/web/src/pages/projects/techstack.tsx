@@ -27,49 +27,35 @@ import { cn } from '@/lib/utils';
 import { isStageLocked } from '@/lib/constants';
 import { useWizardNav } from '@/components/layout/wizard-nav';
 
-// Preset kategori untuk form manual
+// Preset kategori untuk form manual (4 kategori inti: Frontend, Backend, Database, Deploy & Info)
 const PRESET_CATEGORIES = [
   {
     id: 'frontend',
-    title: 'Frontend Framework',
+    title: 'Frontend Framework & UI',
     icon: Globe,
-    description: 'Antarmuka visual dan pengalaman interaksi pengguna',
-    options: ['React v18+', 'Next.js 14', 'Vue.js v3', 'Svelte / SvelteKit', 'Angular', 'Remix'],
-  },
-  {
-    id: 'styling',
-    title: 'Styling & UI',
-    icon: Layers,
-    description: 'Sistem desain, styling CSS, dan komponen UI',
-    options: ['Tailwind CSS v3', 'shadcn/ui', 'Chakra UI', 'Ant Design', 'CSS Modules'],
+    description: 'Antarmuka visual, framework UI, styling, dan komponen',
+    options: ['React v18', 'Next.js 14', 'Vue.js v3', 'Svelte / SvelteKit', 'Tailwind CSS', 'shadcn/ui'],
   },
   {
     id: 'backend',
-    title: 'Backend & API',
+    title: 'Backend & Autentikasi',
     icon: Server,
-    description: 'Server aplikasi, logika bisnis, dan penyedia endpoint API',
-    options: ['Node.js + Express', 'TypeScript + Express', 'Python + FastAPI', 'Go Fiber', 'Laravel PHP', 'NestJS'],
+    description: 'Server aplikasi, API endpoints, logika bisnis, dan autentikasi',
+    options: ['TypeScript + Express', 'Node.js + Express', 'Better Auth', 'Python + FastAPI', 'Go Fiber', 'Laravel PHP'],
   },
   {
     id: 'database',
     title: 'Database & ORM',
     icon: Database,
     description: 'Penyimpanan data persisten dan layer model objek relasional',
-    options: ['PostgreSQL + Prisma', 'MySQL + Drizzle', 'SQLite (Lokal)', 'MongoDB + Mongoose', 'Supabase (Postgres)'],
-  },
-  {
-    id: 'auth',
-    title: 'Autentikasi & Keamanan',
-    icon: ShieldCheck,
-    description: 'Sistem login, sesi pengguna, token PAT, dan kontrol akses',
-    options: ['Better Auth', 'NextAuth / Auth.js', 'JWT Cookie Session', 'Clerk Auth', 'Supabase Auth'],
+    options: ['SQLite + Prisma (Lokal)', 'PostgreSQL + Prisma', 'MySQL + Drizzle', 'MongoDB + Mongoose', 'Supabase (Postgres)'],
   },
   {
     id: 'devops',
-    title: 'Deployment & DevOps',
+    title: 'Deploy & Info',
     icon: Cpu,
-    description: 'Lingkungan hosting, kontainerisasi, dan otomatisasi deploy',
-    options: ['Docker + Compose', 'Railway', 'Vercel', 'VPS Linux (Ubuntu)', 'DigitalOcean', 'AWS EC2'],
+    description: 'Lingkungan hosting, containerization, dan informasi deployment',
+    options: ['Docker + Compose', 'Railway', 'Vercel', 'VPS Linux (Ubuntu)', 'DigitalOcean'],
   },
 ];
 
@@ -460,14 +446,14 @@ export function TechStackPage() {
   }
 
   // ============================================================
-  // TAMPILAN 3: DUA CARD UTAMA ("Mau Pake Teknologi apa?")
+  // TAMPILAN 3: DUA CARD UTAMA ("Pilih Teknologi apa?")
   // ============================================================
   return (
     <div className="max-w-3xl mx-auto w-full space-y-8 py-4">
       {/* Header Utama */}
       <div className="text-center space-y-2">
         <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-          Mau Pake Teknologi apa?
+          Pilih Teknologi apa?
         </h2>
         <p className="text-sm text-muted-foreground max-w-md mx-auto">
           Pilih metode penentuan tech stack aplikasi Anda. Anda dapat menyerahkan analisis arsitektur ke AI atau memilihnya secara manual.

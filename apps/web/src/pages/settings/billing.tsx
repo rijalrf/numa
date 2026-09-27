@@ -11,7 +11,7 @@ interface UserPlanData {
   planName: string;
   quotaUsed: number;
   quotaMax: number;
-  chatLimit: number;
+  surveyRounds: number;
   charLimit: number;
   expiresAt: string | null;
 }
@@ -22,14 +22,13 @@ const AVAILABLE_PLANS = [
     name: 'Free Trial',
     price: 'Rp 0',
     period: '',
-    description: 'Coba siklus penuh untuk 1 proyek pertama Anda.',
+    description: 'Coba siklus wawancara kebutuhan dan ringkasan produk.',
     features: [
-      '1 proyek (sekali coba)',
-      '10 putaran chat brainstorming',
-      'Maksimal 1.000 karakter per pesan',
-      'Rekomendasi Tech Stack & PRD',
-      'Board task atomik',
-      'Akses CLI numa aktif',
+      '1 proyek aktif',
+      '1 putaran survey kebutuhan',
+      'Maksimal 1.000 karakter ide awal',
+      'Ringkasan kebutuhan produk',
+      'Wawancara Konsultan Produk',
     ],
     tier: 'free' as const,
   },
@@ -41,14 +40,15 @@ const AVAILABLE_PLANS = [
     description: 'Cocok untuk solo developer dan indie hacker.',
     features: [
       '2 proyek aktif per bulan',
-      '15 putaran chat per proyek',
-      'Maksimal 2.000 karakter per pesan',
+      '3 putaran survey kebutuhan adaptif',
+      'Maksimal 2.000 karakter ide awal',
       'Rekomendasi Tech Stack & PRD',
       'Board task atomik',
       'Ekspor dokumen PRD (.md)',
       'Akses CLI numa aktif',
     ],
     tier: 'starter' as const,
+    highlight: true,
   },
   {
     id: 'pro',
@@ -57,9 +57,9 @@ const AVAILABLE_PLANS = [
     period: '/bln',
     description: 'Untuk freelancer dan pengembang aktif.',
     features: [
-      '6 proyek aktif per bulan',
-      '25 putaran chat per proyek',
-      'Maksimal 4.000 karakter per pesan',
+      '5 proyek aktif per bulan',
+      '4 putaran survey mendalam',
+      'Maksimal 4.000 karakter ide awal',
       'Rekomendasi Tech Stack & PRD',
       'Board task atomik + edge cases',
       'Ekspor paket lengkap (.zip & .md)',
@@ -175,15 +175,15 @@ export function BillingPage() {
             </div>
 
             <div className="border rounded-lg p-4 bg-muted/30 space-y-1">
-              <div className="text-xs text-muted-foreground font-medium">Batas Sesi Chat</div>
-              <div className="text-2xl font-bold">{planData?.chatLimit} Putaran</div>
-              <p className="text-[11px] text-muted-foreground">Maksimal putaran pesan per proyek dalam tahap interview</p>
+              <div className="text-xs text-muted-foreground font-medium">Kedalaman Survey Kebutuhan</div>
+              <div className="text-2xl font-bold">{planData?.surveyRounds} Putaran</div>
+              <p className="text-[11px] text-muted-foreground">Jumlah putaran kuesioner terstruktur dari Konsultan Produk</p>
             </div>
 
             <div className="border rounded-lg p-4 bg-muted/30 space-y-1">
-              <div className="text-xs text-muted-foreground font-medium">Batas Karakter Pesan</div>
+              <div className="text-xs text-muted-foreground font-medium">Batas Karakter Ide Awal</div>
               <div className="text-2xl font-bold">{planData?.charLimit.toLocaleString('id-ID')} Karakter</div>
-              <p className="text-[11px] text-muted-foreground">Panjang maksimal setiap input prompt ke asisten AI</p>
+              <p className="text-[11px] text-muted-foreground">Panjang maksimal deskripsi ide aplikasi yang dikirimkan</p>
             </div>
           </div>
 

@@ -5,7 +5,7 @@ export type PlanKey = 'free' | 'starter' | 'pro';
 export interface PlanConfig {
   name: string;
   quotaMax: number;
-  chatLimit: number;
+  surveyRounds: number;
   charLimit: number;
   price: number;
 }
@@ -14,21 +14,21 @@ export const PLANS: Record<PlanKey, PlanConfig> = {
   free: {
     name: 'Free Trial',
     quotaMax: 1,
-    chatLimit: 10,
+    surveyRounds: 1,
     charLimit: 1000,
     price: 0,
   },
   starter: {
     name: 'Starter',
     quotaMax: 2,
-    chatLimit: 15,
+    surveyRounds: 3,
     charLimit: 2000,
     price: 49000,
   },
   pro: {
     name: 'Pro',
-    quotaMax: 6,
-    chatLimit: 25,
+    quotaMax: 5,
+    surveyRounds: 4,
     charLimit: 4000,
     price: 129000,
   },
@@ -80,6 +80,24 @@ export async function checkQuota(userId: string): Promise<{
     allowed,
     plan,
     quotaUsed: subscription.quotaUsed,
+    quotaMax: config.quotaMax,
+  };
+}
+
+export async function checkProjectLimit(userId: string): Promise<{
+  allowed: boolean;
+  plan: PlanKey;
+  currentCount: number;
+  quotaMax: number;
+}> {
+  const { plan, config } = await getUserPlan(userId);
+  const currentCount = await prisma.project.count({
+    where: { userId, status: 'ACTIVE' },
+  });
+  return {
+    allowed: currentCount < config.quotaMax,
+    plan,
+    currentCount,
     quotaMax: config.quotaMax,
   };
 }

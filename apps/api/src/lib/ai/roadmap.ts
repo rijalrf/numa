@@ -29,7 +29,7 @@ const RoadmapSchema = z.object({
 export type RoadmapData = z.infer<typeof RoadmapSchema>;
 
 export async function generateRoadmapFromPRD(prd: PrdData, opts?: { projectId?: string }): Promise<RoadmapData> {
-  const system = `Anda adalah Principal Systems Architect. Pecah PRD menjadi Feature Execution Graph terstruktur.
+  const system = `Anda adalah Desainer Sistem teknis. Pecah PRD menjadi Feature Execution Graph terstruktur.
 Setiap fase mengelompokkan layer delivery secara ketat: BOOTSTRAP -> DATABASE -> BACKEND -> FRONTEND -> INTEGRATION.
 Setiap fitur dalam fase wajib memodelkan dependensi logis (dependsOn) ke fitur prasyarat agar eksekusi task otonom berjalan berurutan tanpa race conditions atau circular dependency.
 
@@ -40,8 +40,9 @@ ATURAN STRUKTUR LAYER:
 4. Fase FRONTEND: implementasi halaman UI, komponen, dan konsumsi API backend. Bergantung pada fitur BACKEND terkait.
 5. Fase TERAKHIR WAJIB berlayer 'INTEGRATION': mencakup WIRING (menghubungkan FE ke API BE sesungguhnya, BE ke DB) dan smoke test lokal (aplikasi bisa dijalankan end-to-end tanpa error).`;
 
+  const prdText = typeof prd === 'string' ? prd : (prd as any).markdown ? (prd as any).markdown : JSON.stringify(prd, null, 2);
   const user = `PRD:
-${JSON.stringify(prd, null, 2)}
+${prdText}
 
 Schema JSON:
 {
