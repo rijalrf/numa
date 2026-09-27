@@ -7,14 +7,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { PricingDialog } from '@/components/billing/pricing-dialog';
+import { MarkdownView } from '@/components/ui/markdown-view';
 import {
   Loader2,
   Sparkles,
-  ArrowRight,
-  ArrowLeft,
   CheckCircle2,
-  HelpCircle,
-  Wand2,
 } from 'lucide-react';
 import { useWizardNav } from '@/components/layout/wizard-nav';
 
@@ -69,7 +66,7 @@ export function SurveyPage() {
       setSurveyData(data);
       setCurrentRound(data.round);
 
-      // Inisialisasi state jawaban dari data tersimpan
+      // Inisialisasi state jawaban hanya dari data tersimpan (tanpa pre-select saran)
       const initialAnswers: Record<string, string | string[]> = {};
       const initialOthers: Record<string, string> = {};
       const initialShowOthers: Record<string, boolean> = {};
@@ -84,9 +81,6 @@ export function SurveyPage() {
           } else {
             initialAnswers[q.id] = q.answer;
           }
-        } else if (q.suggestion) {
-          // Pre-select dengan suggestion
-          initialAnswers[q.id] = q.kind === 'checkbox' ? [q.suggestion] : q.suggestion;
         }
       }
 
@@ -136,20 +130,6 @@ export function SurveyPage() {
     setShowOtherInput((prev) => ({ ...prev, [q.id]: false }));
   };
 
-  const handleFillAllSuggestions = () => {
-    if (!surveyData) return;
-    const currentQuestions = surveyData.questions.filter((q) => q.round === currentRound);
-    setAnswers((prev) => {
-      const next = { ...prev };
-      for (const q of currentQuestions) {
-        if (q.suggestion) {
-          next[q.id] = q.kind === 'checkbox' ? [q.suggestion] : q.suggestion;
-        }
-      }
-      return next;
-    });
-  };
-
   const handleOtherChange = (questionId: string, text: string) => {
     setOtherText((prev) => ({ ...prev, [questionId]: text }));
     setAnswers((prev) => ({ ...prev, [questionId]: text }));
@@ -171,7 +151,7 @@ export function SurveyPage() {
     for (const q of currentQuestions) {
       let val = answers[q.id];
 
-      // Jika opsional dan tidak diisi, gunakan saran Numa sebagai fallback
+      // Jika opsional dan tidak diisi, gunakan saran sebagai fallback
       if (!val || (Array.isArray(val) && val.length === 0)) {
         if (!q.required && q.suggestion) {
           val = q.kind === 'checkbox' ? [q.suggestion] : q.suggestion;
@@ -253,21 +233,16 @@ export function SurveyPage() {
           back:
             currentRound > 1 && !surveyData.isComplete
               ? {
-                  label: 'Tahap Sebelumnya',
+                  label: 'Kembali',
                   onClick: handlePreviousRound,
                   disabled: submitting,
                 }
               : null,
-          next: surveyData.isComplete
-            ? {
-                label: surveyData.plan === 'free' ? 'Lanjut (Upgrade)' : 'Lanjut ke Teknologi',
-                onClick: handleProceedToTechStack,
-              }
-            : {
-                label: submitting ? 'Menyimpan...' : 'Lanjut →',
-                onClick: handleSubmitRound,
-                disabled: submitting,
-              },
+          next: {
+            label: submitting ? 'Menyimpan...' : 'Lanjut',
+            onClick: surveyData.isComplete ? handleProceedToTechStack : handleSubmitRound,
+            disabled: submitting,
+          },
         }
   );
 
@@ -288,46 +263,15 @@ export function SurveyPage() {
     );
   }
 
-  // Tampilan ketika seluruh round survey telah selesai
+  // Tampilan ketika seluruh round survey telah selesai — polos tanpa wrapper
   if (surveyData.isComplete && surveyData.summary) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6 pb-12">
-        <div className="border border-border/80 rounded-2xl bg-card p-6 sm:p-8 space-y-6 shadow-xs">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-5">
-            <div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-primary border-primary/30 text-xs">
-                  Ringkasan Kebutuhan Produk
-                </Badge>
-                <span className="text-xs text-muted-foreground">Survey Selesai</span>
-              </div>
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight mt-1">
-                {surveyData.projectName || 'Aplikasi Baru'}
-              </h1>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Konsultan Produk Numa telah merangkum seluruh preferensi dan batasan aplikasi Anda.
-              </p>
-            </div>
-            <Button
-              onClick={handleProceedToTechStack}
-              className="gap-2 shrink-0 self-start sm:self-auto"
-            >
-              <span>{surveyData.plan === 'free' ? 'Lanjut (Upgrade Paket)' : 'Pilih Teknologi'}</span>
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </div>
+      <div className="max-w-3xl mx-auto space-y-4 pb-12">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          {surveyData.projectName || 'Aplikasi Baru'}
+        </h1>
 
-          <div className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground/90 p-4 rounded-xl bg-muted/20 border border-border/50 select-text">
-            {surveyData.summary}
-          </div>
-
-          <div className="flex justify-end pt-2">
-            <Button onClick={handleProceedToTechStack} className="gap-2">
-              <span>{surveyData.plan === 'free' ? 'Lanjut (Upgrade Paket)' : 'Pilih Teknologi'}</span>
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+        <MarkdownView content={surveyData.summary} />
 
         <PricingDialog
           isOpen={pricingOpen}
@@ -341,27 +285,9 @@ export function SurveyPage() {
 
   // Tampilan Pertanyaan Round Berjalan
   const currentQuestions = surveyData.questions.filter((q) => q.round === currentRound);
-  const totalRounds = surveyData.totalRounds;
-  const progressPercent = Math.round((currentRound / totalRounds) * 100);
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-12">
-      {/* Header Stepper & Progress */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span className="font-semibold text-foreground">
-            Wawancara Kebutuhan — Putaran {currentRound} dari {totalRounds}
-          </span>
-          <span className="font-mono text-[11px]">{progressPercent}%</span>
-        </div>
-        <div className="w-full bg-muted/60 h-2 rounded-full overflow-hidden">
-          <div
-            className="bg-primary h-full transition-all duration-300 ease-out"
-            style={{ width: `${progressPercent}%` }}
-          />
-        </div>
-      </div>
-
       {error && (
         <div className="p-3.5 rounded-xl border border-destructive/30 bg-destructive/10 text-xs text-destructive flex items-center justify-between">
           <span>{error}</span>
@@ -375,26 +301,9 @@ export function SurveyPage() {
         </div>
       )}
 
-      {/* Action Bar Cepat */}
-      <div className="flex items-center justify-between">
-        <div className="text-xs text-muted-foreground">
-          Pilih jawaban atau ketik preferensi spesifik Anda.
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={handleFillAllSuggestions}
-          className="text-xs gap-1.5 h-8 border-primary/30 text-primary hover:bg-primary/10"
-        >
-          <Wand2 className="h-3.5 w-3.5" />
-          <span>Isi Semua Saran Numa</span>
-        </Button>
-      </div>
-
       {/* Kartu Pertanyaan */}
       <div className="space-y-4">
-        {currentQuestions.map((q, idx) => {
+        {currentQuestions.map((q) => {
           const selectedVal = answers[q.id];
           const isCheckbox = q.kind === 'checkbox';
           const selectedArray = Array.isArray(selectedVal) ? selectedVal : [];
@@ -406,9 +315,6 @@ export function SurveyPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono font-semibold text-muted-foreground">
-                        #{idx + 1}
-                      </span>
                       {q.required ? (
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium text-foreground">
                           Wajib
@@ -427,29 +333,21 @@ export function SurveyPage() {
                   {q.suggestion && (
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
                       onClick={() => handleSelectSuggestion(q)}
-                      className="text-[11px] h-7 px-2 text-primary hover:bg-primary/10 shrink-0 gap-1"
+                      className="text-xs h-7 px-2.5 text-primary border-primary/30 hover:bg-primary/10 shrink-0 gap-1"
                     >
                       <Sparkles className="h-3 w-3" />
-                      <span>Pakai Saran</span>
+                      <span>Saran AI</span>
                     </Button>
                   )}
                 </div>
-
-                {q.suggestionReason && (
-                  <p className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1.5">
-                    <HelpCircle className="h-3 w-3 shrink-0 text-primary" />
-                    <span>Saran Numa: {q.suggestionReason}</span>
-                  </p>
-                )}
               </CardHeader>
 
               <CardContent className="px-5 pb-5 pt-0 space-y-2.5">
                 {/* Opsi Terstruktur */}
                 {q.options.map((opt) => {
-                  const isSuggestion = opt === q.suggestion;
                   const isSelected = isCheckbox
                     ? selectedArray.includes(opt)
                     : selectedVal === opt;
@@ -494,15 +392,6 @@ export function SurveyPage() {
                         </div>
                         <span className="leading-relaxed">{opt}</span>
                       </div>
-
-                      {isSuggestion && (
-                        <Badge
-                          variant="outline"
-                          className="text-[9px] px-1.5 py-0 border-primary/30 text-primary shrink-0 self-center"
-                        >
-                          Saran Numa
-                        </Badge>
-                      )}
                     </div>
                   );
                 })}
@@ -537,44 +426,6 @@ export function SurveyPage() {
             </Card>
           );
         })}
-      </div>
-
-      {/* Tombol Aksi Bawah */}
-      <div className="flex items-center justify-between pt-4 border-t border-border/60">
-        {currentRound > 1 ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handlePreviousRound}
-            disabled={submitting}
-            className="gap-1.5 text-xs"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            <span>Sebelumnya</span>
-          </Button>
-        ) : (
-          <div />
-        )}
-
-        <Button
-          type="button"
-          onClick={handleSubmitRound}
-          disabled={submitting}
-          className="gap-2 text-xs"
-        >
-          {submitting ? (
-            <>
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              <span>Menyimpan & Menganalisis...</span>
-            </>
-          ) : (
-            <>
-              <span>{currentRound >= totalRounds ? 'Selesaikan Survey' : 'Lanjut ke Tahap Berikutnya'}</span>
-              <ArrowRight className="h-3.5 w-3.5" />
-            </>
-          )}
-        </Button>
       </div>
     </div>
   );

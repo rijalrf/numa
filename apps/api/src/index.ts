@@ -1077,7 +1077,7 @@ Anda adalah AI Coding Agent otonom. Tugas Anda: mengeksekusi task-task project i
 ${project.prd ? `- PRD: SEDIA — fetch via \`numa prd\` atau download manual` : `- PRD: BELUM dibuat — minta user membuatnya lewat tool PRD Generator`}
 
 ## Setup (jalankan 1x di awal)
-1. Install CLI:
+1. Pastikan CLI numa terpasang versi terbaru:
    \`\`\`
    npm install -g numa-cli@latest
    \`\`\`
@@ -1318,46 +1318,68 @@ app.get('/api/user/plan', requireUser, async (req: AuthedRequest, res) => {
   });
 });
 
+// Update profil pengguna (nama)
+app.patch('/api/user/profile', requireUser, async (req: AuthedRequest, res) => {
+  const { name } = req.body || {};
+  if (typeof name !== 'string' || !name.trim()) {
+    return res.status(400).json({ error: 'Nama tidak boleh kosong.' });
+  }
+  const updated = await prisma.user.update({
+    where: { id: req.userId },
+    data: { name: name.trim() },
+    select: { id: true, name: true, email: true },
+  });
+  res.json({ ok: true, user: updated });
+});
+
+const projectTaskGenerationLocks = new Set<string>();
+
 // Step 4: generate atomic tasks dari roadmap (auto generate roadmap jika belum ada).
 app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequest, res) => {
-  const { plan } = await getUserPlan(req.userId);
-  if (plan === 'free') {
-    return res.status(403).json({
-      error: 'Paket Free hanya dapat mengakses hingga pembuatan PRD. Silakan upgrade paket untuk membuat task board dan mengeksekusi agen.',
-      code: 'plan_upgrade_required',
-      plan,
-      upgradeUrl: '/pricing',
-    });
+  if (projectTaskGenerationLocks.has(req.params.id)) {
+    return res.status(409).json({ error: 'Perancangan task sedang berlangsung. Mohon tunggu sejenak.' });
   }
+  projectTaskGenerationLocks.add(req.params.id);
 
-  let project = await prisma.project.findFirst({
-    where: { id: req.params.id, userId: req.userId },
-    include: {
-      prd: true,
-      stacks: true,
-      roadmap: { include: { features: { include: { dependencies: true } } } },
-    },
-  });
-  if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
-
-  const existingTasksCount = await prisma.task.count({ where: { projectId: project.id } });
-  if (existingTasksCount > 0 && isStageLocked(project.wizardStep, 'board')) {
-    return res.status(403).json({ error: 'Tasks telah selesai dibuat dan terkunci (Read-Only).' });
-  }
-
-  const isFirstGeneration = existingTasksCount === 0;
-  if (isFirstGeneration) {
-    const quotaCheck = await checkQuota(req.userId);
-    if (!quotaCheck.allowed) {
+  try {
+    const { plan } = await getUserPlan(req.userId);
+    if (plan === 'free') {
       return res.status(403).json({
-        error: 'Kuota proyek Anda telah habis. Silakan upgrade paket untuk melanjutkan.',
-        plan: quotaCheck.plan,
-        quotaUsed: quotaCheck.quotaUsed,
-        quotaMax: quotaCheck.quotaMax,
+        error: 'Paket Free hanya dapat mengakses hingga pembuatan PRD. Silakan upgrade paket untuk membuat task board dan mengeksekusi agen.',
+        code: 'plan_upgrade_required',
+        plan,
         upgradeUrl: '/pricing',
       });
     }
-  }
+
+    let project = await prisma.project.findFirst({
+      where: { id: req.params.id, userId: req.userId },
+      include: {
+        prd: true,
+        stacks: true,
+        roadmap: { include: { features: { include: { dependencies: true } } } },
+      },
+    });
+    if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
+
+    const existingTasksCount = await prisma.task.count({ where: { projectId: project.id } });
+    if (existingTasksCount > 0 && isStageLocked(project.wizardStep, 'board')) {
+      return res.status(403).json({ error: 'Tasks telah selesai dibuat dan terkunci (Read-Only).' });
+    }
+
+    const isFirstGeneration = existingTasksCount === 0;
+    if (isFirstGeneration) {
+      const quotaCheck = await checkQuota(req.userId);
+      if (!quotaCheck.allowed) {
+        return res.status(403).json({
+          error: 'Kuota proyek Anda telah habis. Silakan upgrade paket untuk melanjutkan.',
+          plan: quotaCheck.plan,
+          quotaUsed: quotaCheck.quotaUsed,
+          quotaMax: quotaCheck.quotaMax,
+          upgradeUrl: '/pricing',
+        });
+      }
+    }
 
   // Auto-generate roadmap jika belum ada tapi PRD ada
   if (project.roadmap.length === 0) {
@@ -1436,8 +1458,7 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
       .map((f) => ({ id: f.id, title: f.title, description: f.description, dependsOn: f.dependsOn })),
   }));
 
-  try {
-    const prdDoc = readPrdContent(project.prd?.content);
+  const prdDoc = readPrdContent(project.prd?.content);
 
     const stackContract = resolveStackContract(project.stacks || []);
 
@@ -1476,91 +1497,97 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
       console.log(`[CLEANUP-VALIDATOR] Peringatan kebersihan task (${cleanupResult.warnings.length}):\n${cleanupResult.warnings.map((w) => '  - ' + w).join('\n')}`);
     }
 
-    // Hapus tasks lama, tulis ulang.
-    await prisma.task.deleteMany({ where: { projectId: project.id } });
+    // Hapus tasks lama dan tulis ulang secara atomik dalam satu transaksi
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.task.deleteMany({ where: { projectId: project.id } });
 
-    let order = 1;
-    const createdTasks: Array<{
-      dbId: string;
-      aiTaskId?: string;
-      order: number;
-      featureId?: string;
-      dependsOn: string[];
-    }> = [];
+        let order = 1;
+        const createdTasks: Array<{
+          dbId: string;
+          aiTaskId?: string;
+          order: number;
+          featureId?: string;
+          dependsOn: string[];
+        }> = [];
 
-    for (const t of validTasks) {
-      // Cari db feature yang punya tmpId = t.featureId
-      let dbFeatureId: string | undefined;
-      for (const [dbId, tmpId] of featureIdMap.entries()) {
-        if (tmpId === t.featureId) {
-          dbFeatureId = dbId;
-          break;
-        }
-      }
-      const currentOrder = order++;
-      const created = await prisma.task.create({
-        data: {
-          projectId: project.id,
-          featureId: dbFeatureId,
-          title: t.title,
-          description: t.description,
-          layer: t.layer,
-          status: 'TODO',
-          order: currentOrder,
-          apiContracts: (t as any).apiContracts ?? [],
-          aiContext: {
-            taskId: t.taskId,
-            requirement_ids: t.requirement_ids,
-            depends_on: t.depends_on,
-            files_to_create: t.files_to_create,
-            files_to_modify: t.files_to_modify,
-            files_readonly: t.files_readonly,
-            forbidden: t.forbidden,
-            implementation_steps: t.implementation_steps,
-            validation_commands: t.validation_commands,
-            definition_of_done: t.definition_of_done,
-            out_of_scope: t.out_of_scope,
-            consumesApis: t.consumesApis ?? [],
-          },
-          acceptanceCriteria: t.acceptanceCriteria,
-        },
-      });
-
-      createdTasks.push({
-        dbId: created.id,
-        aiTaskId: t.taskId,
-        order: currentOrder,
-        featureId: t.featureId,
-        dependsOn: t.depends_on ?? [],
-      });
-    }
-
-    // Hubungkan TaskDependency native di database
-    for (const item of createdTasks) {
-      if (item.dependsOn.length > 0) {
-        for (const dep of item.dependsOn) {
-          const cleanDep = dep.trim().toLowerCase();
-          const target = createdTasks.find(
-            (c) =>
-              c.dbId !== item.dbId &&
-              ((c.aiTaskId && c.aiTaskId.toLowerCase() === cleanDep) ||
-                `task-${c.order}` === cleanDep ||
-                String(c.order) === cleanDep ||
-                (c.featureId && c.featureId.toLowerCase() === cleanDep))
-          );
-          if (target) {
-            await prisma.taskDependency.create({
-              data: {
-                taskId: item.dbId,
-                dependsOnId: target.dbId,
+        for (const t of validTasks) {
+          // Cari db feature yang punya tmpId = t.featureId
+          let dbFeatureId: string | undefined;
+          for (const [dbId, tmpId] of featureIdMap.entries()) {
+            if (tmpId === t.featureId) {
+              dbFeatureId = dbId;
+              break;
+            }
+          }
+          const currentOrder = order++;
+          const created = await tx.task.create({
+            data: {
+              projectId: project.id,
+              featureId: dbFeatureId,
+              title: t.title,
+              description: t.description,
+              layer: t.layer,
+              status: 'TODO',
+              order: currentOrder,
+              apiContracts: (t as any).apiContracts ?? [],
+              aiContext: {
+                taskId: t.taskId,
+                requirement_ids: t.requirement_ids,
+                depends_on: t.depends_on,
+                files_to_create: t.files_to_create,
+                files_to_modify: t.files_to_modify,
+                files_readonly: t.files_readonly,
+                forbidden: t.forbidden,
+                implementation_steps: t.implementation_steps,
+                validation_commands: t.validation_commands,
+                definition_of_done: t.definition_of_done,
+                out_of_scope: t.out_of_scope,
+                consumesApis: t.consumesApis ?? [],
               },
-            });
+              acceptanceCriteria: t.acceptanceCriteria,
+            },
+          });
+
+          createdTasks.push({
+            dbId: created.id,
+            aiTaskId: t.taskId,
+            order: currentOrder,
+            featureId: t.featureId,
+            dependsOn: t.depends_on ?? [],
+          });
+        }
+
+        // Hubungkan TaskDependency native di database
+        for (const item of createdTasks) {
+          if (item.dependsOn.length > 0) {
+            for (const dep of item.dependsOn) {
+              const cleanDep = dep.trim().toLowerCase();
+              const target = createdTasks.find(
+                (c) =>
+                  c.dbId !== item.dbId &&
+                  ((c.aiTaskId && c.aiTaskId.toLowerCase() === cleanDep) ||
+                    `task-${c.order}` === cleanDep ||
+                    String(c.order) === cleanDep ||
+                    (c.featureId && c.featureId.toLowerCase() === cleanDep))
+              );
+              if (target) {
+                await tx.taskDependency.create({
+                  data: {
+                    taskId: item.dbId,
+                    dependsOnId: target.dbId,
+                  },
+                });
+              }
+            }
           }
         }
-      }
-    }
 
-    await prisma.project.update({ where: { id: project.id }, data: { wizardStep: 'board' } });
+        await tx.project.update({ where: { id: project.id }, data: { wizardStep: 'board' } });
+      },
+      { timeout: 60000 }
+    );
+
     if (isFirstGeneration) {
       await incrementQuota(req.userId);
     }
@@ -1585,6 +1612,8 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
     });
   } catch (err) {
     res.status(502).json({ error: 'AI gagal menghasilkan tasks.', detail: (err as Error).message });
+  } finally {
+    projectTaskGenerationLocks.delete(req.params.id);
   }
 });
 

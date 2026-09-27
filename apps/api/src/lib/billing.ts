@@ -34,6 +34,12 @@ export const PLANS: Record<PlanKey, PlanConfig> = {
   },
 };
 
+const PRESET_USER_TIERS: Record<string, PlanKey> = {
+  'womevuhaza09@gmail.com': 'free',
+  'obibutoheq339@gmail.com': 'starter',
+  'ghostredarm@gmail.com': 'pro',
+};
+
 // ponytail: Lazy-init subscription pada first-access. Upgrade ke webhook pendaftaran jika auth flow butuh explicit provisioning.
 export async function getUserPlan(userId: string): Promise<{
   plan: PlanKey;
@@ -50,6 +56,21 @@ export async function getUserPlan(userId: string): Promise<{
         quotaMax: PLANS.free.quotaMax,
       },
     });
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+  if (user?.email && user.email in PRESET_USER_TIERS) {
+    const targetPlan = PRESET_USER_TIERS[user.email];
+    if (sub.plan !== targetPlan) {
+      sub = await prisma.subscription.update({
+        where: { id: sub.id },
+        data: {
+          plan: targetPlan,
+          quotaMax: PLANS[targetPlan].quotaMax,
+          expiresAt: targetPlan === 'free' ? null : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        },
+      });
+    }
   }
 
   const now = new Date();

@@ -44,7 +44,11 @@ async function request<T>(cfg: Config, path: string, init: RequestInit = {}): Pr
     }
   }
   if (!resp.ok) {
-    const msg = (body as { error?: string })?.error ?? `HTTP ${resp.status}`;
+    const rawMsg = (body as { error?: string })?.error ?? (typeof body === 'string' ? body : `HTTP ${resp.status}`);
+    let msg = rawMsg;
+    if (resp.status === 400 && typeof rawMsg === 'string' && rawMsg.toLowerCase().includes('project id required')) {
+      msg = 'Project aktif belum dipilih. Jalankan: numa switch <project-id>';
+    }
     throw new ApiError(msg, resp.status, body);
   }
   return body as T;

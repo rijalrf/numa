@@ -1,13 +1,15 @@
 // Fungsi AI untuk sesi chat ide awal dan struktur dekomposisi: finalizeChatSession, recommendTechStack, generateTreeFromPrd
 import { generateJson } from './ai-service';
 import { TreeDataSchema, type TreeData, RecommendTechStackSchema } from './schemas';
+import { z } from 'zod';
 import crypto from 'node:crypto';
 import {
   RECOMMEND_TECH_STACK_PROMPT,
   GENERATE_TREE_PROMPT,
 } from './prompts';
 import { prisma } from '../prisma';
-import { checkProjectLimit } from '../billing';
+import { checkProjectLimit, getUserPlan, PLANS } from '../billing';
+import { generateSurveyRound } from '../survey';
 
 // ===============================================
 // FINALIZE PROJECT DARI CHAT SESSION
@@ -39,12 +41,29 @@ export async function finalizeChatSession(sessionId: string, userId: string, ini
   }
 
   const tempName = rawIdea.length > 50 ? rawIdea.slice(0, 47) + '...' : rawIdea;
+  let appName = tempName;
+
+  // Generate nama aplikasi ringkas secara cepat
+  try {
+    const resName = await generateJson({
+      system: 'Anda adalah penamaan produk profesional. Hasilkan nama aplikasi yang ringkas, modern, dan relevan (maksimal 2-4 kata) berdasarkan ide pengguna. Bahasa Indonesia atau istilah umum industri software, TANPA EMOJI.',
+      user: `Ide aplikasi pengguna:\n${rawIdea}`,
+      schema: z.object({ name: z.string() }),
+      tier: 'cheap',
+      agentName: 'generateAppName',
+    });
+    if (resName.name && resName.name.trim().length > 0) {
+      appName = resName.name.trim();
+    }
+  } catch (err) {
+    console.warn('[chat] Gagal generate nama app cepat, gunakan tempName:', err);
+  }
 
   // 3. Buat project baru dengan wizardStep 'survey'
   const project = await prisma.project.create({
     data: {
       userId,
-      name: tempName,
+      name: appName,
       idea: rawIdea,
       description: rawIdea,
       wizardStep: 'survey',
@@ -60,6 +79,40 @@ export async function finalizeChatSession(sessionId: string, userId: string, ini
       projectId: project.id,
     },
   });
+
+  // 5. Pre-generate pertanyaan survey round 1 langsung saat submit ide
+  try {
+    const { plan } = await getUserPlan(userId);
+    const totalRounds = PLANS[plan]?.surveyRounds ?? 1;
+
+    const generated = await generateSurveyRound({
+      idea: rawIdea,
+      priorAnswers: [],
+      round: 1,
+      totalRounds,
+      projectId: project.id,
+    });
+
+    for (let i = 0; i < generated.length; i++) {
+      const q = generated[i];
+      await prisma.discoveryQuestion.create({
+        data: {
+          projectId: project.id,
+          round: 1,
+          order: i + 1,
+          question: q.label,
+          context: q.id,
+          kind: q.kind,
+          options: q.options,
+          required: q.required,
+          suggestion: q.suggestion,
+          suggestionReason: q.suggestionReason,
+        },
+      });
+    }
+  } catch (surveyErr) {
+    console.warn('[chat] Pre-generate survey round 1 gagal, fallback ke route GET /survey:', surveyErr);
+  }
 
   return { projectId: project.id };
 }

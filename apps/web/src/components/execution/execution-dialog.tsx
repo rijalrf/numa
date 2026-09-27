@@ -36,27 +36,14 @@ export function ExecutionDialog({ projectId, projectName, isOpen, onClose }: Exe
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [pricingOpen, setPricingOpen] = useState(false);
 
-  const [inputToken, setInputToken] = useState(() => {
-    return localStorage.getItem('numa_active_pat') || '';
-  });
-
-  const generateTokenMut = useMutation<{ token: string }>({
-    mutationFn: () =>
-      api<{ token: string }>('/api/agent-tokens', {
-        method: 'POST',
-        body: JSON.stringify({ name: 'Token CLI Guide' }),
-      }),
-    onSuccess: (res) => {
-      localStorage.setItem('numa_active_pat', res.token);
-      setInputToken(res.token);
-    },
-  });
+  const [inputToken, setInputToken] = useState('');
 
   useEffect(() => {
-    if (isOpen && !inputToken && !generateTokenMut.isPending) {
-      generateTokenMut.mutate();
+    if (isOpen) {
+      const stored = localStorage.getItem('numa_active_pat') || '';
+      setInputToken(stored);
     }
-  }, [isOpen, inputToken]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -94,7 +81,7 @@ Jalankan loop berikut secara otonom tanpa henti hingga seluruh task berstatus DO
 Anda adalah AI Coding Agent otonom. Tugas Anda: mengeksekusi task-task implementasi proyek secara berurutan menggunakan CLI \`numa\`.
 
 ## 0. Persiapan Instalasi CLI (Cukup Sekali)
-Jika perintah \`numa\` belum terpasang di lingkungan terminal ini, jalankan:
+Pastikan CLI \`numa\` terpasang versi terbaru (jalankan 1x di awal):
 \`${installCommand}\`
 
 ## 1. Identitas & Autentikasi
@@ -313,15 +300,27 @@ ${executionLoopText}
         {view === 'agent' && (
           <div className="space-y-4">
             {/* Peringatan Keamanan Token */}
-            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3.5 flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
-              <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-semibold block">Peringatan Keamanan Token PAT:</span>
-                <span className="opacity-90">
-                  Jangan bagikan prompt ini ke publik atau commit ke repositori terbuka karena mengandung token otentikasi pribadi Anda.
-                </span>
+            {inputToken ? (
+              <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3.5 flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
+                <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold block">Peringatan Keamanan Token PAT:</span>
+                  <span className="opacity-90">
+                    Jangan bagikan prompt ini ke publik atau commit ke repositori terbuka karena mengandung token otentikasi pribadi Anda.
+                  </span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3.5 flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
+                <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold block">Token PAT Belum Ditemukan:</span>
+                  <span className="opacity-90">
+                    Token PAT belum tersimpan di browser. Silakan kunjungi menu Profil & Token untuk membuat Token PAT default, lalu ganti placeholder &lt;TOKEN_PAT_ANDA&gt; pada prompt di bawah.
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Toggle Mode Persetujuan */}
             <div className="rounded-xl border border-border/80 bg-muted/20 p-3.5 space-y-2">

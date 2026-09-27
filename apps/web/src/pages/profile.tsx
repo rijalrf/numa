@@ -1,5 +1,6 @@
-// Halaman profil: info akun + pengelolaan Token Akses Agen (PAT) terpusat.
-import { useState } from 'react';
+// Halaman profil: info akun form kolom + pengelolaan Token Akses Agen (PAT) terpusat.
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/lib/auth-client';
 import { api } from '@/lib/http';
@@ -7,8 +8,8 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Copy, Check, Trash2, KeyRound, Loader2, ShieldCheck } from 'lucide-react';
+import { useWizardNav } from '@/components/layout/wizard-nav';
 
 type Token = {
   id: string;
@@ -20,10 +21,39 @@ type Token = {
 
 export function ProfilePage() {
   const { data } = useSession();
+  const navigate = useNavigate();
   const qc = useQueryClient();
-  const [name, setName] = useState('Token CLI');
+  const [tokenName, setTokenName] = useState('Token Default');
   const [newToken, setNewToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const [userNameInput, setUserNameInput] = useState('');
+  const [savingName, setSavingName] = useState(false);
+  const [nameSaved, setNameSaved] = useState(false);
+
+  const user = data?.user;
+
+  useEffect(() => {
+    if (user?.name) {
+      setUserNameInput(user.name);
+    }
+  }, [user?.name]);
+
+  useEffect(() => {
+    const unshownDefaultPat = localStorage.getItem('numa_new_default_pat');
+    if (unshownDefaultPat) {
+      setNewToken(unshownDefaultPat);
+      localStorage.removeItem('numa_new_default_pat');
+    }
+  }, []);
+
+  useWizardNav({
+    back: {
+      label: 'Kembali',
+      onClick: () => navigate(-1),
+    },
+    next: null,
+  });
 
   const tokensQ = useQuery({
     queryKey: ['agent-tokens'],
@@ -34,12 +64,12 @@ export function ProfilePage() {
     mutationFn: () =>
       api<{ token: string }>('/api/agent-tokens', {
         method: 'POST',
-        body: JSON.stringify({ name: name.trim() || 'Token CLI' }),
+        body: JSON.stringify({ name: tokenName.trim() || 'Token Default' }),
       }),
     onSuccess: (res) => {
       setNewToken(res.token);
       localStorage.setItem('numa_active_pat', res.token);
-      setName('Token CLI');
+      setTokenName('Token Default');
       qc.invalidateQueries({ queryKey: ['agent-tokens'] });
     },
   });
@@ -49,6 +79,24 @@ export function ProfilePage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['agent-tokens'] }),
   });
 
+  const handleSaveName = async () => {
+    if (!userNameInput.trim() || savingName) return;
+    setSavingName(true);
+    setNameSaved(false);
+    try {
+      await api('/api/user/profile', {
+        method: 'PATCH',
+        body: JSON.stringify({ name: userNameInput.trim() }),
+      });
+      setNameSaved(true);
+      setTimeout(() => setNameSaved(false), 2500);
+    } catch (err) {
+      console.error('Gagal memperbarui nama profil:', err);
+    } finally {
+      setSavingName(false);
+    }
+  };
+
   async function copy() {
     if (!newToken) return;
     await navigator.clipboard.writeText(newToken);
@@ -56,26 +104,49 @@ export function ProfilePage() {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  const user = data?.user;
-  const initial = user?.name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U';
-
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      {/* Info akun */}
+    <div className="space-y-6 max-w-4xl mx-auto pb-12">
+      {/* Info akun — Form Kolom */}
       <Card className="border-border shadow-xs">
         <CardHeader>
           <CardTitle className="text-base font-semibold">Informasi Akun</CardTitle>
-          <CardDescription>Akun ini terhubung melalui autentikasi Google.</CardDescription>
+          <CardDescription>Kelola data profil dan identitas akun Anda.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-4">
-            <Avatar className="h-14 w-14">
-              {user?.image && <AvatarImage src={user.image} alt={user.name ?? 'Pengguna'} />}
-              <AvatarFallback className="bg-primary text-primary-foreground text-lg">{initial}</AvatarFallback>
-            </Avatar>
-            <div>
-              <p className="font-medium text-foreground">{user?.name || 'Pengguna'}</p>
-              <p className="text-sm text-muted-foreground">{user?.email}</p>
+          <div className="space-y-4 max-w-md">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Nama Lengkap</label>
+              <div className="flex gap-2">
+                <Input
+                  value={userNameInput}
+                  onChange={(e) => setUserNameInput(e.target.value)}
+                  placeholder="Nama Lengkap"
+                  className="text-xs h-9"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleSaveName}
+                  disabled={savingName || !userNameInput.trim() || userNameInput === user?.name}
+                  className="h-9 px-3 text-xs shrink-0 gap-1.5"
+                >
+                  {savingName && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  {nameSaved && <Check className="h-3.5 w-3.5 text-primary" />}
+                  <span>{nameSaved ? 'Tersimpan' : 'Simpan'}</span>
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Email</label>
+              <Input
+                value={user?.email || ''}
+                disabled
+                className="text-xs h-9 bg-muted/50 cursor-not-allowed opacity-80"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Email terhubung dengan akun autentikasi Anda dan tidak dapat diubah.
+              </p>
             </div>
           </div>
         </CardContent>
@@ -89,7 +160,7 @@ export function ProfilePage() {
             Token Akses Pribadi (PAT)
           </CardTitle>
           <CardDescription>
-            Token digunakan untuk autentikasi CLI di terminal (<code>npx numa login &lt;token&gt;</code>).
+            Token digunakan untuk autentikasi CLI di terminal (<code>numa login &lt;token&gt;</code>).
             Satu token mewakili identitas Anda dan dapat mengakses semua proyek Anda. Token plaintext hanya ditampilkan sekali saat dibuat.
           </CardDescription>
         </CardHeader>
@@ -97,15 +168,15 @@ export function ProfilePage() {
           {/* Form buat token */}
           <div className="flex flex-col sm:flex-row gap-3">
             <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Nama perangkat/token, mis. Laptop Kerja"
-              className="sm:flex-1"
+              value={tokenName}
+              onChange={(e) => setTokenName(e.target.value)}
+              placeholder="Nama token, mis. Token Default / Laptop Kerja"
+              className="sm:flex-1 text-xs h-9"
             />
             <Button
               onClick={() => createMut.mutate()}
-              disabled={createMut.isPending || !name.trim()}
-              className="gap-2 font-medium"
+              disabled={createMut.isPending || !tokenName.trim()}
+              className="gap-2 font-medium text-xs h-9"
             >
               {createMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               Buat Token Baru

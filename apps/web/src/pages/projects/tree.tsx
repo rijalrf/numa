@@ -306,11 +306,11 @@ export function TreePage() {
 
   useWizardNav({
     back: {
-      label: 'Kembali ke PRD',
+      label: 'Kembali',
       onClick: handleBackToPrd,
     },
     next: {
-      label: 'Lanjut ke Board Task',
+      label: 'Lanjut',
       onClick: () => navigate(`/projects/${projectId}/board`),
     },
   });

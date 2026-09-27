@@ -1,9 +1,10 @@
 // Header global: logo & judul halaman di kiri, nama project aktif, toggle tema, dan menu pengguna di kanan.
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/http';
 import { signOut, useSession } from '@/lib/auth-client';
+import { ensureDefaultToken } from '@/lib/ensure-default-token';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -95,6 +96,13 @@ export function Header() {
   const location = useLocation();
   const [pricingOpen, setPricingOpen] = useState(false);
   const pageInfo = getPageHeaderInfo(location.pathname);
+
+  // Pastikan token default dibuat pada sesi pertama
+  useEffect(() => {
+    if (data?.user) {
+      ensureDefaultToken();
+    }
+  }, [data?.user]);
 
   // Ambil info paket user untuk badge dan upgrade
   const { data: planData } = useQuery<{

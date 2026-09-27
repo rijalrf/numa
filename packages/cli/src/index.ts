@@ -12,7 +12,7 @@ const program = new Command();
 program
   .name('numa')
   .description('CLI agent loop untuk numa (AI Planner). Dipakai oleh AI coding agent.')
-  .version('0.3.0');
+  .version('0.3.1');
 
 program
   .command('login <token>')
@@ -83,6 +83,110 @@ program
     console.log(`Server   : ${cfg.apiUrl}`);
   });
 
+async function ensureActiveProject(cfg: Config): Promise<boolean> {
+  if (cfg.projectId) return true;
+  console.error('Project aktif belum dipilih.');
+  try {
+    const result = await api.listScopes(cfg);
+    const projects: Array<{ id: string; name: string }> =
+      (result as any)?.scopes ?? (Array.isArray(result) ? result : []);
+    if (projects.length > 0) {
+      console.error('\nDaftar project yang tersedia untuk token ini:');
+      for (const p of projects) {
+        console.error(`  - ${p.name} (${p.id})`);
+      }
+      console.error('\nPilih project aktif dengan: numa switch <project-id>');
+    } else {
+      console.error('Belum ada project yang dapat diakses oleh token ini.');
+    }
+  } catch (err: any) {
+    console.error('Gagal mengambil daftar project:', err?.message || err);
+  }
+  return false;
+}
+
+function formatPrdMarkdown(
+  content: unknown,
+  prdObj: { version: number; generatedAt: string | Date }
+): string {
+  if (!content) return '# Product Requirements Document\n\n(PRD kosong)';
+  if (typeof content === 'string') return content;
+  if (typeof content === 'object') {
+    const obj = content as Record<string, any>;
+    if (typeof obj.markdown === 'string') {
+      return obj.markdown;
+    }
+
+    // Format JSON structured PRD
+    const parts: string[] = [];
+    parts.push('# Product Requirements Document');
+    parts.push('');
+    parts.push(`**Generated:** ${new Date(prdObj.generatedAt).toLocaleString('id-ID')}`);
+    parts.push(`**Version:** ${prdObj.version}`);
+    parts.push('');
+    parts.push('---');
+    parts.push('');
+
+    if (obj.overview) {
+      parts.push('## Ringkasan Produk', '', obj.overview, '', '---', '');
+    }
+    if (Array.isArray(obj.goals) && obj.goals.length > 0) {
+      parts.push('## Tujuan Produk', '');
+      for (const g of obj.goals) parts.push(`- ${g}`);
+      parts.push('', '---', '');
+    }
+    if (Array.isArray(obj.features) && obj.features.length > 0) {
+      parts.push('## Fitur Utama', '');
+      for (const f of obj.features) {
+        parts.push(`### ${f.name || 'Fitur'}`);
+        parts.push(f.description || '(tidak ada deskripsi)');
+        parts.push('');
+      }
+      parts.push('---', '');
+    }
+    if (Array.isArray(obj.functionalRequirements) && obj.functionalRequirements.length > 0) {
+      parts.push('## Functional Requirements', '');
+      for (const r of obj.functionalRequirements) {
+        parts.push(`- **${r.id}** ${r.title}: ${r.description}`);
+      }
+      parts.push('', '---', '');
+    }
+    const rules =
+      Array.isArray(obj.productRules) && obj.productRules.length > 0
+        ? obj.productRules
+        : obj.businessRules;
+    if (Array.isArray(rules) && rules.length > 0) {
+      parts.push('## Aturan Produk & Bisnis', '');
+      for (const r of rules) parts.push(`- **${r.id}**: ${r.description}`);
+      parts.push('', '---', '');
+    }
+    if (Array.isArray(obj.techRequirements) && obj.techRequirements.length > 0) {
+      parts.push('## Kebutuhan Teknologi', '');
+      for (const t of obj.techRequirements) parts.push(`- ${t}`);
+      parts.push('', '---', '');
+    }
+    if (Array.isArray(obj.dataModels) && obj.dataModels.length > 0) {
+      parts.push('## Model Data', '```json', JSON.stringify(obj.dataModels, null, 2), '```', '', '---', '');
+    }
+    if (Array.isArray(obj.apiEndpoints) && obj.apiEndpoints.length > 0) {
+      parts.push('## Spesifikasi Endpoint API', '```json', JSON.stringify(obj.apiEndpoints, null, 2), '```', '', '---', '');
+    }
+    if (Array.isArray(obj.nonFunctional) && obj.nonFunctional.length > 0) {
+      parts.push('## Kebutuhan Non-Fungsional', '');
+      for (const n of obj.nonFunctional) parts.push(`- ${n}`);
+      parts.push('', '---', '');
+    }
+    if (Array.isArray(obj.outOfScope) && obj.outOfScope.length > 0) {
+      parts.push('## Di Luar Lingkup (Out of Scope)', '');
+      for (const o of obj.outOfScope) parts.push(`- ${o}`);
+      parts.push('');
+    }
+
+    return parts.join('\n');
+  }
+  return String(content);
+}
+
 program
   .command('switch [projectId]')
   .description('Beralih ke project lain dengan token yang sama. Tanpa parameter: tampilkan daftar project tersedia.')
@@ -95,9 +199,24 @@ program
     }
 
     if (!projectId) {
-      // List available projects by trying common endpoints
-      console.log('Proyek tersedia untuk token ini:\n');
-      console.log('> Gunakan: numa switch <project-id>');
+      try {
+        const result = await api.listScopes(cfg);
+        const projects: Array<{ id: string; name: string }> =
+          (result as any)?.scopes ?? (Array.isArray(result) ? result : []);
+        console.log('Daftar project yang tersedia untuk token ini:\n');
+        if (projects.length === 0) {
+          console.log('  (Belum ada project yang dapat diakses)');
+        } else {
+          for (const p of projects) {
+            const isCurrent = p.id === cfg.projectId ? ' * (aktif)' : '';
+            console.log(`  - ${p.name} (${p.id})${isCurrent}`);
+          }
+        }
+        console.log('\nGunakan: numa switch <project-id>');
+      } catch (err: any) {
+        console.error('Gagal mengambil daftar project:', err?.message || err);
+        process.exit(1);
+      }
       return;
     }
 
@@ -123,8 +242,20 @@ program
   .description('Tampilkan info project dari token saat ini.')
   .action(async () => {
     const cfg = loadConfig();
-    const me = await api.whoami(cfg);
-    console.log(JSON.stringify(me, null, 2));
+    if (!cfg.token) {
+      console.error('Belum login. Jalankan: numa login <token>');
+      process.exit(1);
+    }
+    if (!(await ensureActiveProject(cfg))) {
+      process.exit(1);
+    }
+    try {
+      const me = await api.whoami(cfg);
+      console.log(JSON.stringify(me, null, 2));
+    } catch (e: any) {
+      console.error(`Error: ${e?.message || e}`);
+      process.exit(1);
+    }
   });
 
 program
@@ -132,18 +263,30 @@ program
   .description('Ambil task berikutnya. Akan melanjutkan task IN_PROGRESS bila ada.')
   .action(async () => {
     const cfg = loadConfig();
-    const out = await api.next(cfg);
-    if (!out.hasTask) {
-      console.log(out.message ?? 'Tidak ada task tersisa.');
-      return;
+    if (!cfg.token) {
+      console.error('Belum login. Jalankan: numa login <token>');
+      process.exit(1);
     }
-    cfg.activeTaskId = out.task!.id;
-    saveConfig(cfg);
-    console.log(`Task #${out.task!.order} [${out.task!.layer}] ${out.task!.status}`);
-    console.log(`ID    : ${out.task!.id}`);
-    console.log(`Judul : ${out.task!.title}`);
-    if (out.task!.description) console.log(`\n${out.task!.description}`);
-    console.log(`\n-> Lanjut: \`numa start\` lalu \`numa context\``);
+    if (!(await ensureActiveProject(cfg))) {
+      process.exit(1);
+    }
+    try {
+      const out = await api.next(cfg);
+      if (!out.hasTask) {
+        console.log(out.message ?? 'Tidak ada task tersisa.');
+        return;
+      }
+      cfg.activeTaskId = out.task!.id;
+      saveConfig(cfg);
+      console.log(`Task #${out.task!.order} [${out.task!.layer}] ${out.task!.status}`);
+      console.log(`ID    : ${out.task!.id}`);
+      console.log(`Judul : ${out.task!.title}`);
+      if (out.task!.description) console.log(`\n${out.task!.description}`);
+      console.log(`\n-> Lanjut: \`numa start\` lalu \`numa context\``);
+    } catch (e: any) {
+      console.error(`Error: ${e?.message || e}`);
+      process.exit(1);
+    }
   });
 
 program
@@ -151,13 +294,25 @@ program
   .description('Tandai task IN_PROGRESS. Default: activeTaskId.')
   .action(async (id?: string) => {
     const cfg = loadConfig();
+    if (!cfg.token) {
+      console.error('Belum login. Jalankan: numa login <token>');
+      process.exit(1);
+    }
+    if (!(await ensureActiveProject(cfg))) {
+      process.exit(1);
+    }
     const taskId = id ?? cfg.activeTaskId;
     if (!taskId) {
       console.error('Tidak ada task aktif. Jalankan: numa next');
       process.exit(1);
     }
-    const r = await api.start(cfg, taskId);
-    console.log(`Task ${r.taskId} -> ${r.status}`);
+    try {
+      const r = await api.start(cfg, taskId);
+      console.log(`Task ${r.taskId} -> ${r.status}`);
+    } catch (e: any) {
+      console.error(`Error: ${e?.message || e}`);
+      process.exit(1);
+    }
   });
 
 program
@@ -165,13 +320,25 @@ program
   .description('Cetak Markdown bounded context task aktif. WAJIB dibaca AI agent sebelum edit file.')
   .action(async (id?: string) => {
     const cfg = loadConfig();
+    if (!cfg.token) {
+      console.error('Belum login. Jalankan: numa login <token>');
+      process.exit(1);
+    }
+    if (!(await ensureActiveProject(cfg))) {
+      process.exit(1);
+    }
     const taskId = id ?? cfg.activeTaskId;
     if (!taskId) {
       console.error('Tidak ada task aktif. Jalankan: numa next');
       process.exit(1);
     }
-    const r = await api.context(cfg, taskId);
-    console.log(r.markdown);
+    try {
+      const r = await api.context(cfg, taskId);
+      console.log(r.markdown);
+    } catch (e: any) {
+      console.error(`Error: ${e?.message || e}`);
+      process.exit(1);
+    }
   });
 
 program
@@ -183,6 +350,13 @@ program
   .option('--commit', 'Auto-generate conventional commit message dan jalankan git commit.')
   .action(async (id?: string, opts?: { force?: boolean; dir?: string; summary?: string; commit?: boolean }) => {
     const cfg = loadConfig();
+    if (!cfg.token) {
+      console.error('Belum login. Jalankan: numa login <token>');
+      process.exit(1);
+    }
+    if (!(await ensureActiveProject(cfg))) {
+      process.exit(1);
+    }
     const taskId = id ?? cfg.activeTaskId;
     if (!taskId) {
       console.error('Tidak ada task aktif. Jalankan: numa next');
@@ -263,112 +437,24 @@ program
   .description('Tampilkan PRD project dalam format Markdown.')
   .action(async () => {
     const cfg = loadConfig();
+    if (!cfg.token) {
+      console.error('Belum login. Jalankan: numa login <token>');
+      process.exit(1);
+    }
+    if (!(await ensureActiveProject(cfg))) {
+      process.exit(1);
+    }
     try {
       const r = await api.prd(cfg);
       const prdObj = r.prd ?? r.brd;
       if (!prdObj) {
-        throw new ApiError('PRD belum ada di project ini.', 400);
+        throw new ApiError('PRD belum ada di project ini. Generate PRD dulu lewat web UI.', 400);
       }
-      const content: Record<string, unknown> = prdObj.content as unknown as Record<string, unknown>;
-      if (typeof content === 'string') {
-        console.log(content);
-        return;
-      }
-      if (typeof content?.markdown === 'string') {
-        console.log(content.markdown);
-        return;
-      }
-      const mdParts: string[] = [];
-
-      mdParts.push('# Product Requirements Document');
-      mdParts.push('');
-      mdParts.push(`**Generated:** ${new Date(prdObj.generatedAt).toLocaleString('id-ID')}`);
-      mdParts.push(`**Version:** ${prdObj.version}`);
-      mdParts.push('');
-      mdParts.push('---');
-      mdParts.push('');
-      mdParts.push('## Ringkasan');
-      mdParts.push('');
-      const overviewVal = content.overview;
-      mdParts.push(overviewVal != null ? String(overviewVal) : '(tidak ada)');
-      mdParts.push('');
-      mdParts.push('---');
-      mdParts.push('');
-      mdParts.push('## Tujuan');
-      mdParts.push('');
-
-      const goals: string[] = Array.isArray(content.goals)
-        ? content.goals.filter((v): v is string => typeof v === 'string')
-        : [];
-      goals.forEach((g: string) => {
-        mdParts.push(`- ${g}`);
-      });
-      mdParts.push('');
-      mdParts.push('---');
-      mdParts.push('');
-      mdParts.push('## Fitur');
-      mdParts.push('');
-
-      const features: Array<{ name?: unknown; description?: unknown }> = Array.isArray(content.features)
-        ? content.features.filter((v): v is { name?: unknown; description?: unknown } => typeof v === 'object' && v !== null)
-        : [];
-      features.forEach((f: { name?: unknown; description?: unknown }) => {
-        if (typeof f.name === 'string') {
-          mdParts.push(`### ${f.name}`);
-        } else if (f.name != null) {
-          mdParts.push(`### ${String(f.name)}`);
-        }
-        if (typeof f.description === 'string' && f.description) {
-          mdParts.push(f.description);
-        } else {
-          mdParts.push('(tidak ada deskripsi)');
-        }
-        mdParts.push('');
-      });
-
-      mdParts.push('---');
-      mdParts.push('');
-      mdParts.push('## Tech Requirements');
-      mdParts.push('');
-
-      const techReqs: string[] = Array.isArray(content.techRequirements)
-        ? content.techRequirements.filter((v): v is string => typeof v === 'string')
-        : [];
-      techReqs.forEach((t: string) => {
-        mdParts.push(`- ${t}`);
-      });
-      mdParts.push('');
-      mdParts.push('---');
-      mdParts.push('');
-      mdParts.push('## Non-Functional Requirements');
-      mdParts.push('');
-
-      const nonFunc: string[] = Array.isArray(content.nonFunctional)
-        ? content.nonFunctional.filter((v): v is string => typeof v === 'string')
-        : [];
-      nonFunc.forEach((n: string) => {
-        mdParts.push(`- ${n}`);
-      });
-      mdParts.push('');
-      mdParts.push('---');
-      mdParts.push('');
-      mdParts.push('## Out of Scope');
-      mdParts.push('');
-
-      const outOfScope: string[] = Array.isArray(content.outOfScope)
-        ? content.outOfScope.filter((v): v is string => typeof v === 'string')
-        : [];
-      outOfScope.forEach((o: string) => {
-        mdParts.push(`- ${o}`);
-      });
-
-      console.log(mdParts.join('\n'));
+      const rendered = formatPrdMarkdown(prdObj.content, prdObj);
+      console.log(rendered);
     } catch (e) {
       if (e instanceof ApiError) {
         console.error(`Error [${e.status}]: ${e.message}`);
-        if (e.status === 400) {
-          console.error('PRD belum ada di project ini. Generate PRD dulu via web UI.');
-        }
       } else {
         console.error('Error:', e instanceof Error ? e.message : e);
       }

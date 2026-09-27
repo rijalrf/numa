@@ -1,4 +1,4 @@
-// Tech Stack page: Pilihan 2 Card (Rekomendasi AI vs Pilih Sendiri) + Form manual
+// Halaman Pemilihan Teknologi: Rekomendasi AI, Starter Pack, atau Pilih Manual
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -8,26 +8,20 @@ import { Badge } from '@/components/ui/badge';
 import {
   Sparkles,
   Check,
-  Loader2,
-  ArrowRight,
-  ArrowLeft,
-  Plus,
-  X,
+  Package,
   Layers,
-  Cpu,
   Database,
   Globe,
   Server,
-  ShieldCheck,
-  SlidersHorizontal,
+  Cpu,
   Lock,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { api } from '@/lib/http';
 import { cn } from '@/lib/utils';
 import { isStageLocked } from '@/lib/constants';
 import { useWizardNav } from '@/components/layout/wizard-nav';
 
-// Preset kategori untuk form manual (4 kategori inti: Frontend, Backend, Database, Deploy & Info)
 const PRESET_CATEGORIES = [
   {
     id: 'frontend',
@@ -41,7 +35,7 @@ const PRESET_CATEGORIES = [
     title: 'Backend & Autentikasi',
     icon: Server,
     description: 'Server aplikasi, API endpoints, logika bisnis, dan autentikasi',
-    options: ['TypeScript + Express', 'Node.js + Express', 'Better Auth', 'Python + FastAPI', 'Go Fiber', 'Laravel PHP'],
+    options: ['TypeScript + Express', 'Node.js + Express', 'Better Auth', 'Python + FastAPI', 'Go Fiber', 'Laravel PHP', 'NestJS'],
   },
   {
     id: 'database',
@@ -59,19 +53,48 @@ const PRESET_CATEGORIES = [
   },
 ];
 
+const STARTER_PACKS = [
+  {
+    id: 'react-express',
+    title: 'React + Express',
+    description: 'Stack fullstack JavaScript/TypeScript paling populer & fleksibel',
+    tags: ['React v18', 'TypeScript + Express', 'PostgreSQL + Prisma', 'Docker + Compose'],
+  },
+  {
+    id: 'vue-nest',
+    title: 'Vue + NestJS',
+    description: 'Arsitektur modular enterprise dengan ekosistem Vue modern',
+    tags: ['Vue.js v3', 'NestJS', 'PostgreSQL + Prisma', 'Docker + Compose'],
+  },
+  {
+    id: 'nextjs',
+    title: 'Next.js Fullstack',
+    description: 'Framework all-in-one React dengan SSR, API Routes & serverless',
+    tags: ['Next.js 14', 'TypeScript', 'PostgreSQL + Prisma', 'Vercel'],
+  },
+  {
+    id: 'laravel-mysql',
+    title: 'Laravel + MySQL',
+    description: 'Backend PHP tangguh & produktif dengan Tailwind CSS & MySQL',
+    tags: ['Tailwind CSS', 'Laravel PHP', 'MySQL + Drizzle', 'VPS Linux (Ubuntu)'],
+  },
+];
+
 export function TechStackPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
 
-  const [selectedMode, setSelectedMode] = useState<'ai' | 'manual'>('ai');
+  const [selectedMode, setSelectedMode] = useState<'ai' | 'starter' | 'manual'>('ai');
+  const [selectedStarterPack, setSelectedStarterPack] = useState<string>('react-express');
   const [view, setView] = useState<'select' | 'manual'>('select');
   const [selected, setSelected] = useState<string[]>([]);
+  const [selectedByCategory, setSelectedByCategory] = useState<Record<string, string>>({});
+  const [customInputs, setCustomInputs] = useState<Record<string, string>>({});
   const [generatingAi, setGeneratingAi] = useState(false);
   const [saving, setSaving] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
-  const [customInputs, setCustomInputs] = useState<Record<string, string>>({});
 
-  // Load status project dan tech stack yang tersimpan
+  // Load status project dan teknologi yang tersimpan
   useEffect(() => {
     if (!projectId) return;
 
@@ -89,20 +112,19 @@ export function TechStackPage() {
           setSelected(existing.map((s) => s.name));
         }
       } catch (err) {
-        console.error('Gagal load tech stack:', err);
+        console.error('Gagal memuat teknologi:', err);
       }
     };
 
     loadTechStack();
   }, [projectId]);
 
-  // Alur Rekomendasi AI: Generate langsung & simpan ke DB lalu otomatis redirect ke PRD
+  // Alur Rekomendasi AI
   const handleAiGenerateAndProceed = async () => {
     if (!projectId || generatingAi || isLocked) return;
     setGeneratingAi(true);
 
     try {
-      // 1. Panggil rekomendasi AI
       const recRes = await api<{ techStack?: string[]; reasoning?: string }>(
         `/api/projects/${projectId}/techstack/recommend`,
         { method: 'POST' }
@@ -111,54 +133,63 @@ export function TechStackPage() {
       const stackList = recRes.techStack && recRes.techStack.length > 0 ? recRes.techStack : [];
 
       if (stackList.length === 0) {
-        alert('Gagal menghasilkan rekomendasi tech stack dari AI. Silakan coba lagi atau pilih secara manual.');
+        alert('Gagal menghasilkan rekomendasi teknologi dari AI. Silakan coba lagi atau pilih secara manual.');
         setGeneratingAi(false);
         return;
       }
 
-      // 2. Simpan tech stack terpilih ke backend (otomatis memajukan wizardStep ke prd)
       await api(`/api/projects/${projectId}/techstack`, {
         method: 'PUT',
         body: JSON.stringify({ techStack: stackList }),
       });
 
-      // 3. Langsung navigasi ke halaman PRD
       navigate(`/projects/${projectId}/prd`);
     } catch (err) {
-      console.error('Error saat generate & simpan tech stack AI:', err);
+      console.error('Error saat generate & simpan teknologi AI:', err);
       alert('Terjadi kesalahan saat memproses rekomendasi AI.');
       setGeneratingAi(false);
     }
   };
 
-  const toggleSelection = (label: string) => {
-    if (isLocked) return;
-    setSelected((prev) =>
-      prev.includes(label) ? prev.filter((l) => l !== label) : [...prev, label]
-    );
+  // Simpan pilihan starter pack
+  const handleStarterPackProceed = async () => {
+    if (!projectId || saving || isLocked) return;
+    const pack = STARTER_PACKS.find((p) => p.id === selectedStarterPack);
+    if (!pack) return;
+
+    setSaving(true);
+    try {
+      await api(`/api/projects/${projectId}/techstack`, {
+        method: 'PUT',
+        body: JSON.stringify({ techStack: pack.tags }),
+      });
+      navigate(`/projects/${projectId}/prd`);
+    } catch (err) {
+      console.error('Error menyimpan starter pack:', err);
+      alert('Terjadi kesalahan saat menyimpan pilihan teknologi.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleAddCustom = (categoryId: string) => {
-    if (isLocked) return;
-    const val = customInputs[categoryId]?.trim();
-    if (!val) return;
-
-    if (!selected.includes(val)) {
-      setSelected((prev) => [...prev, val]);
-    }
-    setCustomInputs((prev) => ({ ...prev, [categoryId]: '' }));
-  };
-
-  const handleKeyDownCustom = (e: React.KeyboardEvent<HTMLInputElement>, categoryId: string) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleAddCustom(categoryId);
-    }
+  const handleCategorySelectChange = (categoryId: string, val: string) => {
+    setSelectedByCategory((prev) => ({ ...prev, [categoryId]: val }));
   };
 
   // Simpan pilihan manual dan lanjut ke PRD
-  const saveAndContinue = async () => {
-    if (selected.length === 0) {
+  const saveManualAndContinue = async () => {
+    const list: string[] = [];
+    for (const cat of PRESET_CATEGORIES) {
+      const val = selectedByCategory[cat.id];
+      if (val === '__other__') {
+        const custom = customInputs[cat.id]?.trim();
+        if (custom) list.push(custom);
+      } else if (val) {
+        list.push(val);
+      }
+    }
+
+    if (list.length === 0) {
       alert('Pilih minimal 1 teknologi untuk melanjutkan.');
       return;
     }
@@ -167,13 +198,13 @@ export function TechStackPage() {
     try {
       await api(`/api/projects/${projectId}/techstack`, {
         method: 'PUT',
-        body: JSON.stringify({ techStack: selected }),
+        body: JSON.stringify({ techStack: list }),
       });
 
       navigate(`/projects/${projectId}/prd`);
     } catch (err) {
-      console.error('Error saving tech stack:', err);
-      alert('Terjadi kesalahan saat menyimpan tech stack.');
+      console.error('Error saving teknologi:', err);
+      alert('Terjadi kesalahan saat menyimpan teknologi.');
     } finally {
       setSaving(false);
     }
@@ -200,48 +231,49 @@ export function TechStackPage() {
     view === 'manual'
       ? {
           back: {
-            label: 'Pilihan Metode',
+            label: 'Kembali',
             onClick: () => setView('select'),
           },
           next: {
-            label: 'Simpan & Lanjut ke PRD',
-            onClick: saveAndContinue,
-            disabled: selected.length === 0,
+            label: saving ? 'Menyimpan...' : 'Lanjut',
+            onClick: saveManualAndContinue,
             loading: saving,
           },
         }
       : isLocked
       ? {
           back: {
-            label: 'Kembali ke Chat',
+            label: 'Kembali',
             onClick: handleBackToChat,
           },
           next: {
-            label: 'Lanjut ke PRD',
+            label: 'Lanjut',
             onClick: () => navigate(`/projects/${projectId}/prd`),
           },
         }
       : {
           back: {
-            label: 'Kembali ke Chat',
+            label: 'Kembali',
             onClick: handleBackToChat,
           },
-          next:
-            selectedMode === 'ai'
-              ? {
-                  label: 'Lanjut ke PRD (Rekomendasi AI)',
-                  onClick: handleAiGenerateAndProceed,
-                  loading: generatingAi,
-                }
-              : {
-                  label: 'Lanjut Pilih Manual',
-                  onClick: () => setView('manual'),
-                },
+          next: {
+            label: generatingAi || saving ? 'Menyimpan...' : 'Lanjut',
+            onClick: () => {
+              if (selectedMode === 'ai') {
+                handleAiGenerateAndProceed();
+              } else if (selectedMode === 'starter') {
+                handleStarterPackProceed();
+              } else {
+                setView('manual');
+              }
+            },
+            loading: generatingAi || saving,
+          },
         }
   );
 
   // ============================================================
-  // TAMPILAN 1: READ-ONLY (JIKA TAHAP TECH STACK SUDAH DILEWATI/TERKUNCI)
+  // TAMPILAN 1: READ-ONLY (JIKA TAHAP SUDAH DILEWATI/TERKUNCI)
   // ============================================================
   if (isLocked) {
     return (
@@ -249,7 +281,7 @@ export function TechStackPage() {
         <div className="flex items-center gap-2.5 p-3.5 bg-muted/70 border border-border rounded-xl text-xs text-muted-foreground shadow-xs">
           <Lock className="h-4 w-4 text-primary shrink-0" />
           <span>
-            Tahap Tech Stack telah selesai dan terkunci (Read-Only). Konfigurasi arsitektur teknologi tersimpan permanen dan tidak dapat diubah lagi.
+            Tahap pemilihan teknologi telah selesai dan terkunci. Konfigurasi arsitektur teknologi tersimpan permanen.
           </span>
         </div>
 
@@ -266,7 +298,7 @@ export function TechStackPage() {
           <CardContent className="pt-4 space-y-4">
             {selected.length === 0 ? (
               <p className="text-xs text-muted-foreground italic py-2">
-                Tidak ada data tech stack tersimpan.
+                Tidak ada data teknologi tersimpan.
               </p>
             ) : (
               <div className="flex flex-wrap gap-2">
@@ -288,204 +320,114 @@ export function TechStackPage() {
   }
 
   // ============================================================
-  // TAMPILAN 2: FORM PILIHAN MANUAL TECH STACK
+  // TAMPILAN 2: FORM PILIHAN MANUAL TEKNOLOGI (DROPDOWN)
   // ============================================================
   if (view === 'manual') {
     return (
-      <div className="max-w-4xl mx-auto w-full space-y-6">
-        {/* Status pilihan */}
-        <div className="flex items-center justify-end pb-1">
-          <span className="text-xs text-muted-foreground bg-muted/60 px-3 py-1 rounded-full">
-            {selected.length} teknologi dipilih
-          </span>
-        </div>
-
-        {/* Bagian Form Pilihan Manual per Kategori */}
+      <div className="max-w-3xl mx-auto w-full space-y-6">
         <Card className="border-border shadow-xs">
           <CardHeader className="pb-3 bg-muted/20 border-b border-border">
             <CardTitle className="text-base font-semibold text-foreground flex items-center gap-2">
               <Layers className="h-4 w-4 text-primary" />
-              <span>Pilihan Manual Tech Stack</span>
+              <span>Pilih Teknologi</span>
             </CardTitle>
             <CardDescription className="text-xs text-muted-foreground">
-              Pilih opsi teknologi yang tersedia atau ketik teknologi kustom Anda pada setiap lapisan aplikasi
+              Tentukan opsi teknologi untuk setiap lapisan arsitektur aplikasi Anda
             </CardDescription>
           </CardHeader>
 
-          <CardContent className="space-y-5 pt-4">
+          <CardContent className="space-y-5 pt-5">
             {PRESET_CATEGORIES.map((cat) => {
               const Icon = cat.icon;
-              const customValue = customInputs[cat.id] || '';
+              const currentVal = selectedByCategory[cat.id] || '';
+              const customVal = customInputs[cat.id] || '';
 
               return (
                 <div key={cat.id} className="space-y-2 pb-4 border-b border-border/60 last:border-b-0 last:pb-0">
                   <div className="flex items-center gap-2">
-                    <Icon className="h-3.5 w-3.5 text-primary" />
-                    <span className="text-xs font-semibold text-foreground">
+                    <Icon className="h-4 w-4 text-primary shrink-0" />
+                    <label className="text-xs font-semibold text-foreground">
                       {cat.title}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground hidden sm:inline">
-                      — {cat.description}
-                    </span>
+                    </label>
                   </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    {cat.description}
+                  </p>
 
-                  {/* Pilihan preset badge */}
-                  <div className="flex flex-wrap gap-1.5 pt-0.5">
-                    {cat.options.map((opt) => {
-                      const isSelected = selected.some(
-                        (s) => s.toLowerCase().includes(opt.toLowerCase()) || opt.toLowerCase().includes(s.toLowerCase())
-                      );
-
-                      return (
-                        <Badge
-                          key={opt}
-                          variant={isSelected ? 'default' : 'outline'}
-                          onClick={() => toggleSelection(opt)}
-                          className={cn(
-                            'cursor-pointer px-2.5 py-1 text-xs transition-all font-normal',
-                            isSelected
-                              ? 'bg-primary text-primary-foreground border-primary'
-                              : 'hover:border-primary/50 hover:bg-accent/50'
-                          )}
-                        >
-                          {isSelected && <Check className="h-3 w-3 mr-1" />}
-                          {opt}
-                        </Badge>
-                      );
-                    })}
-                  </div>
-
-                  {/* Tambah kustom per kategori */}
-                  <div className="flex gap-2 max-w-sm pt-1">
-                    <Input
-                      placeholder={`Tambah ${cat.title.toLowerCase()} lain...`}
-                      value={customValue}
-                      onChange={(e) =>
-                        setCustomInputs((prev) => ({ ...prev, [cat.id]: e.target.value }))
-                      }
-                      onKeyDown={(e) => handleKeyDownCustom(e, cat.id)}
-                      className="h-8 text-xs bg-background"
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleAddCustom(cat.id)}
-                      disabled={!customValue.trim()}
-                      className="h-8 px-2.5 text-xs gap-1"
+                  <div className="space-y-2 pt-1 max-w-md">
+                    <select
+                      value={currentVal}
+                      onChange={(e) => handleCategorySelectChange(cat.id, e.target.value)}
+                      className="h-9 w-full rounded-lg border border-border bg-background px-3 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
                     >
-                      <Plus className="h-3 w-3" />
-                      Tambah
-                    </Button>
+                      <option value="">Pilih {cat.title}...</option>
+                      {cat.options.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                      <option value="__other__">Lainnya (Ketik Sendiri)...</option>
+                    </select>
+
+                    {currentVal === '__other__' && (
+                      <Input
+                        placeholder={`Ketik ${cat.title.toLowerCase()} kustom...`}
+                        value={customVal}
+                        onChange={(e) =>
+                          setCustomInputs((prev) => ({ ...prev, [cat.id]: e.target.value }))
+                        }
+                        className="h-8 text-xs bg-background mt-1.5"
+                        autoFocus
+                      />
+                    )}
                   </div>
                 </div>
               );
             })}
           </CardContent>
         </Card>
-
-        {/* Ringkasan Teknologi Terpilih */}
-        <div className="rounded-xl border border-border bg-card p-4 space-y-2 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-foreground">
-              Daftar Teknologi Terpilih ({selected.length})
-            </span>
-            {selected.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setSelected([])}
-                className="text-xs text-muted-foreground hover:text-destructive transition-colors"
-              >
-                Kosongkan Pilihan
-              </button>
-            )}
-          </div>
-
-          {selected.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic py-1">
-              Belum ada teknologi yang dipilih. Klik badge kategori di atas untuk memilih teknologi.
-            </p>
-          ) : (
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {selected.map((item) => (
-                <span
-                  key={item}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary/10 text-primary border border-primary/30 text-xs font-medium"
-                >
-                  <span className="truncate max-w-xs">{item}</span>
-                  <button
-                    type="button"
-                    onClick={() => toggleSelection(item)}
-                    className="hover:text-destructive hover:bg-destructive/10 rounded p-0.5 transition-colors"
-                    title="Hapus"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Footer Form Manual */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-border">
-          <div className="text-xs">
-            {selected.length === 0 ? (
-              <span className="text-destructive font-medium">
-                Pilih minimal 1 teknologi untuk melanjutkan ke penyusunan PRD
-              </span>
-            ) : (
-              <span className="text-primary font-medium">
-                {selected.length} teknologi terpilih.
-              </span>
-            )}
-          </div>
-        </div>
       </div>
     );
   }
 
   // ============================================================
-  // TAMPILAN 3: DUA CARD UTAMA ("Pilih Teknologi apa?")
+  // TAMPILAN 3: PILIH METODE PENENTUAN TEKNOLOGI
   // ============================================================
   return (
-    <div className="max-w-3xl mx-auto w-full space-y-8 py-4">
-      {/* Header Utama */}
+    <div className="max-w-4xl mx-auto w-full space-y-8 py-4">
       <div className="text-center space-y-2">
         <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-          Pilih Teknologi apa?
+          Pilih Teknologi
         </h2>
         <p className="text-sm text-muted-foreground max-w-md mx-auto">
-          Pilih metode penentuan tech stack aplikasi Anda. Anda dapat menyerahkan analisis arsitektur ke AI atau memilihnya secara manual.
+          Pilih metode penentuan teknologi aplikasi Anda. Rekomendasi otomatis AI, paket populer siap pakai, atau pilih manual.
         </p>
       </div>
 
-      {/* Grid 2 Card */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
-        {/* CARD 1: Rekomendasi AI (Default) */}
+      {/* Grid 3 Mode */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
+        {/* CARD 1: Rekomendasi AI */}
         <div
           onClick={() => setSelectedMode('ai')}
           className={cn(
-            'group relative rounded-2xl border-2 p-6 flex flex-col justify-between cursor-pointer transition-all duration-200 select-none shadow-xs',
+            'group relative rounded-2xl border-2 p-5 flex flex-col justify-between cursor-pointer transition-all duration-200 select-none shadow-xs',
             selectedMode === 'ai'
               ? 'border-primary bg-primary/5 dark:bg-primary/10 ring-2 ring-primary/30 shadow-md'
               : 'border-border bg-card hover:border-primary/50 hover:bg-accent/40'
           )}
         >
-          <div className="space-y-4">
-            {/* Header Card: Icon & Radio Status */}
+          <div className="space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div
                 className={cn(
-                  'h-12 w-12 rounded-xl flex items-center justify-center transition-colors',
+                  'h-10 w-10 rounded-xl flex items-center justify-center transition-colors',
                   selectedMode === 'ai'
-                    ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'bg-primary/10 text-primary group-hover:bg-primary/20'
                 )}
               >
-                <Sparkles className="h-6 w-6" />
+                <Sparkles className="h-5 w-5" />
               </div>
-
               <div
                 className={cn(
                   'h-5 w-5 rounded-full flex items-center justify-center border transition-all',
@@ -498,45 +440,24 @@ export function TechStackPage() {
               </div>
             </div>
 
-            {/* Konten Card */}
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <h3 className="text-lg font-semibold text-foreground">
-                  Rekomendasi AI
-                </h3>
-                <Badge variant="outline" className="text-[10px] border-primary/40 text-primary font-medium">
+                <h3 className="text-sm font-semibold text-foreground">Rekomendasi AI</h3>
+                <Badge variant="outline" className="text-[9px] border-primary/40 text-primary font-medium px-1.5 py-0">
                   Rekomendasi
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                AI menganalisis ide aplikasi dari obrolan brainstorming untuk menyusun kombinasi stack paling optimal, stabil, dan modern.
+                AI menganalisis kebutuhan aplikasi untuk menyusun kombinasi teknologi paling pas dan modern.
               </p>
-            </div>
-
-            {/* Poin Keunggulan */}
-            <div className="space-y-1.5 pt-2 border-t border-border/60 text-xs text-foreground/80">
-              <div className="flex items-center gap-2 text-[11px]">
-                <Check className="h-3.5 w-3.5 text-primary shrink-0" />
-                <span>Analisis otomatis sesuai skala aplikasi</span>
-              </div>
-              <div className="flex items-center gap-2 text-[11px]">
-                <Check className="h-3.5 w-3.5 text-primary shrink-0" />
-                <span>Kompatibilitas modul frontend & backend terjamin</span>
-              </div>
-              <div className="flex items-center gap-2 text-[11px]">
-                <Check className="h-3.5 w-3.5 text-primary shrink-0" />
-                <span>Langsung generate & siap lanjut ke PRD</span>
-              </div>
             </div>
           </div>
 
-          <div className="pt-6">
+          <div className="pt-4">
             <span
               className={cn(
-                'text-xs font-semibold block text-center py-2 rounded-lg transition-colors',
-                selectedMode === 'ai'
-                  ? 'text-primary'
-                  : 'text-muted-foreground'
+                'text-xs font-medium block text-center py-1.5 rounded-lg transition-colors',
+                selectedMode === 'ai' ? 'text-primary font-semibold' : 'text-muted-foreground'
               )}
             >
               {selectedMode === 'ai' ? 'Pilihan Terpilih' : 'Klik untuk memilih'}
@@ -544,30 +465,87 @@ export function TechStackPage() {
           </div>
         </div>
 
-        {/* CARD 2: Pilih Sendiri (Manual) */}
+        {/* CARD 2: Starter Pack Populer */}
+        <div
+          onClick={() => setSelectedMode('starter')}
+          className={cn(
+            'group relative rounded-2xl border-2 p-5 flex flex-col justify-between cursor-pointer transition-all duration-200 select-none shadow-xs',
+            selectedMode === 'starter'
+              ? 'border-primary bg-primary/5 dark:bg-primary/10 ring-2 ring-primary/30 shadow-md'
+              : 'border-border bg-card hover:border-primary/50 hover:bg-accent/40'
+          )}
+        >
+          <div className="space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div
+                className={cn(
+                  'h-10 w-10 rounded-xl flex items-center justify-center transition-colors',
+                  selectedMode === 'starter'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'bg-primary/10 text-primary group-hover:bg-primary/20'
+                )}
+              >
+                <Package className="h-5 w-5" />
+              </div>
+              <div
+                className={cn(
+                  'h-5 w-5 rounded-full flex items-center justify-center border transition-all',
+                  selectedMode === 'starter'
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-muted-foreground/40 bg-background'
+                )}
+              >
+                {selectedMode === 'starter' && <Check className="h-3 w-3 stroke-[3]" />}
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-foreground">Starter Pack</h3>
+                <Badge variant="outline" className="text-[9px] border-border text-muted-foreground font-medium px-1.5 py-0">
+                  Paket Populer
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Pilih paket arsitektur teruji yang sering digunakan developer: React, Vue, Next.js, atau Laravel.
+              </p>
+            </div>
+          </div>
+
+          <div className="pt-4">
+            <span
+              className={cn(
+                'text-xs font-medium block text-center py-1.5 rounded-lg transition-colors',
+                selectedMode === 'starter' ? 'text-primary font-semibold' : 'text-muted-foreground'
+              )}
+            >
+              {selectedMode === 'starter' ? 'Pilihan Terpilih' : 'Klik untuk memilih'}
+            </span>
+          </div>
+        </div>
+
+        {/* CARD 3: Pilih Sendiri (Manual) */}
         <div
           onClick={() => setSelectedMode('manual')}
           className={cn(
-            'group relative rounded-2xl border-2 p-6 flex flex-col justify-between cursor-pointer transition-all duration-200 select-none shadow-xs',
+            'group relative rounded-2xl border-2 p-5 flex flex-col justify-between cursor-pointer transition-all duration-200 select-none shadow-xs',
             selectedMode === 'manual'
               ? 'border-primary bg-primary/5 dark:bg-primary/10 ring-2 ring-primary/30 shadow-md'
               : 'border-border bg-card hover:border-primary/50 hover:bg-accent/40'
           )}
         >
-          <div className="space-y-4">
-            {/* Header Card: Icon & Radio Status */}
+          <div className="space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div
                 className={cn(
-                  'h-12 w-12 rounded-xl flex items-center justify-center transition-colors',
+                  'h-10 w-10 rounded-xl flex items-center justify-center transition-colors',
                   selectedMode === 'manual'
-                    ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'bg-muted text-muted-foreground group-hover:bg-muted/80'
                 )}
               >
-                <SlidersHorizontal className="h-6 w-6" />
+                <SlidersHorizontal className="h-5 w-5" />
               </div>
-
               <div
                 className={cn(
                   'h-5 w-5 rounded-full flex items-center justify-center border transition-all',
@@ -580,45 +558,24 @@ export function TechStackPage() {
               </div>
             </div>
 
-            {/* Konten Card */}
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <h3 className="text-lg font-semibold text-foreground">
-                  Pilih Sendiri
-                </h3>
-                <Badge variant="outline" className="text-[10px] text-muted-foreground font-medium">
+                <h3 className="text-sm font-semibold text-foreground">Pilih Sendiri</h3>
+                <Badge variant="outline" className="text-[9px] text-muted-foreground font-medium px-1.5 py-0">
                   Manual
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Tentukan sendiri kombinasi arsitektur per kategori (Frontend, Backend, Database, Auth, dan DevOps) sesuai standar tim Anda.
+                Tentukan secara bebas kombinasi framework, database, dan deploy per kategori via dropdown.
               </p>
-            </div>
-
-            {/* Poin Keunggulan */}
-            <div className="space-y-1.5 pt-2 border-t border-border/60 text-xs text-foreground/80">
-              <div className="flex items-center gap-2 text-[11px]">
-                <Check className="h-3.5 w-3.5 text-primary shrink-0" />
-                <span>Kendali penuh atas setiap layer aplikasi</span>
-              </div>
-              <div className="flex items-center gap-2 text-[11px]">
-                <Check className="h-3.5 w-3.5 text-primary shrink-0" />
-                <span>Daftar preset framework populer & opsi custom</span>
-              </div>
-              <div className="flex items-center gap-2 text-[11px]">
-                <Check className="h-3.5 w-3.5 text-primary shrink-0" />
-                <span>Cocok untuk kebutuhan spesifik perusahaan</span>
-              </div>
             </div>
           </div>
 
-          <div className="pt-6">
+          <div className="pt-4">
             <span
               className={cn(
-                'text-xs font-semibold block text-center py-2 rounded-lg transition-colors',
-                selectedMode === 'manual'
-                  ? 'text-primary'
-                  : 'text-muted-foreground'
+                'text-xs font-medium block text-center py-1.5 rounded-lg transition-colors',
+                selectedMode === 'manual' ? 'text-primary font-semibold' : 'text-muted-foreground'
               )}
             >
               {selectedMode === 'manual' ? 'Pilihan Terpilih' : 'Klik untuk memilih'}
@@ -627,14 +584,58 @@ export function TechStackPage() {
         </div>
       </div>
 
-      {/* Info Eksekusi */}
-      <div className="pt-4 border-t border-border text-center">
-        <p className="text-xs text-muted-foreground">
-          {selectedMode === 'ai'
-            ? 'Pilihan Rekomendasi AI aktif. Gunakan tombol di bar navigasi atas untuk lanjut ke penyusunan PRD.'
-            : 'Pilihan Manual aktif. Gunakan tombol di bar navigasi atas untuk membuka formulir kategori teknologi.'}
-        </p>
-      </div>
+      {/* Pilihan Opsi Starter Pack jika mode 'starter' dipilih */}
+      {selectedMode === 'starter' && (
+        <div className="space-y-3 pt-2">
+          <div className="text-xs font-semibold text-foreground">
+            Pilih Salah Satu Starter Pack:
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {STARTER_PACKS.map((pack) => {
+              const isSelected = selectedStarterPack === pack.id;
+              return (
+                <div
+                  key={pack.id}
+                  onClick={() => setSelectedStarterPack(pack.id)}
+                  className={cn(
+                    'p-4 rounded-xl border cursor-pointer transition-all space-y-2',
+                    isSelected
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                      : 'border-border bg-card hover:border-primary/40'
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-foreground">
+                      {pack.title}
+                    </span>
+                    <div
+                      className={cn(
+                        'h-4 w-4 rounded-full flex items-center justify-center border text-[10px]',
+                        isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'
+                      )}
+                    >
+                      {isSelected && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-snug">
+                    {pack.description}
+                  </p>
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {pack.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="text-[10px] px-2 py-0.5 rounded bg-muted text-foreground/80 font-mono"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

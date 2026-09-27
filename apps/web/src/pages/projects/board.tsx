@@ -72,14 +72,17 @@ export function BoardPage() {
 
   useWizardNav({
     back: {
-      label: 'Kembali ke Diagram Struktur',
+      label: 'Kembali',
       onClick: handleBackToTree,
     },
-    next: {
-      label: 'Perintah Eksekusi',
-      onClick: () => setExecutionDialogOpen(true),
-      hideIcon: true,
-    },
+    next:
+      !loading && !generating && tasks.length > 0
+        ? {
+            label: 'Perintah Eksekusi',
+            onClick: () => setExecutionDialogOpen(true),
+            hideIcon: true,
+          }
+        : null,
   });
 
   const generateTasks = useCallback(async () => {
@@ -113,23 +116,14 @@ export function BoardPage() {
           setError(null);
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error generating tasks:', err);
-      // Auto-recovery: periksa apakah backend sebenarnya sudah selesai menyimpan task ke DB
-      try {
-        const recoveryJson = await api<{ tasks: Task[] }>(
-          `/api/projects/${projectId}/tasks`
-        );
-        if (recoveryJson.tasks && recoveryJson.tasks.length > 0) {
-          setTasks(recoveryJson.tasks);
-          setSuccessMessage(`${recoveryJson.tasks.length} task berhasil dimuat.`);
-          setError(null);
-          return;
-        }
-      } catch {}
-
-      const msg = err instanceof Error ? err.message : 'Gagal menghasilkan task.';
-      setError(`Gagal merancang task: ${msg}`);
+      if (err?.status === 409) {
+        setError('Generasi task sedang berjalan. Mohon tunggu sebentar.');
+      } else {
+        const msg = err instanceof Error ? err.message : 'Gagal menghasilkan task.';
+        setError(`Gagal merancang task: ${msg}`);
+      }
     } finally {
       setGenerating(false);
       setLoading(false);
@@ -188,30 +182,7 @@ export function BoardPage() {
 
   const displayedTasks = tasks;
 
-  if (generating) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] px-4">
-        <Card className="max-w-md w-full p-6 text-center space-y-4 border-primary/30 shadow-md">
-          <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center mx-auto">
-            <Loader2 className="h-6 w-6 animate-spin" />
-          </div>
-          <div className="space-y-1.5">
-            <h2 className="text-base font-semibold text-foreground">
-              Merancang Atomic Tasks dengan AI
-            </h2>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              AI Numa sedang menganalisis arsitektur dan memecah kebutuhan menjadi atomic tasks lengkap dengan bounded context, validation commands, dan acceptance criteria.
-            </p>
-          </div>
-          <div className="rounded-lg bg-muted/60 p-2.5 text-[11px] text-muted-foreground">
-            Waktu estimasi: 30–60 detik. Mohon jangan menutup halaman.
-          </div>
-        </Card>
-      </div>
-    );
-  }
-
-  if (loading) {
+  if (generating || loading) {
     return (
       <div className="space-y-6">
         <div className="w-full h-[calc(100vh-230px)] min-h-[560px] overflow-x-auto no-scrollbar">
@@ -259,6 +230,7 @@ export function BoardPage() {
                   size="sm"
                   variant="outline"
                   onClick={() => loadTasks('manual')}
+                  disabled={generating}
                   className="h-7 text-xs gap-1 border-destructive/30 hover:bg-destructive/10 text-destructive"
                 >
                   <RefreshCw className="h-3 w-3" />
@@ -268,9 +240,10 @@ export function BoardPage() {
                   size="sm"
                   variant="destructive"
                   onClick={generateTasks}
+                  disabled={generating}
                   className="h-7 text-xs"
                 >
-                  Coba Lagi
+                  {generating ? 'Memproses...' : 'Coba Lagi'}
                 </Button>
               </>
             )}
