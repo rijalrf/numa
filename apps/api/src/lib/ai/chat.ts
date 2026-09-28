@@ -1,6 +1,7 @@
 // Fungsi AI untuk sesi chat ide awal dan struktur dekomposisi: finalizeChatSession, recommendTechStack, generateTreeFromPrd
 import { generateJson } from './ai-service';
 import { TreeDataSchema, type TreeData, RecommendTechStackSchema } from './schemas';
+import { normalizeToGoldenPack } from './golden-stack';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 import {
@@ -138,7 +139,10 @@ export async function recommendTechStack(projectId: string): Promise<{ techStack
     maxRetries: 2,
   });
 
-  return result;
+  return {
+    ...result,
+    techStack: normalizeToGoldenPack(result.techStack),
+  };
 }
 
 // ===============================================

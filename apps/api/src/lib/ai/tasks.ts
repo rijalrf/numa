@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { generateJson } from './ai-service.js';
 import type { RoadmapData } from './roadmap.js';
 import type { StackContract } from './stack-contract.js';
+import { resolveArchitectureContract, renderArchitectureContract } from './architecture-contract.js';
 
 export function defaultValidation(layer: string, stack?: StackContract): string[] {
   const beFramework = (stack?.backend.framework ?? 'Express').toLowerCase();
@@ -89,6 +90,19 @@ export function defaultValidation(layer: string, stack?: StackContract): string[
   }
 }
 
+export function defaultAdvisory(layer: string, stack?: StackContract): string[] {
+  const be = stack?.backend.framework.toLowerCase() ?? '';
+  const isLaravel = be.includes('laravel') || be.includes('php');
+  if (isLaravel) {
+    return ['composer audit'];
+  }
+  // Node / TypeScript ecosystem
+  if (layer === 'BOOTSTRAP' || layer === 'BACKEND' || layer === 'INTEGRATION') {
+    return ['npm audit --audit-level=high'];
+  }
+  return [];
+}
+
 const TasksSchema = z.object({
   tasks: z
     .array(
@@ -108,6 +122,7 @@ const TasksSchema = z.object({
         implementation_steps: z.array(z.string()).default([]),
         acceptanceCriteria: z.array(z.string()).min(1),
         validation_commands: z.array(z.string()).default([]),
+        advisory_commands: z.array(z.string()).default([]),
         definition_of_done: z.array(z.string()).default([]),
         out_of_scope: z.array(z.string()).default([]),
         apiContracts: z
@@ -132,7 +147,7 @@ const TasksSchema = z.object({
           .default([]),
       }),
     )
-    .min(3),
+    .min(1),
 });
 
 export type TaskGen = z.infer<typeof TasksSchema>['tasks'][number];
@@ -159,6 +174,12 @@ export async function generateTasksFromRoadmap(args: {
   projectId?: string;
   feedback?: string;
   stack?: StackContract;
+  cycle?: {
+    request: string;
+    impact: unknown;
+    repoSummary?: unknown;
+    startOrder?: number;
+  };
 }): Promise<TaskGen[]> {
   const prdDoc = args.prd ?? args.brd;
   const feFramework = args.stack?.frontend.framework ?? 'React';
@@ -171,6 +192,14 @@ export async function generateTasksFromRoadmap(args: {
   const feEntryFiles = isVue
     ? ['apps/web/src/main.ts', 'apps/web/src/App.vue']
     : ['apps/web/src/main.tsx', 'apps/web/src/App.tsx'];
+
+  const cycleSystemRules = args.cycle
+    ? `\nATURAN KHUSUS CHANGE CYCLE (CODEBASE SUDAH ADA):
+- Jangan membuat task BOOTSTRAP ulang kecuali perubahan memerlukan re-konfigurasi env/dependensi fundamental. Langsung ke task DATABASE/BACKEND/FRONTEND/INTEGRATION sesuai kebutuhan.
+- 'files_to_modify' WAJIB menargetkan berkas yang sudah ada di codebase (lihat ringkasan workspace).
+- Jika ada berkas penting yang menjadi referensi dan tidak boleh diubah oleh agent, daftarkan di 'files_readonly'.
+- Urutan order task mulai dari ${args.cycle.startOrder ?? 1}.\n`
+    : '';
 
   const system = `Anda adalah Tech Lead senior. Tugas Anda adalah memecah fitur aplikasi menjadi atomic tasks terstruktur yang dirancang agar DAPAT DIEKSEKUSI DENGAN SUKSES OLEH LOW-COST AI CODING AGENT ATAU JUNIOR DEVELOPER TANPA HALUSINASI DAN MENGHASILKAN APLIKASI YANG BISA DIJALANKAN 100% END-TO-END.
 
@@ -195,7 +224,8 @@ ATURAN WAJIB LAYER BACKEND (KEAMANAN, ERROR HANDLING, VALIDASI):
 13. VALIDASI INPUT: Setiap endpoint POST/PUT/PATCH WAJIB memvalidasi request body sebelum memproses.
 14. TRANSAKSI & ATOMISITAS: Operasi yang melibatkan baca-lalu-tulis pada resource bersama WAJIB menggunakan transaksi database.
 15. INTEGRITAS RELASI: Endpoint DELETE WAJIB memeriksa relasi aktif. Jika ada relasi aktif, TOLAK penghapusan dengan status Conflict (HTTP 409).
-16. PAGINATION: Setiap endpoint GET yang mengembalikan daftar WAJIB menerima query params ?page=1&limit=20 dan mengembalikan data berpaginasi beserta metadata.`;
+16. PAGINATION: Setiap endpoint GET yang mengembalikan daftar WAJIB menerima query params ?page=1&limit=20 dan mengembalikan data berpaginasi beserta metadata.
+${cycleSystemRules}`;
 
   const fence = (label: string, data: unknown) => {
     if (!data) return '';
@@ -235,9 +265,21 @@ ATURAN WAJIB LAYER BACKEND (KEAMANAN, ERROR HANDLING, VALIDASI):
     ? `\nTECH STACK CONTRACT (WAJIB DIIKUTI SECARA KETAT):\n- Frontend: ${args.stack.frontend.framework} ${args.stack.frontend.version ?? ''}\n- Backend: ${args.stack.backend.framework} ${args.stack.backend.version ?? ''}\n- Database: ${args.stack.database.engine} (ORM: ${args.stack.database.orm ?? '-'})\n- Styling: ${args.stack.styling}\n- Testing: ${args.stack.testing}\n`
     : '';
 
+  const archContractText = args.stack
+    ? fence('KONTRAK ARSITEKTUR WAJIB (MENANG ATAS KEBIASAAN UMUM)', renderArchitectureContract(resolveArchitectureContract(args.stack)))
+    : '';
+
+  const cycleText = args.cycle
+    ? `${fence('PERMINTAAN PERUBAHAN CYCLE', args.cycle.request)}
+${fence('HASIL ANALISIS DAMPAK CYCLE', args.cycle.impact)}
+${fence('RINGKASAN WORKSPACE REPO (numa sync)', args.cycle.repoSummary)}`
+    : '';
+
   const user = `ROADMAP:
 ${JSON.stringify(args.roadmap, null, 2)}
 ${stackContractText}
+${archContractText}
+${cycleText}
 ${markdownPrdText}
 ${reqIndexText}
 ${reqText}
@@ -357,9 +399,12 @@ Minimal 1 task per fitur. Urutkan order global. Pastikan semua task acceptance c
     const cmds = t.validation_commands;
     // Hanya ganti jika kosong — hormati pilihan eksplisit AI termasuk ['npm run build']
     const isEmpty = !cmds || cmds.length === 0;
+    const advisory = t.advisory_commands;
+    const isAdvisoryEmpty = !advisory || advisory.length === 0;
     return {
       ...t,
       validation_commands: isEmpty ? defaultValidation(t.layer, args.stack) : cmds,
+      advisory_commands: isAdvisoryEmpty ? defaultAdvisory(t.layer, args.stack) : advisory,
     };
   });
 

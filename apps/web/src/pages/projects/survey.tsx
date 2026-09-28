@@ -4,13 +4,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@/lib/http';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { PricingDialog } from '@/components/billing/pricing-dialog';
 import { MarkdownView } from '@/components/ui/markdown-view';
 import {
   Loader2,
-  Sparkles,
   CheckCircle2,
 } from 'lucide-react';
 import { useWizardNav } from '@/components/layout/wizard-nav';
@@ -43,6 +41,13 @@ interface SurveyData {
   questions: SurveyQuestion[];
 }
 
+const ROUND_LABELS: Record<number, string> = {
+  1: 'Masalah Utama & Pengguna',
+  2: 'Fitur Inti & Alur Kerja',
+  3: 'Aturan Bisnis & Akses',
+  4: 'Batasan & Ukuran Sukses',
+};
+
 export function SurveyPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
@@ -54,6 +59,7 @@ export function SurveyPage() {
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [otherText, setOtherText] = useState<Record<string, string>>({});
   const [showOtherInput, setShowOtherInput] = useState<Record<string, boolean>>({});
+  const [skipped, setSkipped] = useState<Record<string, boolean>>({});
   const [pricingOpen, setPricingOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -87,6 +93,7 @@ export function SurveyPage() {
       setAnswers(initialAnswers);
       setOtherText(initialOthers);
       setShowOtherInput(initialShowOthers);
+      setSkipped({});
     } catch (err) {
       console.error('Gagal memuat survey:', err);
       setError('Gagal memuat pertanyaan survey.');
@@ -100,11 +107,13 @@ export function SurveyPage() {
   }, [loadSurvey]);
 
   const handleRadioSelect = (questionId: string, val: string) => {
+    setSkipped((prev) => (prev[questionId] ? { ...prev, [questionId]: false } : prev));
     setAnswers((prev) => ({ ...prev, [questionId]: val }));
     setShowOtherInput((prev) => ({ ...prev, [questionId]: false }));
   };
 
   const handleCheckboxToggle = (questionId: string, val: string) => {
+    setSkipped((prev) => (prev[questionId] ? { ...prev, [questionId]: false } : prev));
     setAnswers((prev) => {
       const current = (prev[questionId] as string[]) || [];
       const next = current.includes(val)
@@ -116,6 +125,7 @@ export function SurveyPage() {
 
   const handleSelectSuggestion = (q: SurveyQuestion) => {
     if (!q.suggestion) return;
+    setSkipped((prev) => (prev[q.id] ? { ...prev, [q.id]: false } : prev));
     if (q.kind === 'checkbox') {
       setAnswers((prev) => ({
         ...prev,
@@ -136,28 +146,46 @@ export function SurveyPage() {
   };
 
   const handleOtherClick = (questionId: string) => {
+    setSkipped((prev) => (prev[questionId] ? { ...prev, [questionId]: false } : prev));
     setShowOtherInput((prev) => ({ ...prev, [questionId]: true }));
     const currentText = otherText[questionId] || '';
     setAnswers((prev) => ({ ...prev, [questionId]: currentText }));
+  };
+
+  const handleSkipToggle = (questionId: string) => {
+    const willSkip = !skipped[questionId];
+    setSkipped((prev) => ({ ...prev, [questionId]: willSkip }));
+    if (willSkip) {
+      setAnswers((prev) => {
+        const next = { ...prev };
+        delete next[questionId];
+        return next;
+      });
+      setOtherText((prev) => {
+        const next = { ...prev };
+        delete next[questionId];
+        return next;
+      });
+      setShowOtherInput((prev) => ({ ...prev, [questionId]: false }));
+    }
   };
 
   const handleSubmitRound = async () => {
     if (!surveyData || submitting) return;
     const currentQuestions = surveyData.questions.filter((q) => q.round === currentRound);
 
-    // Validasi kelengkapan jawaban
+    // Kumpulkan jawaban — pertanyaan yang dilewati tidak dikirim
     const answersToSubmit: Array<{ questionId: string; value: string | string[] }> = [];
 
     for (const q of currentQuestions) {
+      if (skipped[q.id]) continue;
+
       let val = answers[q.id];
 
-      // Jika opsional dan tidak diisi, gunakan saran sebagai fallback
+      // Pertanyaan yang tidak disentuh: gunakan saran AI sebagai fallback
       if (!val || (Array.isArray(val) && val.length === 0)) {
-        if (!q.required && q.suggestion) {
+        if (q.suggestion) {
           val = q.kind === 'checkbox' ? [q.suggestion] : q.suggestion;
-        } else if (q.required) {
-          setError(`Harap jawab pertanyaan: "${q.label}"`);
-          return;
         }
       }
 
@@ -301,6 +329,28 @@ export function SurveyPage() {
         </div>
       )}
 
+      {/* Progress Bar & Indikator Tahap */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">
+            {ROUND_LABELS[currentRound] ? `Tahap ${currentRound}: ${ROUND_LABELS[currentRound]}` : `Tahap ${currentRound}`}
+          </span>
+          <span className="text-[11px]">
+            {currentRound} dari {surveyData.totalRounds}
+          </span>
+        </div>
+
+        {/* Progress Bar */}
+        <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+          <div
+            className="bg-primary h-full transition-all duration-300 rounded-full"
+            style={{
+              width: `${Math.round((currentRound / Math.max(surveyData.totalRounds, 1)) * 100)}%`,
+            }}
+          />
+        </div>
+      </div>
+
       {/* Kartu Pertanyaan */}
       <div className="space-y-4">
         {currentQuestions.map((q) => {
@@ -308,40 +358,30 @@ export function SurveyPage() {
           const isCheckbox = q.kind === 'checkbox';
           const selectedArray = Array.isArray(selectedVal) ? selectedVal : [];
           const isOtherActive = showOtherInput[q.id];
+          const isSkipped = !!skipped[q.id];
 
           return (
-            <Card key={q.id} className="border-border/80 shadow-xs">
+            <Card key={q.id} className={`border-border/80 shadow-xs transition-opacity ${isSkipped ? 'opacity-55' : ''}`}>
               <CardHeader className="pb-3 pt-4 px-5">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      {q.required ? (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium text-foreground">
-                          Wajib
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal text-muted-foreground border-dashed">
-                          Opsional
-                        </Badge>
-                      )}
-                    </div>
-                    <CardTitle className="text-sm font-semibold leading-snug text-foreground">
-                      {q.label}
-                    </CardTitle>
-                  </div>
+                  <CardTitle className="text-sm font-semibold leading-snug text-foreground">
+                    {q.label}
+                  </CardTitle>
 
-                  {q.suggestion && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleSelectSuggestion(q)}
-                      className="text-xs h-7 px-2.5 text-primary border-primary/30 hover:bg-primary/10 shrink-0 gap-1"
-                    >
-                      <Sparkles className="h-3 w-3" />
-                      <span>Saran AI</span>
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {q.suggestion && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleSelectSuggestion(q)}
+                        disabled={isSkipped}
+                        className="text-xs h-7 px-2.5 text-primary border-primary/30 hover:bg-primary/10"
+                      >
+                        <span>Saran AI</span>
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
 
@@ -421,6 +461,19 @@ export function SurveyPage() {
                       Klik untuk menuliskan jawaban bebas jika opsi di atas tidak sesuai.
                     </p>
                   )}
+                </div>
+
+                {/* Tombol Lewati di bawah */}
+                <div className="flex justify-end pt-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleSkipToggle(q.id)}
+                    className="text-xs h-7 px-2.5 text-muted-foreground hover:text-foreground"
+                  >
+                    {isSkipped ? 'Batal Lewati' : 'Lewati'}
+                  </Button>
                 </div>
               </CardContent>
             </Card>

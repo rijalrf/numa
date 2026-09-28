@@ -167,8 +167,17 @@ async function runTest() {
   const stackRecJson = await stackRecRes.json();
   console.log('Tech stack rekomendasi:', stackRecJson.techStack);
 
+  // Uji validasi penolakan Golden Stack (mis. MongoDB atau framework di luar whitelist)
+  const invalidStack = ['frontend: React v18', 'backend: Flask', 'database: MongoDB'];
+  const invalidStackRes = await authedFetch(`/api/projects/${projectId}/techstack`, {
+    method: 'PUT',
+    body: JSON.stringify({ techStack: invalidStack }),
+  });
+  assert.strictEqual(invalidStackRes.status, 400, 'Tech stack non-whitelist harus ditolak dengan status 400');
+  console.log('Validasi penolakan Golden Stack non-whitelist OK (status 400).');
+
   // Simpan tech stack dengan format kategori dan versi eksplisit
-  const customStack = ['frontend: React v18', 'backend: Express v4', 'database: SQLite', 'styling: Tailwind CSS', 'testing: Playwright'];
+  const customStack = ['frontend: React v18', 'backend: Express v4', 'database: SQLite + Prisma', 'styling: Tailwind CSS', 'testing: Playwright'];
   const saveStackRes = await authedFetch(`/api/projects/${projectId}/techstack`, {
     method: 'PUT',
     body: JSON.stringify({ techStack: customStack }),
@@ -343,6 +352,103 @@ async function runTest() {
     assert.strictEqual(doneRes.status, 200, 'Agent done task status harus 200');
     console.log('Agent complete task OK');
   }
+
+  console.log('\n--- 12. TEST AGENT ARCHITECTURE CONTRACT & REPO SUMMARY ---');
+  // Ambil kontrak arsitektur via agent
+  const archRes = await agentFetch('/api/agent/architecture-contract');
+  assert.strictEqual(archRes.status, 200, 'Architecture contract agent status harus 200');
+  const archJson = await archRes.json();
+  assert.strictEqual(archJson.contractKey, 'express', 'Contract key harus express');
+  assert(typeof archJson.markdown === 'string' && archJson.markdown.includes('Express'), 'Markdown arsitektur harus memuat panduan Express');
+  console.log('Verifikasi architecture contract agent OK:', archJson.contractKey);
+
+  // Unggah ringkasan workspace (numa sync)
+  const syncRes = await agentFetch('/api/agent/repo-summary', {
+    method: 'POST',
+    body: JSON.stringify({
+      fileTree: ['src/index.ts', 'src/routes.ts', 'package.json'],
+      manifests: { 'package.json': '{"name": "test-app", "dependencies": {}}' },
+      stats: { totalFiles: 3 },
+    }),
+  });
+  assert.strictEqual(syncRes.status, 200, 'Repo summary status harus 200');
+  console.log('Verifikasi simpan repo-summary OK.');
+
+  // Selesaikan seluruh sisa task awal agar siap Change Cycle
+  const allTasksRes = await authedFetch(`/api/projects/${projectId}/tasks`);
+  const allTasksJson = await allTasksRes.json();
+  for (const t of allTasksJson.tasks || []) {
+    if (t.status !== 'DONE') {
+      await authedFetch(`/api/tasks/${t.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'DONE' }),
+      });
+    }
+  }
+  console.log('Semua task pembangunan awal telah berstatus DONE.');
+
+  console.log('\n--- 13. TEST CHANGE CYCLE ("MINTA PERUBAHAN") ---');
+  // Analisis permintaan perubahan adaptif
+  const analyzeRes = await authedFetch(`/api/projects/${projectId}/cycles/analyze`, {
+    method: 'POST',
+    body: JSON.stringify({
+      request: 'Tambahkan validasi email pada formulir kontak dan tombol ekspor CSV untuk log aktivitas',
+    }),
+  });
+  assert.strictEqual(analyzeRes.status, 200, 'Cycle analyze status harus 200');
+  const analyzeJson = await analyzeRes.json();
+  const cycleId = analyzeJson.cycleId;
+  assert(cycleId, 'CycleId harus dikembalikan oleh server');
+  console.log(`Analisis siklus OK. Clarity: ${analyzeJson.analysis?.clarity}, cycleId: ${cycleId}`);
+
+  // Bila AI meminta klarifikasi, jawab klarifikasi tersebut
+  if (analyzeJson.needsClarification && analyzeJson.questions?.length > 0) {
+    const answers = analyzeJson.questions.map((q: any) => ({
+      question: q.question,
+      answer: q.options?.[0] || 'Gunakan format standar CSV dengan delimiter koma.',
+    }));
+    const clarifyRes = await authedFetch(`/api/projects/${projectId}/cycles/${cycleId}/clarify`, {
+      method: 'POST',
+      body: JSON.stringify({ answers }),
+    });
+    assert.strictEqual(clarifyRes.status, 200, 'Cycle clarify status harus 200');
+    console.log('Jawaban klarifikasi berhasil dikirim.');
+  }
+
+  // Generate task untuk siklus perubahan
+  const cycleGenRes = await authedFetch(`/api/projects/${projectId}/cycles/${cycleId}/generate`, {
+    method: 'POST',
+    body: JSON.stringify({ confirm: true, split: 'single' }),
+  });
+  assert.strictEqual(cycleGenRes.status, 200, 'Cycle generate status harus 200');
+  const cycleGenJson = await cycleGenRes.json();
+  assert.strictEqual(cycleGenJson.ok, true, 'Cycle generate harus bernilai ok: true');
+  console.log(`Task delta untuk siklus perubahan berhasil dibuat: ${cycleGenJson.tasks?.length} tasks.`);
+
+  // Verifikasi filter task berdasarkan cycleId
+  const cycleTasksRes = await authedFetch(`/api/projects/${projectId}/tasks?cycleId=${cycleId}`);
+  assert.strictEqual(cycleTasksRes.status, 200, 'Filter tasks by cycleId harus 200');
+  const cycleTasksJson = await cycleTasksRes.json();
+  assert(cycleTasksJson.tasks.length > 0, 'Harus ada task yang terdaftar pada cycleId ini');
+  assert.strictEqual(cycleTasksJson.tasks[0].cycleId, cycleId, 'Task harus memiliki cycleId yang valid');
+  console.log('Verifikasi filter task berdasarkan cycleId OK.');
+
+  // Verifikasi endpoint riwayat siklus
+  const cyclesListRes = await authedFetch(`/api/projects/${projectId}/cycles`);
+  assert.strictEqual(cyclesListRes.status, 200, 'Get cycles list harus 200');
+  const cyclesListJson = await cyclesListRes.json();
+  assert.strictEqual(cyclesListJson.openCycleId, cycleId, 'openCycleId harus merujuk ke siklus yang sedang aktif');
+  console.log('Verifikasi riwayat siklus OK.');
+
+  // Selesaikan seluruh task pada siklus ini dan verifikasi auto-transition status siklus ke DONE
+  for (const ct of cycleTasksJson.tasks) {
+    const compRes = await agentFetch(`/api/agent/tasks/${ct.id}/complete`, { method: 'POST' });
+    assert.strictEqual(compRes.status, 200, 'Complete cycle task via agent harus 200');
+  }
+  const cycleDetailRes = await authedFetch(`/api/projects/${projectId}/cycles/${cycleId}`);
+  const cycleDetailJson = await cycleDetailRes.json();
+  assert.strictEqual(cycleDetailJson.cycle?.status, 'DONE', 'Status siklus harus otomatis berubah menjadi DONE');
+  console.log('Status siklus otomatis beralih ke DONE setelah seluruh task selesai OK.');
 
   console.log('\n=== SEMUA TEST E2E BERHASIL 100%! ===');
 }

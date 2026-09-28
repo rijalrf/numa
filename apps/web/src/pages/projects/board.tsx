@@ -13,6 +13,7 @@ import {
   Sparkles,
   Layers,
   X,
+  History,
 } from 'lucide-react';
 import { useWizardNav } from '@/components/layout/wizard-nav';
 import { ExecutionDialog } from '@/components/execution/execution-dialog';
@@ -21,6 +22,8 @@ import {
   TaskDetailDialog,
   type TaskDetail,
 } from '@/components/kanban/task-detail-dialog';
+import { CycleBar, type ProjectCycleItem } from '@/components/cycle/cycle-bar';
+import { ChangeCycleDialog } from '@/components/cycle/change-cycle-dialog';
 
 type Task = TaskDetail;
 
@@ -38,6 +41,14 @@ export function BoardPage() {
   const [projectName, setProjectName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // State Change Cycle
+  const [cycles, setCycles] = useState<ProjectCycleItem[]>([]);
+  const [activeCycleId, setActiveCycleId] = useState<string | null | 'all'>('all');
+  const [openCycleId, setOpenCycleId] = useState<string | null>(null);
+  const [initialTaskCounts, setInitialTaskCounts] = useState<{ total: number; done: number }>({ total: 0, done: 0 });
+  const [changeCycleOpen, setChangeCycleOpen] = useState(false);
+  const [viewCycleId, setViewCycleId] = useState<string | null>(null);
 
   const handleTaskStatusChange = (taskId: string, newStatus: Task['status']) => {
     setTasks((prev) =>
@@ -130,20 +141,44 @@ export function BoardPage() {
     }
   }, [projectId]);
 
+  const loadCycles = useCallback(async () => {
+    if (!projectId) return;
+    try {
+      const res = await api<{
+        cycles: ProjectCycleItem[];
+        openCycleId: string | null;
+        initialTaskCounts: { total: number; done: number };
+      }>(`/api/projects/${projectId}/cycles`);
+
+      setCycles(res.cycles || []);
+      setOpenCycleId(res.openCycleId || null);
+      if (res.initialTaskCounts) setInitialTaskCounts(res.initialTaskCounts);
+    } catch (err) {
+      console.error('Gagal memuat riwayat siklus:', err);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    loadCycles();
+  }, [loadCycles]);
+
   const loadTasks = useCallback(
     async (mode: 'initial' | 'manual' | 'silent' = 'initial') => {
       if (!projectId) return;
       if (mode === 'manual') setRefreshing(true);
 
       try {
+        const cycleParam = activeCycleId !== undefined ? `?cycleId=${activeCycleId}` : '';
         const json = await api<{ tasks: Task[] }>(
-          `/api/projects/${projectId}/tasks`
+          `/api/projects/${projectId}/tasks${cycleParam}`
         );
         if (json.tasks && json.tasks.length > 0) {
           setTasks(json.tasks);
           setError(null);
         } else if (mode === 'initial') {
           await generateTasks();
+        } else {
+          setTasks([]);
         }
       } catch (err) {
         console.error('Gagal load tasks:', err);
@@ -156,7 +191,7 @@ export function BoardPage() {
         if (mode === 'manual') setRefreshing(false);
       }
     },
-    [projectId, generateTasks]
+    [projectId, generateTasks, activeCycleId]
   );
 
   // Load tasks on mount
@@ -164,14 +199,22 @@ export function BoardPage() {
     loadTasks('initial');
   }, [loadTasks]);
 
+  // Muat ulang task saat pemilih siklus berubah
+  useEffect(() => {
+    if (!loading) {
+      loadTasks('manual');
+    }
+  }, [activeCycleId]);
+
   // Polling saat auto refresh aktif (tiap 5 detik)
   useEffect(() => {
     if (!autoRefresh || !projectId) return;
     const timer = setInterval(() => {
       loadTasks('silent');
+      loadCycles();
     }, 5000);
     return () => clearInterval(timer);
-  }, [autoRefresh, projectId, loadTasks]);
+  }, [autoRefresh, projectId, loadTasks, loadCycles]);
 
   const columns: Array<{ status: string; label: string }> = [
     { status: 'TODO', label: 'To Do' },
@@ -179,6 +222,12 @@ export function BoardPage() {
     { status: 'BLOCKED', label: 'Blocked' },
     { status: 'DONE', label: 'Done' },
   ];
+
+  const allTasksDone = tasks.length > 0 && tasks.every((t) => t.status === 'DONE');
+  const selectedCycleObj = typeof activeCycleId === 'string' && activeCycleId !== 'all'
+    ? cycles.find((c) => c.id === activeCycleId)
+    : null;
+  const isArchiveView = selectedCycleObj?.status === 'DONE';
 
   const displayedTasks = tasks;
 
@@ -268,9 +317,61 @@ export function BoardPage() {
         </div>
       )}
 
+      {/* Banner Arsip jika melihat siklus yang sudah selesai */}
+      {isArchiveView && selectedCycleObj && (
+        <div className="flex items-center justify-between gap-2 p-2.5 rounded-md border border-border/80 bg-muted/40 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+            <span>
+              Menampilkan arsip Siklus #{selectedCycleObj.number} ({selectedCycleObj.title}) — berstatus selesai (hanya baca).
+            </span>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setActiveCycleId('all')}
+            className="h-6 px-2 text-xs font-medium"
+          >
+            Tampilkan Semua
+          </Button>
+        </div>
+      )}
+
       {/* Action Bar Atas */}
-      <div className="flex items-center justify-end gap-3">
-        <div className="flex items-center gap-3 ml-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        {/* Cycle Bar & Pengalih Siklus */}
+        <div className="flex items-center gap-2">
+          <CycleBar
+            cycles={cycles}
+            activeCycleId={activeCycleId}
+            onSelectCycle={(id) => setActiveCycleId(id)}
+            openCycleId={openCycleId}
+            initialTaskCounts={initialTaskCounts}
+            allTasksDone={allTasksDone}
+            onRequestChange={() => {
+              setViewCycleId(null);
+              setChangeCycleOpen(true);
+            }}
+          />
+          {selectedCycleObj && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setViewCycleId(selectedCycleObj.id);
+                setChangeCycleOpen(true);
+              }}
+              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+            >
+              <History className="h-3.5 w-3.5" />
+              <span>Detail Siklus</span>
+            </Button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3 ml-auto sm:ml-0">
           {/* Toggle Auto Refresh */}
           <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
             <span>Auto Refresh</span>
@@ -294,7 +395,10 @@ export function BoardPage() {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => loadTasks('manual')}
+            onClick={() => {
+              loadTasks('manual');
+              loadCycles();
+            }}
             disabled={refreshing || loading}
             className="gap-1.5 font-medium h-8"
           >
@@ -422,6 +526,20 @@ export function BoardPage() {
         onClose={() => setPricingOpen(false)}
         title="Tingkatkan Kuota Proyek Anda"
         description="Batas kuota proyek untuk paket Anda saat ini telah tercapai. Upgrade ke paket yang lebih tinggi untuk merancang dan mengeksekusi lebih banyak proyek."
+      />
+
+      <ChangeCycleDialog
+        projectId={projectId!}
+        isOpen={changeCycleOpen}
+        onClose={() => {
+          setChangeCycleOpen(false);
+          setViewCycleId(null);
+        }}
+        onCycleGenerated={async () => {
+          await loadCycles();
+          await loadTasks('manual');
+        }}
+        viewCycleId={viewCycleId}
       />
     </div>
   );

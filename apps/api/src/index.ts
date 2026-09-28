@@ -25,8 +25,9 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import { generatePrdMarkdownStream, generatePRDFromDiscovery, readPrdContent, PrdSchema } from './lib/ai/prd.js';
-import { generateRoadmapFromPRD } from './lib/ai/roadmap.js';
-import { generateTasksFromRoadmap } from './lib/ai/tasks.js';
+import { generateRoadmapFromPRD, type RoadmapData } from './lib/ai/roadmap.js';
+import { generateTasksFromRoadmap, type TaskGen } from './lib/ai/tasks.js';
+import { analyzeChangeRequest, mergePrdDelta } from './lib/ai/cycle.js';
 import { getUserPlan, checkQuota, incrementQuota, checkProjectLimit, PLANS } from './lib/billing.js';
 import { validateAndNormalizeDAG } from './lib/ai/dag-validator.js';
 import { validateApiCoverage } from './lib/ai/api-coverage-validator.js';
@@ -34,6 +35,8 @@ import { validateCleanup } from './lib/ai/cleanup-validator.js';
 import { finalizeChatSession, recommendTechStack, generateTreeFromPrd } from './lib/ai/chat.js';
 import { buildZip } from './lib/zip.js';
 import { parseStackEntry, resolveStackContract } from './lib/ai/stack-contract.js';
+import { resolveArchitectureContract, renderArchitectureContract } from './lib/ai/architecture-contract.js';
+import { validateGoldenSelection } from './lib/ai/golden-stack.js';
 import { generateSurveyRound, generateSurveySummary } from './lib/survey.js';
 
 // Hash token utility (mirrors requireAgent.middleware)
@@ -549,6 +552,22 @@ app.post('/api/agent/tasks/:id/complete', requireAgent, async (req: AgentRequest
     }
   }
 
+  // Jika task milik siklus (ProjectCycle) dan status DONE, cek apakah semua task siklus sudah selesai
+  if (task.cycleId && updated.status === 'DONE') {
+    const remainingInCycle = await prisma.task.count({
+      where: {
+        cycleId: task.cycleId,
+        status: { not: 'DONE' },
+      },
+    });
+    if (remainingInCycle === 0) {
+      await prisma.projectCycle.update({
+        where: { id: task.cycleId },
+        data: { status: 'DONE' },
+      });
+    }
+  }
+
   res.json({
     ok: true,
     taskId: updated.id,
@@ -625,6 +644,7 @@ app.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentRequest, 
     forbidden?: string[];
     implementation_steps?: string[];
     validation_commands?: string[];
+    advisory_commands?: string[];
     definition_of_done?: string[];
     out_of_scope?: string[];
   };
@@ -866,6 +886,7 @@ app.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentRequest, 
       files_readonly: ctx.files_readonly ?? [],
       files_to_create: [], // Tidak lagi memaksa disk check fisik di CLI guard
       validation_commands: ctx.validation_commands ?? [],
+      advisory_commands: ctx.advisory_commands ?? [],
     },
   });
 });
@@ -881,6 +902,40 @@ app.get(['/api/agent/prd', '/api/agent/brd'], requireAgent, async (req: AgentReq
     return res.status(400).json({ error: 'PRD belum ada di project ini. Generate PRD dulu lewat web UI.' });
   }
   res.json({ prd, brd: prd });
+});
+
+// ===============================================
+// Agent endpoint: fetch Architecture Contract untuk CLI agent
+// ===============================================
+app.get('/api/agent/architecture-contract', requireAgent, async (req: AgentRequest, res) => {
+  const stacks = await prisma.stack.findMany({
+    where: { projectId: req.agent.projectId },
+  });
+  const stackContract = resolveStackContract(stacks);
+  const archContract = resolveArchitectureContract(stackContract);
+  const markdown = renderArchitectureContract(archContract);
+
+  res.json({
+    contractKey: archContract.key,
+    title: archContract.title,
+    framework: archContract.framework,
+    markdown,
+  });
+});
+
+// ===============================================
+// Agent endpoint: simpan ringkasan workspace (numa sync)
+// ===============================================
+app.post('/api/agent/repo-summary', requireAgent, async (req: AgentRequest, res) => {
+  const summary = req.body?.summary;
+  if (!summary) {
+    return res.status(400).json({ error: 'Ringkasan repo (summary) diperlukan.' });
+  }
+  await prisma.project.update({
+    where: { id: req.agent.projectId },
+    data: { repoSummary: summary },
+  });
+  res.json({ ok: true, savedAt: new Date().toISOString() });
 });
 
 // ============================================================
@@ -1057,9 +1112,13 @@ app.post('/api/projects/:id/wizard-step', requireUser, async (req: AuthedRequest
 app.get('/api/projects/:id/master-prompt', requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({
     where: { id: req.params.id, userId: req.userId },
-    include: { prd: true },
+    include: { prd: true, stacks: true },
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
+
+  const stackContract = resolveStackContract(project.stacks || []);
+  const archContract = resolveArchitectureContract(stackContract);
+  const archMd = renderArchitectureContract(archContract);
 
   const host = req.get('host');
   const protocol = req.protocol || (req.secure ? 'https' : 'http');
@@ -1084,6 +1143,10 @@ ${project.prd ? `- PRD: SEDIA — fetch via \`numa prd\` atau download manual` :
 2. Login dengan token di bawah ini sekaligus arahkan ke server (tersimpan di ~/.numa/config.json):
    \`\`\`
    numa login {{TOKEN}} --api-url ${serverUrl}
+   \`\`\`
+3. Pasang skill pack & kontrak arsitektur ke workspace proyek:
+   \`\`\`
+   numa init
    \`\`\`
 
 ## Fetch PRD (lakukan sekali, sebelum loop task)
@@ -1116,9 +1179,13 @@ Setelah semua task DONE, aplikasi siap dijalankan di komputer lokal user:
    - Next.js: \`npm run dev -- -p 9999\` atau \`next dev -p 9999\`
    - Create React App: \`PORT=9999 npm start\`
 3. Akses aplikasi di browser: **http://localhost:9999**
-4. Proyek siap dipakai!
+4. Jalankan \`numa sync\` agar server mencatat ringkasan workspace untuk siklus perubahan berikutnya.
+5. Proyek siap dipakai!
 
 **Catatan penting**: Gunakan port **9999** agar tidak bertabrakan dengan numa platform yang jalan di port 3455.
+
+## Kontrak Arsitektur Wajib
+${archMd}
 
 ## Aturan Penting
 - **Isolasi project**: agent HANYA boleh membaca task/PRD dari project ini (server menegakkan via token).
@@ -1332,6 +1399,101 @@ app.patch('/api/user/profile', requireUser, async (req: AuthedRequest, res) => {
   res.json({ ok: true, user: updated });
 });
 
+async function persistGeneratedTasks(
+  tx: any,
+  projectId: string,
+  validTasks: TaskGen[],
+  featureIdMap: Map<string, string>,
+  cycleId?: string | null,
+  startOrder = 1
+) {
+  let order = startOrder;
+  const createdTasks: Array<{
+    dbId: string;
+    aiTaskId?: string;
+    order: number;
+    featureId?: string;
+    dependsOn: string[];
+  }> = [];
+
+  for (const t of validTasks) {
+    let dbFeatureId: string | undefined;
+    for (const [dbId, tmpId] of featureIdMap.entries()) {
+      if (tmpId === t.featureId || dbId === t.featureId) {
+        if (!dbId.startsWith('CYCLE-')) {
+          dbFeatureId = dbId;
+        }
+        break;
+      }
+    }
+    const currentOrder = order++;
+    const created = await tx.task.create({
+      data: {
+        projectId,
+        featureId: dbFeatureId,
+        cycleId: cycleId ?? null,
+        title: t.title,
+        description: t.description,
+        layer: t.layer,
+        status: 'TODO',
+        order: currentOrder,
+        apiContracts: (t as any).apiContracts ?? [],
+        aiContext: {
+          taskId: t.taskId,
+          requirement_ids: t.requirement_ids,
+          depends_on: t.depends_on,
+          files_to_create: t.files_to_create,
+          files_to_modify: t.files_to_modify,
+          files_readonly: t.files_readonly,
+          forbidden: t.forbidden,
+          implementation_steps: t.implementation_steps,
+          validation_commands: t.validation_commands,
+          advisory_commands: (t as any).advisory_commands ?? [],
+          definition_of_done: t.definition_of_done,
+          out_of_scope: t.out_of_scope,
+          consumesApis: t.consumesApis ?? [],
+        },
+        acceptanceCriteria: t.acceptanceCriteria,
+      },
+    });
+
+    createdTasks.push({
+      dbId: created.id,
+      aiTaskId: t.taskId,
+      order: currentOrder,
+      featureId: t.featureId,
+      dependsOn: t.depends_on ?? [],
+    });
+  }
+
+  // Hubungkan TaskDependency native di database
+  for (const item of createdTasks) {
+    if (item.dependsOn.length > 0) {
+      for (const dep of item.dependsOn) {
+        const cleanDep = dep.trim().toLowerCase();
+        const target = createdTasks.find(
+          (c) =>
+            c.dbId !== item.dbId &&
+            ((c.aiTaskId && c.aiTaskId.toLowerCase() === cleanDep) ||
+              `task-${c.order}` === cleanDep ||
+              String(c.order) === cleanDep ||
+              (c.featureId && c.featureId.toLowerCase() === cleanDep))
+        );
+        if (target) {
+          await tx.taskDependency.create({
+            data: {
+              taskId: item.dbId,
+              dependsOnId: target.dbId,
+            },
+          });
+        }
+      }
+    }
+  }
+
+  return createdTasks;
+}
+
 const projectTaskGenerationLocks = new Set<string>();
 
 // Step 4: generate atomic tasks dari roadmap (auto generate roadmap jika belum ada).
@@ -1501,88 +1663,7 @@ app.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequ
     await prisma.$transaction(
       async (tx) => {
         await tx.task.deleteMany({ where: { projectId: project.id } });
-
-        let order = 1;
-        const createdTasks: Array<{
-          dbId: string;
-          aiTaskId?: string;
-          order: number;
-          featureId?: string;
-          dependsOn: string[];
-        }> = [];
-
-        for (const t of validTasks) {
-          // Cari db feature yang punya tmpId = t.featureId
-          let dbFeatureId: string | undefined;
-          for (const [dbId, tmpId] of featureIdMap.entries()) {
-            if (tmpId === t.featureId) {
-              dbFeatureId = dbId;
-              break;
-            }
-          }
-          const currentOrder = order++;
-          const created = await tx.task.create({
-            data: {
-              projectId: project.id,
-              featureId: dbFeatureId,
-              title: t.title,
-              description: t.description,
-              layer: t.layer,
-              status: 'TODO',
-              order: currentOrder,
-              apiContracts: (t as any).apiContracts ?? [],
-              aiContext: {
-                taskId: t.taskId,
-                requirement_ids: t.requirement_ids,
-                depends_on: t.depends_on,
-                files_to_create: t.files_to_create,
-                files_to_modify: t.files_to_modify,
-                files_readonly: t.files_readonly,
-                forbidden: t.forbidden,
-                implementation_steps: t.implementation_steps,
-                validation_commands: t.validation_commands,
-                definition_of_done: t.definition_of_done,
-                out_of_scope: t.out_of_scope,
-                consumesApis: t.consumesApis ?? [],
-              },
-              acceptanceCriteria: t.acceptanceCriteria,
-            },
-          });
-
-          createdTasks.push({
-            dbId: created.id,
-            aiTaskId: t.taskId,
-            order: currentOrder,
-            featureId: t.featureId,
-            dependsOn: t.depends_on ?? [],
-          });
-        }
-
-        // Hubungkan TaskDependency native di database
-        for (const item of createdTasks) {
-          if (item.dependsOn.length > 0) {
-            for (const dep of item.dependsOn) {
-              const cleanDep = dep.trim().toLowerCase();
-              const target = createdTasks.find(
-                (c) =>
-                  c.dbId !== item.dbId &&
-                  ((c.aiTaskId && c.aiTaskId.toLowerCase() === cleanDep) ||
-                    `task-${c.order}` === cleanDep ||
-                    String(c.order) === cleanDep ||
-                    (c.featureId && c.featureId.toLowerCase() === cleanDep))
-              );
-              if (target) {
-                await tx.taskDependency.create({
-                  data: {
-                    taskId: item.dbId,
-                    dependsOnId: target.dbId,
-                  },
-                });
-              }
-            }
-          }
-        }
-
+        await persistGeneratedTasks(tx, project.id, validTasks, featureIdMap, null, 1);
         await tx.project.update({ where: { id: project.id }, data: { wizardStep: 'board' } });
       },
       { timeout: 60000 }
@@ -1623,8 +1704,19 @@ app.get('/api/projects/:id/tasks', requireUser, async (req: AuthedRequest, res) 
     where: { id: req.params.id, userId: req.userId },
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
+
+  const whereClause: any = { projectId: project.id };
+  const cycleQuery = req.query.cycleId;
+  if (cycleQuery !== undefined) {
+    if (cycleQuery === 'null' || cycleQuery === '') {
+      whereClause.cycleId = null;
+    } else if (cycleQuery !== 'all') {
+      whereClause.cycleId = String(cycleQuery);
+    }
+  }
+
   const tasks = await prisma.task.findMany({
-    where: { projectId: project.id },
+    where: whereClause,
     include: {
       dependsOn: {
         include: {
@@ -1654,7 +1746,446 @@ app.patch('/api/tasks/:taskId', requireUser, async (req: AuthedRequest, res) => 
       completedAt: parsed.data.status === 'DONE' ? new Date() : task.completedAt,
     },
   });
+
+  if (task.cycleId && parsed.data.status === 'DONE') {
+    const remaining = await prisma.task.count({
+      where: { cycleId: task.cycleId, status: { not: 'DONE' } },
+    });
+    if (remaining === 0) {
+      await prisma.projectCycle.update({
+        where: { id: task.cycleId },
+        data: { status: 'DONE' },
+      });
+    }
+  }
+
   res.json({ task: updated });
+});
+
+// ============================================================
+// Change Cycle ("Minta Perubahan") API (Fase 3)
+// ============================================================
+
+app.get('/api/projects/:id/cycles', requireUser, async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findFirst({
+    where: { id: req.params.id, userId: req.userId },
+  });
+  if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
+
+  const cycles = await prisma.projectCycle.findMany({
+    where: { projectId: project.id },
+    orderBy: { number: 'asc' },
+    include: {
+      tasks: {
+        select: { id: true, status: true },
+      },
+    },
+  });
+
+  const openCycle = cycles.find((c) => c.status === 'OPEN');
+
+  const mapped = cycles.map((c) => ({
+    id: c.id,
+    number: c.number,
+    title: c.title,
+    request: c.request,
+    status: c.status,
+    type: c.type,
+    size: c.size,
+    impact: c.impact,
+    clarify: c.clarify,
+    prdDelta: c.prdDelta,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
+    taskCounts: {
+      total: c.tasks.length,
+      done: c.tasks.filter((t) => t.status === 'DONE').length,
+    },
+  }));
+
+  const initialTasks = await prisma.task.findMany({
+    where: { projectId: project.id, cycleId: null },
+    select: { id: true, status: true },
+  });
+
+  res.json({
+    cycles: mapped,
+    openCycleId: openCycle?.id ?? null,
+    initialTaskCounts: {
+      total: initialTasks.length,
+      done: initialTasks.filter((t) => t.status === 'DONE').length,
+    },
+  });
+});
+
+app.get('/api/projects/:id/cycles/:cycleId', requireUser, async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findFirst({
+    where: { id: req.params.id, userId: req.userId },
+  });
+  if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
+
+  const cycle = await prisma.projectCycle.findFirst({
+    where: { id: req.params.cycleId, projectId: project.id },
+    include: {
+      tasks: {
+        include: {
+          dependsOn: {
+            include: {
+              dependsOn: { select: { id: true, title: true, status: true, order: true } },
+            },
+          },
+        },
+        orderBy: { order: 'asc' },
+      },
+    },
+  });
+  if (!cycle) return res.status(404).json({ error: 'Siklus tidak ditemukan.' });
+
+  res.json({ cycle });
+});
+
+const CycleAnalyzeBody = z.object({
+  request: z.string().min(8, 'Permintaan perubahan minimal 8 karakter').max(2000),
+  clarifyAnswers: z.array(z.object({ question: z.string(), answer: z.string() })).optional(),
+});
+
+app.post('/api/projects/:id/cycles/analyze', requireUser, async (req: AuthedRequest, res) => {
+  const parsed = CycleAnalyzeBody.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Permintaan tidak valid.' });
+  }
+
+  const project = await prisma.project.findFirst({
+    where: { id: req.params.id, userId: req.userId },
+    include: {
+      prd: true,
+      treeNodes: true,
+      tasks: {
+        select: { id: true, title: true, layer: true, status: true, aiContext: true },
+      },
+    },
+  });
+  if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
+
+  // Guard: Semua task wajib DONE
+  const pendingTasks = project.tasks.filter((t) => t.status !== 'DONE');
+  if (pendingTasks.length > 0) {
+    return res.status(409).json({
+      error: `Masih ada ${pendingTasks.length} task yang belum selesai. Selesaikan semua task sebelum memulai siklus baru.`,
+    });
+  }
+
+  // Guard: Tidak boleh ada cycle OPEN
+  const activeCycle = await prisma.projectCycle.findFirst({
+    where: { projectId: project.id, status: 'OPEN' },
+  });
+  if (activeCycle) {
+    return res.status(409).json({
+      error: `Masih ada siklus aktif "${activeCycle.title}". Selesaikan siklus tersebut terlebih dahulu.`,
+    });
+  }
+
+  const completedTasks = project.tasks.map((t) => {
+    const ctx = (t.aiContext ?? {}) as any;
+    const files = [
+      ...(ctx.files_to_create ?? []),
+      ...(ctx.files_to_modify ?? []),
+    ];
+    return { title: t.title, layer: t.layer, files };
+  });
+
+  const tree = project.treeNodes.map((n) => ({ label: n.label, kind: n.kind }));
+
+  const analysis = await analyzeChangeRequest({
+    projectId: project.id,
+    request: parsed.data.request,
+    prd: project.prd?.content ? readPrdContent(project.prd.content) : null,
+    tree,
+    repoSummary: project.repoSummary,
+    completedTasks,
+    clarifyAnswers: parsed.data.clarifyAnswers,
+  });
+
+  // Tentukan nomor cycle berikutnya
+  const maxCycle = await prisma.projectCycle.findFirst({
+    where: { projectId: project.id },
+    orderBy: { number: 'desc' },
+    select: { number: true },
+  });
+  const nextNumber = (maxCycle?.number ?? 0) + 1;
+
+  // Hapus draft lama jika ada
+  await prisma.projectCycle.deleteMany({
+    where: { projectId: project.id, status: 'DRAFT' },
+  });
+
+  const cycle = await prisma.projectCycle.create({
+    data: {
+      projectId: project.id,
+      number: nextNumber,
+      title: parsed.data.request.slice(0, 60),
+      request: parsed.data.request,
+      status: 'DRAFT',
+      type: analysis.type,
+      size: analysis.size,
+      impact: analysis as any,
+      clarify: parsed.data.clarifyAnswers ?? [],
+    },
+  });
+
+  if (analysis.clarity === 'VAGUE' && (!parsed.data.clarifyAnswers || parsed.data.clarifyAnswers.length === 0)) {
+    return res.json({
+      needsClarification: true,
+      cycleId: cycle.id,
+      questions: analysis.clarificationQuestions ?? [],
+      analysis,
+    });
+  }
+
+  return res.json({
+    needsClarification: false,
+    cycleId: cycle.id,
+    analysis,
+  });
+});
+
+const CycleClarifyBody = z.object({
+  answers: z.array(z.object({ question: z.string(), answer: z.string() })),
+});
+
+app.post('/api/projects/:id/cycles/:cycleId/clarify', requireUser, async (req: AuthedRequest, res) => {
+  const parsed = CycleClarifyBody.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Jawaban klarifikasi tidak valid.' });
+  }
+
+  const project = await prisma.project.findFirst({
+    where: { id: req.params.id, userId: req.userId },
+    include: {
+      prd: true,
+      treeNodes: true,
+      tasks: {
+        select: { id: true, title: true, layer: true, status: true, aiContext: true },
+      },
+    },
+  });
+  if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
+
+  const cycle = await prisma.projectCycle.findFirst({
+    where: { id: req.params.cycleId, projectId: project.id, status: 'DRAFT' },
+  });
+  if (!cycle) return res.status(404).json({ error: 'Draft siklus tidak ditemukan.' });
+
+  const completedTasks = project.tasks.map((t) => {
+    const ctx = (t.aiContext ?? {}) as any;
+    const files = [
+      ...(ctx.files_to_create ?? []),
+      ...(ctx.files_to_modify ?? []),
+    ];
+    return { title: t.title, layer: t.layer, files };
+  });
+
+  const tree = project.treeNodes.map((n) => ({ label: n.label, kind: n.kind }));
+
+  const analysis = await analyzeChangeRequest({
+    projectId: project.id,
+    request: cycle.request,
+    prd: project.prd?.content ? readPrdContent(project.prd.content) : null,
+    tree,
+    repoSummary: project.repoSummary,
+    completedTasks,
+    clarifyAnswers: parsed.data.answers,
+  });
+
+  const updated = await prisma.projectCycle.update({
+    where: { id: cycle.id },
+    data: {
+      clarify: parsed.data.answers,
+      impact: analysis as any,
+      type: analysis.type,
+      size: analysis.size,
+    },
+  });
+
+  res.json({
+    ok: true,
+    cycleId: updated.id,
+    analysis,
+  });
+});
+
+const CycleGenerateBody = z.object({
+  confirm: z.boolean(),
+  split: z.enum(['single', 'a', 'b']).default('single'),
+  title: z.string().optional(),
+  partRequest: z.string().optional(),
+});
+
+app.post('/api/projects/:id/cycles/:cycleId/generate', requireUser, async (req: AuthedRequest, res) => {
+  const parsed = CycleGenerateBody.safeParse(req.body);
+  if (!parsed.success || !parsed.data.confirm) {
+    return res.status(400).json({ error: 'Konfirmasi siklus diperlukan.' });
+  }
+
+  const project = await prisma.project.findFirst({
+    where: { id: req.params.id, userId: req.userId },
+    include: {
+      prd: true,
+      stacks: true,
+      roadmap: { include: { features: true } },
+      tasks: {
+        select: { id: true, status: true },
+      },
+    },
+  });
+  if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
+
+  const cycle = await prisma.projectCycle.findFirst({
+    where: { id: req.params.cycleId, projectId: project.id, status: 'DRAFT' },
+  });
+  if (!cycle) return res.status(404).json({ error: 'Draft siklus tidak ditemukan.' });
+
+  const pendingTasks = project.tasks.filter((t) => t.status !== 'DONE');
+  if (pendingTasks.length > 0) {
+    return res.status(409).json({
+      error: `Masih ada ${pendingTasks.length} task yang belum selesai. Selesaikan semua task sebelum memulai siklus baru.`,
+    });
+  }
+
+  const activeCycle = await prisma.projectCycle.findFirst({
+    where: { projectId: project.id, status: 'OPEN', id: { not: cycle.id } },
+  });
+  if (activeCycle) {
+    return res.status(409).json({ error: 'Masih ada siklus lain yang berstatus OPEN.' });
+  }
+
+  let effectiveRequest = cycle.request;
+  let impact = cycle.impact as any;
+
+  if (parsed.data.split !== 'single' && parsed.data.partRequest) {
+    effectiveRequest = parsed.data.partRequest;
+    impact = await analyzeChangeRequest({
+      projectId: project.id,
+      request: effectiveRequest,
+      prd: project.prd?.content ? readPrdContent(project.prd.content) : null,
+      repoSummary: project.repoSummary,
+    });
+  }
+
+  let prdDeltaPayload: any = {};
+  if (impact.needsPrdChange && impact.newRequirements && impact.newRequirements.length > 0 && project.prd) {
+    prdDeltaPayload = {
+      summary: impact.prdChangeSummary ?? impact.summary,
+      newRequirements: impact.newRequirements,
+    };
+    const updatedContent = mergePrdDelta(project.prd.content, prdDeltaPayload);
+    await prisma.prd.update({
+      where: { projectId: project.id },
+      data: {
+        content: updatedContent as any,
+        version: { increment: 1 },
+      },
+    });
+  }
+
+  const featureIdMap = new Map<string, string>();
+  const roadmapData: RoadmapData = {
+    phases: project.roadmap.map((p) => ({
+      order: p.order,
+      title: p.title,
+      description: p.description ?? undefined,
+      layer: p.layer as any,
+      features: p.features.map((f) => {
+        featureIdMap.set(f.id, f.id);
+        return {
+          id: f.id,
+          title: f.title,
+          description: f.description ?? undefined,
+          dependsOn: [],
+        };
+      }),
+    })),
+  };
+
+  if (roadmapData.phases.length === 0 || roadmapData.phases.every((p) => p.features.length === 0)) {
+    const defaultPhase = {
+      order: 1,
+      title: 'Siklus Perubahan',
+      layer: 'BACKEND' as const,
+      features: [{ id: 'CYCLE-FEAT', title: cycle.title, dependsOn: [] }],
+    };
+    roadmapData.phases = [defaultPhase];
+    featureIdMap.set('CYCLE-FEAT', 'CYCLE-FEAT');
+  }
+
+  const lastTask = await prisma.task.findFirst({
+    where: { projectId: project.id },
+    orderBy: { order: 'desc' },
+    select: { order: true },
+  });
+  const startOrder = (lastTask?.order ?? 0) + 1;
+
+  const stackContract = project.stacks.length > 0 ? resolveStackContract(project.stacks) : undefined;
+  const prdDoc = project.prd?.content ? readPrdContent(project.prd.content) : undefined;
+
+  const generated = await generateTasksFromRoadmap({
+    roadmap: roadmapData,
+    projectName: project.name,
+    prd: prdDoc,
+    uiSpec: project.uiSpec,
+    projectId: project.id,
+    stack: stackContract,
+    cycle: {
+      request: effectiveRequest,
+      impact,
+      repoSummary: project.repoSummary,
+      startOrder,
+    },
+  });
+
+  const { tasks: validTasks, warnings } = validateAndNormalizeDAG(generated);
+  if (warnings.length > 0) {
+    console.log(`[CYCLE-DAG-VALIDATOR] warnings:\n${warnings.join('\n')}`);
+  }
+
+  await prisma.$transaction(
+    async (tx) => {
+      await persistGeneratedTasks(tx, project.id, validTasks, featureIdMap, cycle.id, startOrder);
+
+      await tx.projectCycle.update({
+        where: { id: cycle.id },
+        data: {
+          title: parsed.data.title ?? effectiveRequest.slice(0, 60),
+          request: effectiveRequest,
+          status: 'OPEN',
+          impact: impact as any,
+          prdDelta: prdDeltaPayload,
+          type: impact.type ?? cycle.type,
+          size: impact.size ?? cycle.size,
+        },
+      });
+    },
+    { timeout: 60000 }
+  );
+
+  const cycleTasks = await prisma.task.findMany({
+    where: { cycleId: cycle.id },
+    include: {
+      dependsOn: {
+        include: {
+          dependsOn: { select: { id: true, title: true, status: true, order: true } },
+        },
+      },
+    },
+    orderBy: { order: 'asc' },
+  });
+
+  res.json({
+    ok: true,
+    cycleId: cycle.id,
+    tasksCount: cycleTasks.length,
+    tasks: cycleTasks,
+  });
 });
 
 // ============================================================
@@ -2169,8 +2700,13 @@ app.put('/api/projects/:id/techstack', requireUser, async (req: AuthedRequest, r
     return res.status(403).json({ error: 'Tahap tech stack telah selesai dan terkunci (Read-Only).' });
   }
 
-  await prisma.stack.deleteMany({ where: { projectId: project.id } });
   const stacks = Array.isArray(req.body.techStack) ? req.body.techStack : [];
+  const check = validateGoldenSelection(stacks);
+  if (!check.ok) {
+    return res.status(400).json({ error: check.error });
+  }
+
+  await prisma.stack.deleteMany({ where: { projectId: project.id } });
   await Promise.all(
     stacks.map((s: string) => {
       const parsed = parseStackEntry(s);

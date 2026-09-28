@@ -172,7 +172,7 @@ export function ChatPage() {
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Menyiapkan Wawancara...</span>
+                  <span>Menyiapkan</span>
                 </>
               ) : (
                 <>

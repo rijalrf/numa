@@ -73,6 +73,7 @@ export type ContextResp = {
     files_readonly?: string[];
     files_to_create?: string[];
     validation_commands?: string[];
+    advisory_commands?: string[];
   };
 };
 export type StatusResp = { ok: true; taskId: string; status: string; checkpointPending?: boolean; layer?: string };
@@ -82,6 +83,12 @@ export type PrdResponse = {
 };
 export type BrdResponse = PrdResponse;
 export type ProjectScope = { id: string; name: string };
+export type ArchitectureContractResponse = {
+  contractKey: string;
+  title: string;
+  framework: string;
+  markdown: string;
+};
 
 export const api = {
   whoami(cfg: Config) {
@@ -123,6 +130,15 @@ export const api = {
   },
   brd(cfg: Config) {
     return request<PrdResponse>(cfg, '/api/agent/prd');
+  },
+  architectureContract(cfg: Config) {
+    return request<ArchitectureContractResponse>(cfg, '/api/agent/architecture-contract');
+  },
+  saveRepoSummary(cfg: Config, summary: unknown) {
+    return request<{ ok: true; savedAt: string }>(cfg, '/api/agent/repo-summary', {
+      method: 'POST',
+      body: JSON.stringify({ summary }),
+    });
   },
 };
 

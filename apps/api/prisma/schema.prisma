@@ -90,6 +90,7 @@ model Project {
   reviewFlow  Boolean  @default(false)   // bila true, complete -> REVIEW dulu
   wizardStep  String   @default("done")  // chat | techstack | prd | tree | board | guide | done
   uiSpec      Json?                      // spesifikasi desain UI/UX terstruktur (Bab 14)
+  repoSummary Json?                      // ringkasan workspace dari numa sync
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -99,6 +100,7 @@ model Project {
   prd              Prd?
   roadmap          RoadmapPhase[]
   tasks            Task[]
+  cycles           ProjectCycle[]
   agentTokenScopes AgentTokenScope[]
   checkpoints      Checkpoint[]
   chatSession      ChatSession?
@@ -219,6 +221,7 @@ model Task {
   outputSummary String?
   acceptanceCriteria Json @default("[]")
   blockedReason String?
+  cycleId     String?
   startedAt   DateTime?
   completedAt DateTime?
   createdAt   DateTime @default(now())
@@ -226,12 +229,36 @@ model Task {
 
   project      Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   feature      RoadmapFeature?  @relation(fields: [featureId], references: [id], onDelete: SetNull)
+  cycle        ProjectCycle?    @relation(fields: [cycleId], references: [id], onDelete: SetNull)
   dependsOn    TaskDependency[] @relation("TaskDepsFrom")
   dependencies TaskDependency[] @relation("TaskDepsTo")
 
   @@index([projectId])
   @@index([featureId])
   @@index([status])
+  @@index([cycleId])
+}
+
+model ProjectCycle {
+  id        String   @id @default(cuid())
+  projectId String
+  number    Int      // 1..n
+  title     String
+  request   String
+  status    String   @default("DRAFT") // DRAFT | OPEN | DONE
+  type      String   @default("MIXED") // FEATURE | BUGFIX | REFACTOR | MIXED
+  size      String   @default("MEDIUM") // SMALL | MEDIUM | LARGE
+  impact    Json     @default("{}")
+  clarify   Json     @default("[]")
+  prdDelta  Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+
+  @@index([projectId, status])
+  @@index([projectId, number])
 }
 
 model TaskDependency {

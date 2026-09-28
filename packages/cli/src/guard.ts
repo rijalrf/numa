@@ -10,6 +10,7 @@ export type GuardSpec = {
   files_readonly?: string[];
   files_to_create?: string[];
   validation_commands?: string[];
+  advisory_commands?: string[];
 };
 
 export type FailureType = 'FORBIDDEN_FILES' | 'TEST_FAILURE' | 'COMMAND_FAILURE' | 'RUNTIME_ERROR';
@@ -185,6 +186,18 @@ export async function runGuard(spec: GuardSpec, cwd: string, taskId?: string): P
       );
     }
     console.log('\nSemua validation commands lolos.');
+  }
+
+  const advisory = spec.advisory_commands ?? [];
+  if (advisory.length > 0) {
+    console.log('\nMenjalankan pemeriksaan penasihat keamanan (advisory)...\n');
+    const { ok, output } = await runValidationCommands(advisory, cwd);
+    if (output) console.log(output);
+    if (!ok) {
+      console.log('\nPeringatan (tidak memblokir): Ditemukan anjuran audit keamanan di atas.');
+    } else {
+      console.log('\nPemeriksaan penasihat keamanan lolos.');
+    }
   }
 }
 
