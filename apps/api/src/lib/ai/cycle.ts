@@ -6,33 +6,76 @@ import { readPrdContent } from './prd.js';
 import type { PrdTaskContext } from './tasks.js';
 
 export const ImpactSchema = z.object({
-  clarity: z.enum(['CLEAR', 'VAGUE']),
-  clarificationQuestions: z.array(SurveyQuestionItemSchema).optional(),
-  type: z.enum(['FEATURE', 'BUGFIX', 'REFACTOR', 'MIXED']),
-  size: z.enum(['SMALL', 'MEDIUM', 'LARGE']),
-  summary: z.string(),
-  impactedFiles: z.array(z.string()).default([]),
-  impactedPrd: z.array(z.string()).default([]),
-  impactedTree: z.array(z.string()).default([]),
-  needsPrdChange: z.boolean(),
-  prdChangeSummary: z.string().optional(),
+  clarity: z
+    .preprocess((v) => (typeof v === 'string' && v.toUpperCase() === 'VAGUE' ? 'VAGUE' : 'CLEAR'), z.enum(['CLEAR', 'VAGUE']))
+    .default('CLEAR'),
+  clarificationQuestions: z
+    .preprocess((v) => (Array.isArray(v) && v.length > 0 ? v : undefined), z.array(SurveyQuestionItemSchema).optional())
+    .nullable()
+    .optional(),
+  type: z
+    .preprocess((v) => (typeof v === 'string' ? v.toUpperCase() : 'FEATURE'), z.enum(['FEATURE', 'BUGFIX', 'REFACTOR', 'MIXED']))
+    .default('FEATURE'),
+  size: z
+    .preprocess((v) => (typeof v === 'string' ? v.toUpperCase() : 'SMALL'), z.enum(['SMALL', 'MEDIUM', 'LARGE']))
+    .default('SMALL'),
+  summary: z.preprocess((val) => (typeof val === 'string' && val.trim() ? val : 'Perubahan sistem'), z.string()).default('Perubahan sistem'),
+  impactedFiles: z
+    .preprocess((v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []), z.array(z.string()))
+    .default([]),
+  impactedPrd: z
+    .preprocess((v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []), z.array(z.string()))
+    .default([]),
+  impactedTree: z
+    .preprocess((v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []), z.array(z.string()))
+    .default([]),
+  needsPrdChange: z
+    .preprocess((val) => (typeof val === 'boolean' ? val : val === 'true' || val === 1), z.boolean())
+    .default(false),
+  prdChangeSummary: z
+    .preprocess((v) => (typeof v === 'string' && v.trim() ? v : undefined), z.string().optional())
+    .nullable()
+    .optional(),
   newRequirements: z
-    .array(
-      z.object({
-        id: z.string(),
-        title: z.string(),
-        description: z.string(),
-        priority: z.enum(['HIGH', 'MEDIUM', 'LOW']).default('MEDIUM'),
-      })
+    .preprocess(
+      (v) => (Array.isArray(v) ? v : []),
+      z.array(
+        z.object({
+          id: z.preprocess((v) => (typeof v === 'string' && v.trim() ? v : 'FR-CYCLE-001'), z.string()).default('FR-CYCLE-001'),
+          title: z.preprocess((v) => (typeof v === 'string' && v.trim() ? v : 'Perubahan fitur'), z.string()).default('Perubahan fitur'),
+          description: z.preprocess((v) => (typeof v === 'string' ? v : String(v ?? '')), z.string()).default(''),
+          priority: z.preprocess((val) => {
+            if (typeof val === 'string') {
+              const up = val.toUpperCase().trim();
+              if (up === 'MUST' || up === 'CRITICAL') return 'HIGH';
+              if (up === 'SHOULD') return 'MEDIUM';
+              if (up === 'COULD' || up === 'WONT') return 'LOW';
+              if (['HIGH', 'MEDIUM', 'LOW'].includes(up)) return up;
+            }
+            return 'MEDIUM';
+          }, z.enum(['HIGH', 'MEDIUM', 'LOW']).default('MEDIUM')),
+        })
+      )
     )
     .default([]),
-  estimatedTasks: z.number().int().min(1),
+  estimatedTasks: z.preprocess((val) => {
+    const num = Number(val);
+    return Number.isFinite(num) && num >= 1 ? Math.round(num) : 3;
+  }, z.number().int().min(1).default(3)),
   splitProposal: z
-    .object({
-      reason: z.string(),
-      partA: z.string(),
-      partB: z.string(),
-    })
+    .preprocess((v) => {
+      if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+      return v;
+    }, z.object({
+      reason: z.preprocess((v) => (typeof v === 'string' ? v : ''), z.string()).default(''),
+      partA: z
+        .preprocess((v) => (typeof v === 'object' && v !== null ? (v as any).title ?? JSON.stringify(v) : String(v ?? '')), z.string())
+        .default(''),
+      partB: z
+        .preprocess((v) => (typeof v === 'object' && v !== null ? (v as any).title ?? JSON.stringify(v) : String(v ?? '')), z.string())
+        .default(''),
+    }).optional())
+    .nullable()
     .optional(),
 });
 
@@ -64,7 +107,13 @@ PRINSIP ANALISIS DAMPAK:
    - impactedPrd: ID requirement lama yang terdampak jika ada.
    - impactedTree: nama simpul fitur aplikasi yang tersentuh.
 5. Pemecahan Siklus (Split Proposal):
-   - Jika perkiraan task >= 8 atau size LARGE, tawarkan usulan pemecahan menjadi 2 siklus berurutan (partA dan partB) dengan alasan teknis rasional.
+   - Jika perkiraan task >= 8 atau size LARGE, tawarkan usulan pemecahan menjadi 2 siklus berurutan (partA dan partB berupa string teks) dengan alasan teknis rasional.
+   - Jika size SMALL atau MEDIUM, hilangkan field splitProposal atau set null.
+6. Format Output JSON:
+   - summary: Wajib string deskripsi singkat analisis (1-2 kalimat).
+   - estimatedTasks: Wajib angka integer minimal 1.
+   - newRequirements[].priority: Wajib salah satu dari 'HIGH', 'MEDIUM', atau 'LOW'.
+   - clarificationQuestions: Berikan array pertanyaan jika clarity VAGUE, atau abaikan jika CLEAR.
 
 Bahasa Indonesia baku, istilah teknis pemrograman dalam bahasa Inggris, TANPA EMOJI.`;
 

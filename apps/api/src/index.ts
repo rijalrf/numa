@@ -1216,18 +1216,29 @@ Tempel token di placeholder di bawah SEBELUM menyalin prompt ini.
   res.json({ projectName: project.name, prompt: md });
 });
 
+const projectPrdGenerationLocks = new Set<string>();
+
 // Step 2: generate PRD dari ide + tech stack + chat history (SSE streaming)
 app.post(['/api/projects/:id/prd/generate', '/api/projects/:id/brd/generate'], requireUser, async (req: AuthedRequest, res) => {
+  if (projectPrdGenerationLocks.has(req.params.id)) {
+    return res.status(409).json({ error: 'Penyusunan PRD sedang berlangsung. Mohon tunggu sejenak.' });
+  }
+  projectPrdGenerationLocks.add(req.params.id);
+
   const project = await prisma.project.findFirst({
     where: { id: req.params.id, userId: req.userId },
     include: {
       stacks: true,
     },
   });
-  if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
+  if (!project) {
+    projectPrdGenerationLocks.delete(req.params.id);
+    return res.status(404).json({ error: 'Project tidak ditemukan.' });
+  }
 
   const { plan } = await getUserPlan(req.userId);
   if (plan === 'free') {
+    projectPrdGenerationLocks.delete(req.params.id);
     return res.status(403).json({
       error: 'Paket Free tidak dapat menghasilkan dokumen PRD. Silakan upgrade paket untuk melanjutkan.',
       code: 'plan_upgrade_required',
@@ -1238,6 +1249,7 @@ app.post(['/api/projects/:id/prd/generate', '/api/projects/:id/brd/generate'], r
 
   const existing = await prisma.prd.findUnique({ where: { projectId: project.id } });
   if (existing && isStageLocked(project.wizardStep, 'prd')) {
+    projectPrdGenerationLocks.delete(req.params.id);
     return res.status(403).json({ error: 'Dokumen PRD telah selesai dan terkunci (Read-Only).' });
   }
 
@@ -1282,15 +1294,11 @@ app.post(['/api/projects/:id/prd/generate', '/api/projects/:id/brd/generate'], r
       }
     );
 
-    let savedPrd;
-    if (existing) {
-      savedPrd = await prisma.prd.update({
-        where: { projectId: project.id },
-        data: { content: prd, version: existing.version + 1 },
-      });
-    } else {
-      savedPrd = await prisma.prd.create({ data: { projectId: project.id, content: prd } });
-    }
+    const savedPrd = await prisma.prd.upsert({
+      where: { projectId: project.id },
+      create: { projectId: project.id, content: prd, version: 1 },
+      update: { content: prd, version: { increment: 1 } },
+    });
     await prisma.project.update({ where: { id: project.id }, data: { wizardStep: 'tree' } });
 
     res.write(`data: ${JSON.stringify({ done: true, prd: savedPrd, brd: savedPrd })}\n\n`);
@@ -1298,6 +1306,8 @@ app.post(['/api/projects/:id/prd/generate', '/api/projects/:id/brd/generate'], r
   } catch (err) {
     res.write(`data: ${JSON.stringify({ error: 'AI gagal menghasilkan PRD.', detail: (err as Error).message })}\n\n`);
     res.end();
+  } finally {
+    projectPrdGenerationLocks.delete(req.params.id);
   }
 });
 
@@ -1896,57 +1906,65 @@ app.post('/api/projects/:id/cycles/analyze', requireUser, async (req: AuthedRequ
 
   const tree = project.treeNodes.map((n) => ({ label: n.label, kind: n.kind }));
 
-  const analysis = await analyzeChangeRequest({
-    projectId: project.id,
-    request: parsed.data.request,
-    prd: project.prd?.content ? readPrdContent(project.prd.content) : null,
-    tree,
-    repoSummary: project.repoSummary,
-    completedTasks,
-    clarifyAnswers: parsed.data.clarifyAnswers,
-  });
-
-  // Tentukan nomor cycle berikutnya
-  const maxCycle = await prisma.projectCycle.findFirst({
-    where: { projectId: project.id },
-    orderBy: { number: 'desc' },
-    select: { number: true },
-  });
-  const nextNumber = (maxCycle?.number ?? 0) + 1;
-
-  // Hapus draft lama jika ada
-  await prisma.projectCycle.deleteMany({
-    where: { projectId: project.id, status: 'DRAFT' },
-  });
-
-  const cycle = await prisma.projectCycle.create({
-    data: {
+  try {
+    const analysis = await analyzeChangeRequest({
       projectId: project.id,
-      number: nextNumber,
-      title: parsed.data.request.slice(0, 60),
       request: parsed.data.request,
-      status: 'DRAFT',
-      type: analysis.type,
-      size: analysis.size,
-      impact: analysis as any,
-      clarify: parsed.data.clarifyAnswers ?? [],
-    },
-  });
+      prd: project.prd?.content ? readPrdContent(project.prd.content) : null,
+      tree,
+      repoSummary: project.repoSummary,
+      completedTasks,
+      clarifyAnswers: parsed.data.clarifyAnswers,
+    });
 
-  if (analysis.clarity === 'VAGUE' && (!parsed.data.clarifyAnswers || parsed.data.clarifyAnswers.length === 0)) {
+    // Tentukan nomor cycle berikutnya
+    const maxCycle = await prisma.projectCycle.findFirst({
+      where: { projectId: project.id },
+      orderBy: { number: 'desc' },
+      select: { number: true },
+    });
+    const nextNumber = (maxCycle?.number ?? 0) + 1;
+
+    // Hapus draft lama jika ada
+    await prisma.projectCycle.deleteMany({
+      where: { projectId: project.id, status: 'DRAFT' },
+    });
+
+    const cycle = await prisma.projectCycle.create({
+      data: {
+        projectId: project.id,
+        number: nextNumber,
+        title: parsed.data.request.slice(0, 60),
+        request: parsed.data.request,
+        status: 'DRAFT',
+        type: analysis.type,
+        size: analysis.size,
+        impact: analysis as any,
+        clarify: parsed.data.clarifyAnswers ?? [],
+      },
+    });
+
+    if (analysis.clarity === 'VAGUE' && (!parsed.data.clarifyAnswers || parsed.data.clarifyAnswers.length === 0)) {
+      return res.json({
+        needsClarification: true,
+        cycleId: cycle.id,
+        questions: analysis.clarificationQuestions ?? [],
+        analysis,
+      });
+    }
+
     return res.json({
-      needsClarification: true,
+      needsClarification: false,
       cycleId: cycle.id,
-      questions: analysis.clarificationQuestions ?? [],
       analysis,
     });
+  } catch (err) {
+    console.error(`[cycles/analyze] Gagal menganalisis perubahan project ${project.id}:`, err);
+    return res.status(502).json({
+      error: 'AI gagal menganalisis permintaan perubahan.',
+      detail: (err as Error).message,
+    });
   }
-
-  return res.json({
-    needsClarification: false,
-    cycleId: cycle.id,
-    analysis,
-  });
 });
 
 const CycleClarifyBody = z.object({
@@ -1987,31 +2005,39 @@ app.post('/api/projects/:id/cycles/:cycleId/clarify', requireUser, async (req: A
 
   const tree = project.treeNodes.map((n) => ({ label: n.label, kind: n.kind }));
 
-  const analysis = await analyzeChangeRequest({
-    projectId: project.id,
-    request: cycle.request,
-    prd: project.prd?.content ? readPrdContent(project.prd.content) : null,
-    tree,
-    repoSummary: project.repoSummary,
-    completedTasks,
-    clarifyAnswers: parsed.data.answers,
-  });
+  try {
+    const analysis = await analyzeChangeRequest({
+      projectId: project.id,
+      request: cycle.request,
+      prd: project.prd?.content ? readPrdContent(project.prd.content) : null,
+      tree,
+      repoSummary: project.repoSummary,
+      completedTasks,
+      clarifyAnswers: parsed.data.answers,
+    });
 
-  const updated = await prisma.projectCycle.update({
-    where: { id: cycle.id },
-    data: {
-      clarify: parsed.data.answers,
-      impact: analysis as any,
-      type: analysis.type,
-      size: analysis.size,
-    },
-  });
+    const updated = await prisma.projectCycle.update({
+      where: { id: cycle.id },
+      data: {
+        clarify: parsed.data.answers,
+        impact: analysis as any,
+        type: analysis.type,
+        size: analysis.size,
+      },
+    });
 
-  res.json({
-    ok: true,
-    cycleId: updated.id,
-    analysis,
-  });
+    return res.json({
+      ok: true,
+      cycleId: updated.id,
+      analysis,
+    });
+  } catch (err) {
+    console.error(`[cycles/clarify] Gagal memperbarui klarifikasi cycle ${cycle.id}:`, err);
+    return res.status(502).json({
+      error: 'AI gagal memproses jawaban klarifikasi.',
+      detail: (err as Error).message,
+    });
+  }
 });
 
 const CycleGenerateBody = z.object({
@@ -2059,133 +2085,141 @@ app.post('/api/projects/:id/cycles/:cycleId/generate', requireUser, async (req: 
     return res.status(409).json({ error: 'Masih ada siklus lain yang berstatus OPEN.' });
   }
 
-  let effectiveRequest = cycle.request;
-  let impact = cycle.impact as any;
+  try {
+    let effectiveRequest = cycle.request;
+    let impact = cycle.impact as any;
 
-  if (parsed.data.split !== 'single' && parsed.data.partRequest) {
-    effectiveRequest = parsed.data.partRequest;
-    impact = await analyzeChangeRequest({
-      projectId: project.id,
-      request: effectiveRequest,
-      prd: project.prd?.content ? readPrdContent(project.prd.content) : null,
-      repoSummary: project.repoSummary,
-    });
-  }
+    if (parsed.data.split !== 'single' && parsed.data.partRequest) {
+      effectiveRequest = parsed.data.partRequest;
+      impact = await analyzeChangeRequest({
+        projectId: project.id,
+        request: effectiveRequest,
+        prd: project.prd?.content ? readPrdContent(project.prd.content) : null,
+        repoSummary: project.repoSummary,
+      });
+    }
 
-  let prdDeltaPayload: any = {};
-  if (impact.needsPrdChange && impact.newRequirements && impact.newRequirements.length > 0 && project.prd) {
-    prdDeltaPayload = {
-      summary: impact.prdChangeSummary ?? impact.summary,
-      newRequirements: impact.newRequirements,
-    };
-    const updatedContent = mergePrdDelta(project.prd.content, prdDeltaPayload);
-    await prisma.prd.update({
-      where: { projectId: project.id },
-      data: {
-        content: updatedContent as any,
-        version: { increment: 1 },
-      },
-    });
-  }
-
-  const featureIdMap = new Map<string, string>();
-  const roadmapData: RoadmapData = {
-    phases: project.roadmap.map((p) => ({
-      order: p.order,
-      title: p.title,
-      description: p.description ?? undefined,
-      layer: p.layer as any,
-      features: p.features.map((f) => {
-        featureIdMap.set(f.id, f.id);
-        return {
-          id: f.id,
-          title: f.title,
-          description: f.description ?? undefined,
-          dependsOn: [],
-        };
-      }),
-    })),
-  };
-
-  if (roadmapData.phases.length === 0 || roadmapData.phases.every((p) => p.features.length === 0)) {
-    const defaultPhase = {
-      order: 1,
-      title: 'Siklus Perubahan',
-      layer: 'BACKEND' as const,
-      features: [{ id: 'CYCLE-FEAT', title: cycle.title, dependsOn: [] }],
-    };
-    roadmapData.phases = [defaultPhase];
-    featureIdMap.set('CYCLE-FEAT', 'CYCLE-FEAT');
-  }
-
-  const lastTask = await prisma.task.findFirst({
-    where: { projectId: project.id },
-    orderBy: { order: 'desc' },
-    select: { order: true },
-  });
-  const startOrder = (lastTask?.order ?? 0) + 1;
-
-  const stackContract = project.stacks.length > 0 ? resolveStackContract(project.stacks) : undefined;
-  const prdDoc = project.prd?.content ? readPrdContent(project.prd.content) : undefined;
-
-  const generated = await generateTasksFromRoadmap({
-    roadmap: roadmapData,
-    projectName: project.name,
-    prd: prdDoc,
-    uiSpec: project.uiSpec,
-    projectId: project.id,
-    stack: stackContract,
-    cycle: {
-      request: effectiveRequest,
-      impact,
-      repoSummary: project.repoSummary,
-      startOrder,
-    },
-  });
-
-  const { tasks: validTasks, warnings } = validateAndNormalizeDAG(generated);
-  if (warnings.length > 0) {
-    console.log(`[CYCLE-DAG-VALIDATOR] warnings:\n${warnings.join('\n')}`);
-  }
-
-  await prisma.$transaction(
-    async (tx) => {
-      await persistGeneratedTasks(tx, project.id, validTasks, featureIdMap, cycle.id, startOrder);
-
-      await tx.projectCycle.update({
-        where: { id: cycle.id },
+    let prdDeltaPayload: any = {};
+    if (impact.needsPrdChange && impact.newRequirements && impact.newRequirements.length > 0 && project.prd) {
+      prdDeltaPayload = {
+        summary: impact.prdChangeSummary ?? impact.summary,
+        newRequirements: impact.newRequirements,
+      };
+      const updatedContent = mergePrdDelta(project.prd.content, prdDeltaPayload);
+      await prisma.prd.update({
+        where: { projectId: project.id },
         data: {
-          title: parsed.data.title ?? effectiveRequest.slice(0, 60),
-          request: effectiveRequest,
-          status: 'OPEN',
-          impact: impact as any,
-          prdDelta: prdDeltaPayload,
-          type: impact.type ?? cycle.type,
-          size: impact.size ?? cycle.size,
+          content: updatedContent as any,
+          version: { increment: 1 },
         },
       });
-    },
-    { timeout: 60000 }
-  );
+    }
 
-  const cycleTasks = await prisma.task.findMany({
-    where: { cycleId: cycle.id },
-    include: {
-      dependsOn: {
-        include: {
-          dependsOn: { select: { id: true, title: true, status: true, order: true } },
+    const featureIdMap = new Map<string, string>();
+    const roadmapData: RoadmapData = {
+      phases: project.roadmap.map((p) => ({
+        order: p.order,
+        title: p.title,
+        description: p.description ?? undefined,
+        layer: p.layer as any,
+        features: p.features.map((f) => {
+          featureIdMap.set(f.id, f.id);
+          return {
+            id: f.id,
+            title: f.title,
+            description: f.description ?? undefined,
+            dependsOn: [],
+          };
+        }),
+      })),
+    };
+
+    if (roadmapData.phases.length === 0 || roadmapData.phases.every((p) => p.features.length === 0)) {
+      const defaultPhase = {
+        order: 1,
+        title: 'Siklus Perubahan',
+        layer: 'BACKEND' as const,
+        features: [{ id: 'CYCLE-FEAT', title: cycle.title, dependsOn: [] }],
+      };
+      roadmapData.phases = [defaultPhase];
+      featureIdMap.set('CYCLE-FEAT', 'CYCLE-FEAT');
+    }
+
+    const lastTask = await prisma.task.findFirst({
+      where: { projectId: project.id },
+      orderBy: { order: 'desc' },
+      select: { order: true },
+    });
+    const startOrder = (lastTask?.order ?? 0) + 1;
+
+    const stackContract = project.stacks.length > 0 ? resolveStackContract(project.stacks) : undefined;
+    const prdDoc = project.prd?.content ? readPrdContent(project.prd.content) : undefined;
+
+    const generated = await generateTasksFromRoadmap({
+      roadmap: roadmapData,
+      projectName: project.name,
+      prd: prdDoc,
+      uiSpec: project.uiSpec,
+      projectId: project.id,
+      stack: stackContract,
+      cycle: {
+        request: effectiveRequest,
+        impact,
+        repoSummary: project.repoSummary,
+        startOrder,
+      },
+    });
+
+    const { tasks: validTasks, warnings } = validateAndNormalizeDAG(generated);
+    if (warnings.length > 0) {
+      console.log(`[CYCLE-DAG-VALIDATOR] warnings:\n${warnings.join('\n')}`);
+    }
+
+    await prisma.$transaction(
+      async (tx) => {
+        await persistGeneratedTasks(tx, project.id, validTasks, featureIdMap, cycle.id, startOrder);
+
+        await tx.projectCycle.update({
+          where: { id: cycle.id },
+          data: {
+            title: parsed.data.title ?? effectiveRequest.slice(0, 60),
+            request: effectiveRequest,
+            status: 'OPEN',
+            impact: impact as any,
+            prdDelta: prdDeltaPayload,
+            type: impact.type ?? cycle.type,
+            size: impact.size ?? cycle.size,
+          },
+        });
+      },
+      { timeout: 60000 }
+    );
+
+    const cycleTasks = await prisma.task.findMany({
+      where: { cycleId: cycle.id },
+      include: {
+        dependsOn: {
+          include: {
+            dependsOn: { select: { id: true, title: true, status: true, order: true } },
+          },
         },
       },
-    },
-    orderBy: { order: 'asc' },
-  });
+      orderBy: { order: 'asc' },
+    });
 
-  res.json({
-    ok: true,
-    cycleId: cycle.id,
-    tasksCount: cycleTasks.length,
-    tasks: cycleTasks,
-  });
+    return res.json({
+      ok: true,
+      cycleId: cycle.id,
+      tasksCount: cycleTasks.length,
+      tasks: cycleTasks,
+    });
+  } catch (err) {
+    console.error(`[cycles/generate] Gagal merancang task untuk cycle ${cycle.id}:`, err);
+    return res.status(502).json({
+      error: 'AI gagal merancang task untuk siklus perubahan.',
+      detail: (err as Error).message,
+    });
+  }
 });
 
 // ============================================================
@@ -2959,8 +2993,8 @@ app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
     : 500;
   const message = err instanceof Error ? err.message : 'Terjadi kesalahan pada server.';
   res.status(status).json({
-    error: 'Terjadi kesalahan internal server.',
-    detail: process.env.NODE_ENV === 'production' ? undefined : message,
+    error: status === 500 && process.env.NODE_ENV === 'production' ? 'Terjadi kesalahan internal server.' : message,
+    detail: message,
   });
 });
 

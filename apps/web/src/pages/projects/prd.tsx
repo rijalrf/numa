@@ -1,9 +1,9 @@
 // Halaman PRD: View atau real-time streaming dokumen kebutuhan produk
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@/lib/http';
 import { Button } from '@/components/ui/button';
-import { Lock, Sparkles, RefreshCw, Loader2, ArrowRight } from 'lucide-react';
+import { Sparkles, RefreshCw, Loader2, ArrowRight } from 'lucide-react';
 import { isStageLocked } from '@/lib/constants';
 import { useWizardNav } from '@/components/layout/wizard-nav';
 import { PricingDialog } from '@/components/billing/pricing-dialog';
@@ -19,13 +19,18 @@ export function PrdPage() {
   const [error, setError] = useState<string | null>(null);
   const [userPlan, setUserPlan] = useState<{ plan: string; planName: string } | null>(null);
   const [pricingOpen, setPricingOpen] = useState(false);
+  const streamingRef = useRef(false);
 
   // Generator PRD via SSE: kumpulkan seluruh respons sebelum render untuk mencegah kedipan layar
   const streamPrd = useCallback(async () => {
-    if (!projectId || isLocked || generating) return;
+    if (!projectId || isLocked || generating || streamingRef.current) return;
+    streamingRef.current = true;
     setGenerating(true);
     setError(null);
     setMarkdown('');
+
+    let accumulated = '';
+    let streamError: string | null = null;
 
     try {
       const resp = await fetch(`/api/projects/${projectId}/prd/generate`, {
@@ -34,6 +39,10 @@ export function PrdPage() {
       });
 
       if (!resp.ok) {
+        if (resp.status === 409) {
+          // Sedang berjalan di proses lain, tunggu data dari GET
+          return;
+        }
         throw new Error('Gagal menghubungi server untuk generate PRD');
       }
 
@@ -42,7 +51,6 @@ export function PrdPage() {
 
       const decoder = new TextDecoder();
       let buffer = '';
-      let accumulated = '';
 
       while (true) {
         const { done, value } = await reader.read();
@@ -62,7 +70,7 @@ export function PrdPage() {
                 }
                 if (data.error) {
                   console.error('Error dari SSE stream:', data.error);
-                  setError(data.error);
+                  streamError = data.error;
                 }
               } catch {}
             }
@@ -73,11 +81,17 @@ export function PrdPage() {
       // Render sekali penuh saat stream selesai
       if (accumulated) {
         setMarkdown(accumulated);
+        setError(null);
+      } else if (streamError) {
+        setError(streamError);
       }
     } catch (err: any) {
       console.error('Error streaming PRD:', err);
-      setError(err?.message || 'Terjadi kesalahan saat menyusun PRD.');
+      if (!accumulated) {
+        setError(err?.message || 'Terjadi kesalahan saat menyusun PRD.');
+      }
     } finally {
+      streamingRef.current = false;
       setGenerating(false);
       setLoading(false);
     }
@@ -159,16 +173,6 @@ export function PrdPage() {
 
   return (
     <div className="max-w-4xl mx-auto w-full space-y-6 pb-16">
-      {/* Banner terkunci jika sudah lewat PRD */}
-      {isLocked && (
-        <div className="flex items-center gap-2.5 p-3.5 bg-muted/70 border border-border rounded-md text-xs text-muted-foreground shadow-xs">
-          <Lock className="h-4 w-4 text-primary shrink-0" />
-          <span>
-            Tahap Dokumen PRD telah selesai dan terkunci (Read-Only). Spesifikasi kebutuhan tersimpan permanen.
-          </span>
-        </div>
-      )}
-
       {/* Paywall Banner untuk Free Plan */}
       {userPlan?.plan === 'free' && markdown && !generating && (
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-950 dark:text-amber-200">

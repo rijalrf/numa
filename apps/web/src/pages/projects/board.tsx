@@ -1,5 +1,5 @@
 // Board page: papan Kanban task implementasi project dengan kolom User Story & kolom card.
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '@/lib/http';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -50,6 +50,16 @@ export function BoardPage() {
   const [changeCycleOpen, setChangeCycleOpen] = useState(false);
   const [viewCycleId, setViewCycleId] = useState<string | null>(null);
 
+  const isGeneratingRef = useRef(false);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Bersihkan timer polling saat unmount
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    };
+  }, []);
+
   const handleTaskStatusChange = (taskId: string, newStatus: Task['status']) => {
     setTasks((prev) =>
       prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
@@ -96,8 +106,48 @@ export function BoardPage() {
         : null,
   });
 
-  const generateTasks = useCallback(async () => {
+  const pollForGeneratedTasks = useCallback(() => {
     if (!projectId) return;
+    if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+
+    setGenerating(true);
+    setError(null);
+    let attempts = 0;
+    const maxAttempts = 60; // 3 menit (polling tiap 3 detik)
+
+    pollTimerRef.current = setInterval(async () => {
+      attempts++;
+      try {
+        const json = await api<{ tasks: Task[] }>(`/api/projects/${projectId}/tasks`);
+        if (json.tasks && json.tasks.length > 0) {
+          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+          isGeneratingRef.current = false;
+          setTasks(json.tasks);
+          setSuccessMessage(`${json.tasks.length} task berhasil dirancang.`);
+          setGenerating(false);
+          setLoading(false);
+          setError(null);
+          return;
+        }
+      } catch {
+        // Polling sementara gagal, ulangi di tick berikutnya
+      }
+
+      if (attempts >= maxAttempts) {
+        if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+        isGeneratingRef.current = false;
+        setGenerating(false);
+        setLoading(false);
+        setError('Proses perancangan task memakan waktu lebih lama dari biasanya. Silakan periksa ulang beberapa saat lagi.');
+      }
+    }, 3000);
+  }, [projectId]);
+
+  const generateTasks = useCallback(async () => {
+    if (!projectId || isGeneratingRef.current) return;
+    isGeneratingRef.current = true;
     setGenerating(true);
     setError(null);
     setSuccessMessage(null);
@@ -127,19 +177,23 @@ export function BoardPage() {
           setError(null);
         }
       }
+      isGeneratingRef.current = false;
+      setGenerating(false);
+      setLoading(false);
     } catch (err: any) {
       console.error('Error generating tasks:', err);
       if (err?.status === 409) {
-        setError('Generasi task sedang berjalan. Mohon tunggu sebentar.');
+        // Generasi sedang berjalan di server — aktifkan polling otomatis
+        pollForGeneratedTasks();
       } else {
+        isGeneratingRef.current = false;
+        setGenerating(false);
+        setLoading(false);
         const msg = err instanceof Error ? err.message : 'Gagal menghasilkan task.';
         setError(`Gagal merancang task: ${msg}`);
       }
-    } finally {
-      setGenerating(false);
-      setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, pollForGeneratedTasks]);
 
   const loadCycles = useCallback(async () => {
     if (!projectId) return;
@@ -176,7 +230,9 @@ export function BoardPage() {
           setTasks(json.tasks);
           setError(null);
         } else if (mode === 'initial') {
-          await generateTasks();
+          if (!isGeneratingRef.current) {
+            await generateTasks();
+          }
         } else {
           setTasks([]);
         }
@@ -233,7 +289,11 @@ export function BoardPage() {
 
   if (generating || loading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground animate-pulse px-1">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          <span>{generating ? 'Sedang merancang task dengan AI...' : 'Memuat papan task...'}</span>
+        </div>
         <div className="w-full h-[calc(100vh-230px)] min-h-[560px] overflow-x-auto no-scrollbar">
           <div className="grid grid-cols-4 gap-3.5 h-full min-w-[900px]">
             {[1, 2, 3, 4].map((colIdx) => (

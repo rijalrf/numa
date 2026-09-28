@@ -30,6 +30,7 @@ const REASONING_AGENTS = new Set([
   'generateTreeFromPrd',
   'generateTreeFromBrd',
   'SecurityAuditor',
+  'ChangeCycleAnalyzer',
 ]);
 
 export function resolveModel(opts?: { tier?: ModelTier; agentName?: string; modelOverride?: string }): string {
@@ -79,15 +80,16 @@ export async function generateJson<T>({
   const startTime = Date.now();
   const model = resolveModel({ tier, agentName, modelOverride });
   let lastErr: unknown;
+  const conversationMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+    { role: 'system', content: system },
+    { role: 'user', content: user },
+  ];
 
   for (let i = 0; i <= maxRetries; i++) {
     try {
       const resp = await client.chat.completions.create({
         model,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
+        messages: conversationMessages,
         response_format: { type: 'json_object' },
         temperature: 0.4,
       });
@@ -128,6 +130,12 @@ export async function generateJson<T>({
     } catch (err) {
       lastErr = err;
       if (i === maxRetries) break;
+
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      conversationMessages.push({
+        role: 'user',
+        content: `Hasil JSON sebelumnya tidak valid: ${errorMsg}. Perbaiki format JSON sesuai instruksi skema dan kembalikan JSON yang valid saja.`,
+      });
     }
   }
 

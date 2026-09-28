@@ -103,6 +103,14 @@ export function ChangeCycleDialog({
     }
   }, [isOpen, viewCycleId, projectId]);
 
+  const extractErrorMessage = (err: any, fallback: string) => {
+    const detail = err?.detail?.detail || (typeof err?.detail?.error === 'string' && err.detail.error !== err.message ? err.detail.error : null);
+    if (detail && detail !== err?.message) {
+      return `${err.message || fallback} (${detail})`;
+    }
+    return err?.message || fallback;
+  };
+
   if (!isOpen) return null;
 
   // Step 1: Analisis Permintaan
@@ -143,7 +151,7 @@ export function ChangeCycleDialog({
         setStep('confirm');
       }
     } catch (err: any) {
-      setError(err?.message || 'Gagal menganalisis dampak perubahan.');
+      setError(extractErrorMessage(err, 'Gagal menganalisis dampak perubahan.'));
     } finally {
       setLoading(false);
     }
@@ -175,7 +183,7 @@ export function ChangeCycleDialog({
       setAnalysis(res.analysis);
       setStep('confirm');
     } catch (err: any) {
-      setError(err?.message || 'Gagal mengirim klarifikasi.');
+      setError(extractErrorMessage(err, 'Gagal mengirim klarifikasi.'));
     } finally {
       setLoading(false);
     }
@@ -209,7 +217,7 @@ export function ChangeCycleDialog({
       onCycleGenerated();
       onClose();
     } catch (err: any) {
-      setError(err?.message || 'Gagal merancang task untuk siklus perubahan.');
+      setError(extractErrorMessage(err, 'Gagal merancang task untuk siklus perubahan.'));
       setStep('confirm');
     } finally {
       setLoading(false);
@@ -283,9 +291,23 @@ export function ChangeCycleDialog({
 
         {/* Banner Pesan Error */}
         {error && (
-          <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{error}</span>
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+            {step === 'input' && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={handleAnalyze}
+                disabled={loading || requestText.trim().length < 8}
+                className="h-7 text-xs border-destructive/40 hover:bg-destructive/20 text-destructive shrink-0"
+              >
+                Coba Lagi
+              </Button>
+            )}
           </div>
         )}
 
