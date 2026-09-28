@@ -133,7 +133,7 @@ export function Header() {
   return (
     <header className="border-b bg-background/95 backdrop-blur-xs">
       <div className="px-6 py-2.5 flex items-center justify-between gap-4">
-        {/* Kiri: Logo Numa + Pemisah + Nama Aplikasi (menggantikan judul halaman) */}
+        {/* Kiri: Logo Numa + Pemisah + Judul Halaman & Label Deskripsi */}
         <div className="flex items-center gap-3.5 min-w-0">
           <Link to="/chat" className="flex items-center gap-2 shrink-0">
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-[#2D7E79] to-[#76B8A7]">
@@ -142,14 +142,14 @@ export function Header() {
             <span className="font-semibold text-lg tracking-tight text-foreground">Numa</span>
           </Link>
 
-          {(projectName || pageInfo) && (
+          {pageInfo && (
             <>
               <div className="h-5 w-[1px] bg-border shrink-0" />
               <div className="min-w-0">
                 <h1 className="text-sm sm:text-base font-semibold text-foreground tracking-tight truncate leading-tight">
-                  {projectName || pageInfo?.title}
+                  {pageInfo.title}
                 </h1>
-                {!projectName && pageInfo?.subtitle && (
+                {pageInfo.subtitle && (
                   <p className="text-[11px] sm:text-xs text-muted-foreground truncate leading-tight mt-0.5 hidden sm:block">
                     {pageInfo.subtitle}
                   </p>
@@ -159,8 +159,16 @@ export function Header() {
           )}
         </div>
 
-        {/* Kanan: Toggle Tema + Nama Paket & Upgrade di sisi Profile */}
+        {/* Kanan: Nama App Hasil Generate + Toggle Tema + Paket & Profile */}
         <div className="flex items-center gap-3 shrink-0 justify-end">
+          {projectName && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/60 border border-border/70 max-w-[200px] sm:max-w-[260px]">
+              <span className="text-xs font-semibold text-foreground truncate" title={projectName}>
+                {projectName}
+              </span>
+            </div>
+          )}
+
           <ThemeToggle />
 
           {data?.user ? (

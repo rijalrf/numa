@@ -112,29 +112,16 @@ export function ProfilePage() {
           <CardTitle className="text-base font-semibold">Informasi Akun</CardTitle>
           <CardDescription>Kelola data profil dan identitas akun Anda.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="space-y-4 max-w-md">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-foreground">Nama Lengkap</label>
-              <div className="flex gap-2">
-                <Input
-                  value={userNameInput}
-                  onChange={(e) => setUserNameInput(e.target.value)}
-                  placeholder="Nama Lengkap"
-                  className="text-xs h-9"
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={handleSaveName}
-                  disabled={savingName || !userNameInput.trim() || userNameInput === user?.name}
-                  className="h-9 px-3 text-xs shrink-0 gap-1.5"
-                >
-                  {savingName && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  {nameSaved && <Check className="h-3.5 w-3.5 text-primary" />}
-                  <span>{nameSaved ? 'Tersimpan' : 'Simpan'}</span>
-                </Button>
-              </div>
+              <Input
+                value={userNameInput}
+                onChange={(e) => setUserNameInput(e.target.value)}
+                placeholder="Nama Lengkap"
+                className="text-xs h-9"
+              />
             </div>
 
             <div className="space-y-1.5">
@@ -148,6 +135,20 @@ export function ProfilePage() {
                 Email terhubung dengan akun autentikasi Anda dan tidak dapat diubah.
               </p>
             </div>
+          </div>
+
+          <div className="flex justify-end pt-2 border-t border-border/50">
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleSaveName}
+              disabled={savingName || !userNameInput.trim() || userNameInput === user?.name}
+              className="h-9 px-4 text-xs shrink-0 gap-1.5"
+            >
+              {savingName && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {nameSaved && <Check className="h-3.5 w-3.5 text-primary" />}
+              <span>{nameSaved ? 'Tersimpan' : 'Simpan'}</span>
+            </Button>
           </div>
         </CardContent>
       </Card>

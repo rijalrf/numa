@@ -58,18 +58,25 @@ export const MarkdownView = React.memo(function MarkdownView({
               {children}
             </blockquote>
           ),
-          code: ({ inline, className: codeClassName, children, ...props }: any) => {
-            if (inline) {
+          pre: ({ children }) => (
+            <pre className="p-3.5 rounded-xl bg-muted/60 border border-border/60 overflow-x-auto my-2.5 font-mono text-xs text-foreground leading-relaxed">
+              {children}
+            </pre>
+          ),
+          code: ({ className, children, ...props }: any) => {
+            // ponytail: deteksi block vs inline tanpa plugin rehype; jika memiliki bahasa syntax atau newline dianggap code block
+            const isBlock = /language-/.test(className || '') || String(children).includes('\n');
+            if (isBlock) {
               return (
-                <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-[11px] text-foreground border border-border/50" {...props}>
+                <code className={className} {...props}>
                   {children}
                 </code>
               );
             }
             return (
-              <pre className="p-3.5 rounded-xl bg-muted/60 border border-border/60 overflow-x-auto my-3 font-mono text-xs text-foreground leading-relaxed">
-                <code {...props}>{children}</code>
-              </pre>
+              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-[11px] text-foreground border border-border/50 inline align-baseline" {...props}>
+                {children}
+              </code>
             );
           },
           table: ({ children }) => (

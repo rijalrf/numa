@@ -4,15 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { PricingDialog } from '@/components/billing/pricing-dialog';
 import {
   Sparkles,
   ArrowRight,
   Loader2,
-  FileQuestion,
-  FileText,
-  Terminal,
   Store,
   CalendarCheck,
   GraduationCap,
@@ -122,17 +118,9 @@ export function ChatPage() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center px-4 sm:px-6 py-10 bg-background">
-      <div className="max-w-2xl w-full space-y-8">
+      <div className="max-w-2xl w-full space-y-6">
         {/* Headline & Subhead */}
-        <div className="text-center space-y-3">
-          <Badge
-            variant="outline"
-            className="border-primary/30 text-primary text-xs px-3 py-1 gap-1.5 inline-flex items-center"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            <span>AI Software Factory</span>
-          </Badge>
-
+        <div className="text-center space-y-2">
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
             Dari ide mentah jadi aplikasi siap eksekusi
           </h1>
@@ -140,49 +128,6 @@ export function ChatPage() {
           <p className="text-sm text-muted-foreground max-w-lg mx-auto leading-relaxed">
             Ceritakan ide aplikasi Anda. Numa akan memandu perancangan kebutuhan, memilih teknologi, menyusun PRD lengkap, dan menyiapkan task untuk coding agent.
           </p>
-        </div>
-
-        {/* Stepper Ringkas 4 Langkah */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 py-1">
-          <div className="p-3 rounded-xl border border-primary/40 bg-primary/5 space-y-1">
-            <div className="flex items-center gap-1.5 text-primary text-xs font-semibold">
-              <Sparkles className="h-3.5 w-3.5" />
-              <span>1. Ide</span>
-            </div>
-            <p className="text-[11px] text-muted-foreground leading-tight">
-              Tulis konsep awal
-            </p>
-          </div>
-
-          <div className="p-3 rounded-xl border border-border/70 bg-card/50 space-y-1">
-            <div className="flex items-center gap-1.5 text-foreground/80 text-xs font-semibold">
-              <FileQuestion className="h-3.5 w-3.5 text-muted-foreground" />
-              <span>2. Survey</span>
-            </div>
-            <p className="text-[11px] text-muted-foreground leading-tight">
-              Wawancara kebutuhan
-            </p>
-          </div>
-
-          <div className="p-3 rounded-xl border border-border/70 bg-card/50 space-y-1">
-            <div className="flex items-center gap-1.5 text-foreground/80 text-xs font-semibold">
-              <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-              <span>3. PRD & Rencana</span>
-            </div>
-            <p className="text-[11px] text-muted-foreground leading-tight">
-              Spesifikasi & roadmap
-            </p>
-          </div>
-
-          <div className="p-3 rounded-xl border border-border/70 bg-card/50 space-y-1">
-            <div className="flex items-center gap-1.5 text-foreground/80 text-xs font-semibold">
-              <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
-              <span>4. Coding Agent</span>
-            </div>
-            <p className="text-[11px] text-muted-foreground leading-tight">
-              Eksekusi CLI numa
-            </p>
-          </div>
         </div>
 
         {/* Pesan Error jika ada */}

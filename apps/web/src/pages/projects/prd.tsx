@@ -1,5 +1,5 @@
 // Halaman PRD: View atau real-time streaming dokumen kebutuhan produk
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@/lib/http';
 import { Button } from '@/components/ui/button';
@@ -19,21 +19,8 @@ export function PrdPage() {
   const [error, setError] = useState<string | null>(null);
   const [userPlan, setUserPlan] = useState<{ plan: string; planName: string } | null>(null);
   const [pricingOpen, setPricingOpen] = useState(false);
-  const autoScrollRef = useRef(true);
 
-  // Auto-scroll listener: lacak apakah user berada di dekat bagian bawah
-  useEffect(() => {
-    const handleScroll = () => {
-      const isAtBottom =
-        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 120;
-      autoScrollRef.current = isAtBottom;
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  // Streaming generator SSE dengan throttling untuk cegah flicker
+  // Generator PRD via SSE: kumpulkan seluruh respons sebelum render untuk mencegah kedipan layar
   const streamPrd = useCallback(async () => {
     if (!projectId || isLocked || generating) return;
     setGenerating(true);
@@ -56,7 +43,6 @@ export function PrdPage() {
       const decoder = new TextDecoder();
       let buffer = '';
       let accumulated = '';
-      let lastFlushTime = Date.now();
 
       while (true) {
         const { done, value } = await reader.read();
@@ -73,18 +59,6 @@ export function PrdPage() {
                 const data = JSON.parse(line.slice(6));
                 if (data.delta) {
                   accumulated += data.delta;
-                  const now = Date.now();
-                  // Throttled update untuk rendering halus tanpa kedap-kedip
-                  if (now - lastFlushTime > 80) {
-                    setMarkdown(accumulated);
-                    lastFlushTime = now;
-                    if (autoScrollRef.current) {
-                      window.scrollTo({
-                        top: document.documentElement.scrollHeight,
-                        behavior: 'smooth',
-                      });
-                    }
-                  }
                 }
                 if (data.error) {
                   console.error('Error dari SSE stream:', data.error);
@@ -96,15 +70,9 @@ export function PrdPage() {
         }
       }
 
-      // Flush sisa teks di akhir stream
+      // Render sekali penuh saat stream selesai
       if (accumulated) {
         setMarkdown(accumulated);
-        if (autoScrollRef.current) {
-          window.scrollTo({
-            top: document.documentElement.scrollHeight,
-            behavior: 'smooth',
-          });
-        }
       }
     } catch (err: any) {
       console.error('Error streaming PRD:', err);

@@ -86,7 +86,6 @@ export function TechStackPage() {
 
   const [selectedMode, setSelectedMode] = useState<'ai' | 'starter' | 'manual'>('ai');
   const [selectedStarterPack, setSelectedStarterPack] = useState<string>('react-express');
-  const [view, setView] = useState<'select' | 'manual'>('select');
   const [selected, setSelected] = useState<string[]>([]);
   const [selectedByCategory, setSelectedByCategory] = useState<Record<string, string>>({});
   const [customInputs, setCustomInputs] = useState<Record<string, string>>({});
@@ -228,19 +227,7 @@ export function TechStackPage() {
   };
 
   useWizardNav(
-    view === 'manual'
-      ? {
-          back: {
-            label: 'Kembali',
-            onClick: () => setView('select'),
-          },
-          next: {
-            label: saving ? 'Menyimpan...' : 'Lanjut',
-            onClick: saveManualAndContinue,
-            loading: saving,
-          },
-        }
-      : isLocked
+    isLocked
       ? {
           back: {
             label: 'Kembali',
@@ -264,7 +251,7 @@ export function TechStackPage() {
               } else if (selectedMode === 'starter') {
                 handleStarterPackProceed();
               } else {
-                setView('manual');
+                saveManualAndContinue();
               }
             },
             loading: generatingAi || saving,
@@ -320,78 +307,7 @@ export function TechStackPage() {
   }
 
   // ============================================================
-  // TAMPILAN 2: FORM PILIHAN MANUAL TEKNOLOGI (DROPDOWN)
-  // ============================================================
-  if (view === 'manual') {
-    return (
-      <div className="max-w-3xl mx-auto w-full space-y-6">
-        <Card className="border-border shadow-xs">
-          <CardHeader className="pb-3 bg-muted/20 border-b border-border">
-            <CardTitle className="text-base font-semibold text-foreground flex items-center gap-2">
-              <Layers className="h-4 w-4 text-primary" />
-              <span>Pilih Teknologi</span>
-            </CardTitle>
-            <CardDescription className="text-xs text-muted-foreground">
-              Tentukan opsi teknologi untuk setiap lapisan arsitektur aplikasi Anda
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent className="space-y-5 pt-5">
-            {PRESET_CATEGORIES.map((cat) => {
-              const Icon = cat.icon;
-              const currentVal = selectedByCategory[cat.id] || '';
-              const customVal = customInputs[cat.id] || '';
-
-              return (
-                <div key={cat.id} className="space-y-2 pb-4 border-b border-border/60 last:border-b-0 last:pb-0">
-                  <div className="flex items-center gap-2">
-                    <Icon className="h-4 w-4 text-primary shrink-0" />
-                    <label className="text-xs font-semibold text-foreground">
-                      {cat.title}
-                    </label>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    {cat.description}
-                  </p>
-
-                  <div className="space-y-2 pt-1 max-w-md">
-                    <select
-                      value={currentVal}
-                      onChange={(e) => handleCategorySelectChange(cat.id, e.target.value)}
-                      className="h-9 w-full rounded-lg border border-border bg-background px-3 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-                    >
-                      <option value="">Pilih {cat.title}...</option>
-                      {cat.options.map((opt) => (
-                        <option key={opt} value={opt}>
-                          {opt}
-                        </option>
-                      ))}
-                      <option value="__other__">Lainnya (Ketik Sendiri)...</option>
-                    </select>
-
-                    {currentVal === '__other__' && (
-                      <Input
-                        placeholder={`Ketik ${cat.title.toLowerCase()} kustom...`}
-                        value={customVal}
-                        onChange={(e) =>
-                          setCustomInputs((prev) => ({ ...prev, [cat.id]: e.target.value }))
-                        }
-                        className="h-8 text-xs bg-background mt-1.5"
-                        autoFocus
-                      />
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // ============================================================
-  // TAMPILAN 3: PILIH METODE PENENTUAN TEKNOLOGI
+  // TAMPILAN UTAMA: PILIH METODE PENENTUAN TEKNOLOGI
   // ============================================================
   return (
     <div className="max-w-4xl mx-auto w-full space-y-8 py-4">
@@ -635,6 +551,71 @@ export function TechStackPage() {
             })}
           </div>
         </div>
+      )}
+
+      {/* Panel Form Manual jika mode 'manual' dipilih */}
+      {selectedMode === 'manual' && (
+        <Card className="border-border shadow-xs pt-2">
+          <CardHeader className="pb-3 bg-muted/20 border-b border-border">
+            <CardTitle className="text-base font-semibold text-foreground flex items-center gap-2">
+              <Layers className="h-4 w-4 text-primary" />
+              <span>Pilih Teknologi</span>
+            </CardTitle>
+            <CardDescription className="text-xs text-muted-foreground">
+              Tentukan opsi teknologi untuk setiap lapisan arsitektur aplikasi Anda
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="space-y-5 pt-5">
+            {PRESET_CATEGORIES.map((cat) => {
+              const Icon = cat.icon;
+              const currentVal = selectedByCategory[cat.id] || '';
+              const customVal = customInputs[cat.id] || '';
+
+              return (
+                <div key={cat.id} className="space-y-2 pb-4 border-b border-border/60 last:border-b-0 last:pb-0">
+                  <div className="flex items-center gap-2">
+                    <Icon className="h-4 w-4 text-primary shrink-0" />
+                    <label className="text-xs font-semibold text-foreground">
+                      {cat.title}
+                    </label>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    {cat.description}
+                  </p>
+
+                  <div className="space-y-2 pt-1 max-w-md">
+                    <select
+                      value={currentVal}
+                      onChange={(e) => handleCategorySelectChange(cat.id, e.target.value)}
+                      className="h-9 w-full rounded-lg border border-border bg-background px-3 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                    >
+                      <option value="">Pilih {cat.title}...</option>
+                      {cat.options.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                      <option value="__other__">Lainnya (Ketik Sendiri)...</option>
+                    </select>
+
+                    {currentVal === '__other__' && (
+                      <Input
+                        placeholder={`Ketik ${cat.title.toLowerCase()} kustom...`}
+                        value={customVal}
+                        onChange={(e) =>
+                          setCustomInputs((prev) => ({ ...prev, [cat.id]: e.target.value }))
+                        }
+                        className="h-8 text-xs bg-background mt-1.5"
+                        autoFocus
+                      />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
       )}
     </div>
   );
