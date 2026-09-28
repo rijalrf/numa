@@ -22,13 +22,13 @@ const AVAILABLE_PLANS = [
     name: 'Free Trial',
     price: 'Rp 0',
     period: '',
-    description: 'Coba siklus wawancara kebutuhan dan ringkasan produk.',
+    description: 'Coba hingga tahap PRD untuk 1 proyek pertama Anda.',
     features: [
       '1 proyek aktif',
       '1 putaran survey kebutuhan',
-      'Maksimal 1.000 karakter ide awal',
-      'Ringkasan kebutuhan produk',
-      'Wawancara Konsultan Produk',
+      'Maksimal 1.000 karakter per pesan',
+      'Chat brainstorming ide',
+      'Rekomendasi Tech Stack & PRD',
     ],
     tier: 'free' as const,
   },
@@ -41,7 +41,7 @@ const AVAILABLE_PLANS = [
     features: [
       '2 proyek aktif per bulan',
       '3 putaran survey kebutuhan adaptif',
-      'Maksimal 2.000 karakter ide awal',
+      'Maksimal 2.000 karakter per pesan',
       'Rekomendasi Tech Stack & PRD',
       'Board task atomik',
       'Ekspor dokumen PRD (.md)',
@@ -59,7 +59,7 @@ const AVAILABLE_PLANS = [
     features: [
       '5 proyek aktif per bulan',
       '4 putaran survey mendalam',
-      'Maksimal 4.000 karakter ide awal',
+      'Maksimal 4.000 karakter per pesan',
       'Rekomendasi Tech Stack & PRD',
       'Board task atomik + edge cases',
       'Ekspor paket lengkap (.zip & .md)',
@@ -158,7 +158,7 @@ export function BillingPage() {
 
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="border rounded-lg p-4 bg-muted/30 space-y-2">
+            <div className="border rounded-md p-4 bg-muted/30 space-y-2">
               <div className="text-xs text-muted-foreground font-medium">Pemakaian Kuota Proyek</div>
               <div className="text-2xl font-bold">
                 {planData?.quotaUsed} / {planData?.quotaMax}
@@ -174,13 +174,13 @@ export function BillingPage() {
               </p>
             </div>
 
-            <div className="border rounded-lg p-4 bg-muted/30 space-y-1">
+            <div className="border rounded-md p-4 bg-muted/30 space-y-1">
               <div className="text-xs text-muted-foreground font-medium">Kedalaman Survey Kebutuhan</div>
               <div className="text-2xl font-bold">{planData?.surveyRounds} Putaran</div>
               <p className="text-[11px] text-muted-foreground">Jumlah putaran kuesioner terstruktur dari Konsultan Produk</p>
             </div>
 
-            <div className="border rounded-lg p-4 bg-muted/30 space-y-1">
+            <div className="border rounded-md p-4 bg-muted/30 space-y-1">
               <div className="text-xs text-muted-foreground font-medium">Batas Karakter Ide Awal</div>
               <div className="text-2xl font-bold">{planData?.charLimit.toLocaleString('id-ID')} Karakter</div>
               <p className="text-[11px] text-muted-foreground">Panjang maksimal deskripsi ide aplikasi yang dikirimkan</p>
@@ -216,14 +216,14 @@ export function BillingPage() {
             return (
               <div
                 key={plan.id}
-                className={`relative rounded-xl border p-6 flex flex-col justify-between bg-card ${
+                className={`relative rounded-md border p-6 flex flex-col justify-between bg-card ${
                   isCurrent
                     ? 'border-primary ring-1 ring-primary'
                     : 'border-border'
                 }`}
               >
                 {isCurrent && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-2.5 py-0.5 bg-primary text-primary-foreground text-[11px] font-medium rounded-full shadow-sm">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-2.5 py-0.5 bg-primary text-primary-foreground text-[11px] font-medium rounded-md shadow-sm">
                     Paket Saat Ini
                   </div>
                 )}

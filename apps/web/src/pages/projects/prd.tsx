@@ -161,7 +161,7 @@ export function PrdPage() {
     <div className="max-w-4xl mx-auto w-full space-y-6 pb-16">
       {/* Banner terkunci jika sudah lewat PRD */}
       {isLocked && (
-        <div className="flex items-center gap-2.5 p-3.5 bg-muted/70 border border-border rounded-xl text-xs text-muted-foreground shadow-xs">
+        <div className="flex items-center gap-2.5 p-3.5 bg-muted/70 border border-border rounded-md text-xs text-muted-foreground shadow-xs">
           <Lock className="h-4 w-4 text-primary shrink-0" />
           <span>
             Tahap Dokumen PRD telah selesai dan terkunci (Read-Only). Spesifikasi kebutuhan tersimpan permanen.
@@ -171,7 +171,7 @@ export function PrdPage() {
 
       {/* Paywall Banner untuk Free Plan */}
       {userPlan?.plan === 'free' && markdown && !generating && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-950 dark:text-amber-200">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-950 dark:text-amber-200">
           <div className="space-y-1">
             <div className="flex items-center gap-2 font-semibold text-sm">
               <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" />
@@ -194,7 +194,7 @@ export function PrdPage() {
 
       {/* Error state: tombol Generate Ulang hanya tampil saat gagal */}
       {error && !generating && (
-        <div className="p-4 rounded-xl border border-destructive/30 bg-destructive/10 text-xs text-destructive flex items-center justify-between">
+        <div className="p-4 rounded-md border border-destructive/30 bg-destructive/10 text-xs text-destructive flex items-center justify-between">
           <span>{error}</span>
           <Button
             size="sm"

@@ -189,7 +189,7 @@ export function ProfilePage() {
 
           {/* Token baru, tampil sekali */}
           {newToken && (
-            <div className="p-4 border border-primary/50 bg-primary/5 dark:bg-primary/10 rounded-lg space-y-2">
+            <div className="p-4 border border-primary/50 bg-primary/5 dark:bg-primary/10 rounded-md space-y-2">
               <div className="flex items-center gap-2 text-primary font-medium text-sm">
                 <ShieldCheck className="h-4 w-4" />
                 <span>Token Berhasil Dibuat</span>
@@ -198,7 +198,7 @@ export function ProfilePage() {
                 Salin dan simpan sekarang di tempat aman. Token ini tidak akan pernah ditampilkan lagi.
               </p>
               <div className="flex items-center gap-2">
-                <code className="flex-1 bg-background p-2.5 rounded border border-border font-mono text-xs break-all select-all">
+                <code className="flex-1 bg-background p-2.5 rounded-md border border-border font-mono text-xs break-all select-all">
                   {newToken}
                 </code>
                 <Button size="sm" variant="outline" onClick={copy} className="gap-1.5 shrink-0 text-xs">
@@ -217,7 +217,7 @@ export function ProfilePage() {
               <p className="text-sm text-muted-foreground">Belum ada token aktif. Buat token pertama Anda di atas.</p>
             )}
             {tokensQ.data?.tokens.map((t) => (
-              <div key={t.id} className="border border-border rounded-lg p-3.5 flex items-center justify-between gap-3 bg-card">
+              <div key={t.id} className="border border-border rounded-md p-3.5 flex items-center justify-between gap-3 bg-card">
                 <div className="min-w-0 space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-medium text-foreground">{t.name}</p>

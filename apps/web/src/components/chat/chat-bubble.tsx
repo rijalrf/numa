@@ -28,7 +28,7 @@ export function ChatBubble({ message }: ChatBubbleProps) {
 
       {/* Content bubble */}
       <div
-        className={`max-w-[75%] rounded-lg px-4 py-3 whitespace-pre-wrap ${
+        className={`max-w-[75%] rounded-md px-4 py-3 whitespace-pre-wrap ${
           isUser
             ? 'bg-primary text-primary-foreground'
             : 'bg-muted text-muted-foreground'

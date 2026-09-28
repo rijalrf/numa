@@ -162,7 +162,7 @@ export function Header() {
         {/* Kanan: Nama App Hasil Generate + Toggle Tema + Paket & Profile */}
         <div className="flex items-center gap-3 shrink-0 justify-end">
           {projectName && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/60 border border-border/70 max-w-[200px] sm:max-w-[260px]">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted/60 border border-border/70 max-w-[200px] sm:max-w-[260px]">
               <span className="text-xs font-semibold text-foreground truncate" title={projectName}>
                 {projectName}
               </span>

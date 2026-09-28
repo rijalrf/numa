@@ -132,7 +132,7 @@ export function ChatPage() {
 
         {/* Pesan Error jika ada */}
         {errorMessage && (
-          <div className="p-3 rounded-xl border border-destructive/30 bg-destructive/10 text-xs text-destructive flex items-center justify-between">
+          <div className="p-3 rounded-md border border-destructive/30 bg-destructive/10 text-xs text-destructive flex items-center justify-between">
             <span>{errorMessage}</span>
             <button
               type="button"
@@ -145,7 +145,7 @@ export function ChatPage() {
         )}
 
         {/* Input Card */}
-        <div className="rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs focus-within:border-primary transition-all space-y-3">
+        <div className="rounded-md border border-border/80 bg-card p-4 sm:p-5 shadow-xs focus-within:border-primary transition-all space-y-3">
           <Textarea
             placeholder="Jelaskan aplikasi yang ingin Anda bangun, masalah yang diselesaikan, atau fitur utamanya..."
             value={inputText}
@@ -160,7 +160,7 @@ export function ChatPage() {
 
           <div className="flex items-center justify-between pt-3 border-t border-border/60">
             <span className="text-[11px] text-muted-foreground">
-              Tekan <kbd className="px-1.5 py-0.5 rounded bg-muted font-mono text-[10px]">Enter</kbd> untuk kirim • {inputText.length}/{charLimit} karakter
+              Tekan <kbd className="px-1.5 py-0.5 rounded-md bg-muted font-mono text-[10px]">Enter</kbd> untuk kirim • {inputText.length}/{charLimit} karakter
             </span>
 
             <Button

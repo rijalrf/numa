@@ -266,7 +266,7 @@ export function StructuredForm({ questions, onSubmit, disabled }: StructuredForm
                       *
                     </span>
                   )}
-                  <span className="text-[11px] font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                  <span className="text-[11px] font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded-md">
                     {isMultiple ? 'Boleh pilih lebih dari 1' : 'Pilih 1'}
                   </span>
                 </div>
@@ -287,7 +287,7 @@ export function StructuredForm({ questions, onSubmit, disabled }: StructuredForm
                         disabled={disabled}
                         onClick={() => handleToggleOption(q, idx, option)}
                         className={cn(
-                          'w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all text-sm',
+                          'w-full flex items-center gap-3 p-3 rounded-md border text-left transition-all text-sm',
                           isSelected
                             ? 'border-primary bg-primary/10 dark:bg-primary/20 text-foreground ring-1 ring-primary shadow-xs font-medium'
                             : 'border-border bg-card/60 hover:bg-accent/50 hover:border-primary/40 text-foreground/90'
@@ -318,7 +318,7 @@ export function StructuredForm({ questions, onSubmit, disabled }: StructuredForm
                     disabled={disabled}
                     onClick={() => handleToggleOther(q, idx)}
                     className={cn(
-                      'w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all text-sm',
+                      'w-full flex items-center gap-3 p-3 rounded-md border text-left transition-all text-sm',
                       hasOther
                         ? 'border-primary bg-primary/10 dark:bg-primary/20 text-foreground ring-1 ring-primary shadow-xs font-medium'
                         : 'border-border bg-card/60 hover:bg-accent/50 hover:border-primary/40 text-foreground/90'

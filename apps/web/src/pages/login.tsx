@@ -45,7 +45,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0F0F] text-foreground flex flex-col items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-black text-foreground flex flex-col items-center justify-center p-4 relative overflow-hidden">
       {/* Background ambient glow dan grid pattern */}
       <div className="absolute -top-40 left-1/2 -translate-x-1/2 h-[450px] w-[600px] rounded-full bg-numa-primary/20 blur-[120px] pointer-events-none" />
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none" />
@@ -60,10 +60,10 @@ export function LoginPage() {
       </Link>
 
       {/* Card Login Modern */}
-      <div className="relative w-full max-w-md rounded-2xl border border-white/[.08] bg-[#0E1414]/90 p-8 shadow-[0_0_50px_rgba(45,126,121,.15)] backdrop-blur-xl z-10">
+      <div className="relative w-full max-w-md rounded-md border border-white/[.08] bg-neutral-950/90 p-8 shadow-[0_0_50px_rgba(45,126,121,.15)] backdrop-blur-xl z-10">
         {/* Logo dan Header */}
         <div className="text-center mb-8">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-numa-primary to-numa-accent shadow-[0_0_24px_rgba(118,184,167,.3)]">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-md bg-gradient-to-br from-numa-primary to-numa-accent shadow-[0_0_24px_rgba(118,184,167,.3)]">
             <span className="text-xl font-bold text-white">N</span>
           </div>
           <h1 className="text-xl font-bold tracking-tight text-white">Masuk ke Numa</h1>
@@ -78,7 +78,7 @@ export function LoginPage() {
             type="button"
             onClick={loginWithGoogle}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-3 rounded-xl border border-white/10 bg-white/[.04] px-4 py-3 text-sm font-medium text-white transition-all hover:bg-white/[.08] hover:border-white/20 active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_2px_12px_rgba(0,0,0,0.3)] cursor-pointer"
+            className="w-full flex items-center justify-center gap-3 rounded-md border border-white/10 bg-white/[.04] px-4 py-3 text-sm font-medium text-white transition-all hover:bg-white/[.08] hover:border-white/20 active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_2px_12px_rgba(0,0,0,0.3)] cursor-pointer"
           >
             {loading ? (
               <>
@@ -95,7 +95,7 @@ export function LoginPage() {
 
           {/* Pesan Error jika ada */}
           {err && (
-            <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive text-center flex items-center justify-center gap-2">
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive text-center flex items-center justify-center gap-2">
               <AlertCircle className="h-4 w-4 shrink-0" />
               <span>{err}</span>
             </div>

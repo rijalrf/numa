@@ -265,7 +265,7 @@ export function TechStackPage() {
   if (isLocked) {
     return (
       <div className="max-w-4xl mx-auto w-full space-y-6">
-        <div className="flex items-center gap-2.5 p-3.5 bg-muted/70 border border-border rounded-xl text-xs text-muted-foreground shadow-xs">
+        <div className="flex items-center gap-2.5 p-3.5 bg-muted/70 border border-border rounded-md text-xs text-muted-foreground shadow-xs">
           <Lock className="h-4 w-4 text-primary shrink-0" />
           <span>
             Tahap pemilihan teknologi telah selesai dan terkunci. Konfigurasi arsitektur teknologi tersimpan permanen.
@@ -292,7 +292,7 @@ export function TechStackPage() {
                 {selected.map((item) => (
                   <span
                     key={item}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary border border-primary/30 text-xs font-medium"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary/10 text-primary border border-primary/30 text-xs font-medium"
                   >
                     <Check className="h-3 w-3" />
                     <span>{item}</span>
@@ -326,7 +326,7 @@ export function TechStackPage() {
         <div
           onClick={() => setSelectedMode('ai')}
           className={cn(
-            'group relative rounded-2xl border-2 p-5 flex flex-col justify-between cursor-pointer transition-all duration-200 select-none shadow-xs',
+            'group relative rounded-md border-2 p-5 flex flex-col justify-between cursor-pointer transition-all duration-200 select-none shadow-xs',
             selectedMode === 'ai'
               ? 'border-primary bg-primary/5 dark:bg-primary/10 ring-2 ring-primary/30 shadow-md'
               : 'border-border bg-card hover:border-primary/50 hover:bg-accent/40'
@@ -336,7 +336,7 @@ export function TechStackPage() {
             <div className="flex items-start justify-between gap-3">
               <div
                 className={cn(
-                  'h-10 w-10 rounded-xl flex items-center justify-center transition-colors',
+                  'h-10 w-10 rounded-md flex items-center justify-center transition-colors',
                   selectedMode === 'ai'
                     ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'bg-primary/10 text-primary group-hover:bg-primary/20'
@@ -346,7 +346,7 @@ export function TechStackPage() {
               </div>
               <div
                 className={cn(
-                  'h-5 w-5 rounded-full flex items-center justify-center border transition-all',
+                  'h-5 w-5 rounded-md flex items-center justify-center border transition-all',
                   selectedMode === 'ai'
                     ? 'border-primary bg-primary text-primary-foreground'
                     : 'border-muted-foreground/40 bg-background'
@@ -372,7 +372,7 @@ export function TechStackPage() {
           <div className="pt-4">
             <span
               className={cn(
-                'text-xs font-medium block text-center py-1.5 rounded-lg transition-colors',
+                'text-xs font-medium block text-center py-1.5 rounded-md transition-colors',
                 selectedMode === 'ai' ? 'text-primary font-semibold' : 'text-muted-foreground'
               )}
             >
@@ -385,7 +385,7 @@ export function TechStackPage() {
         <div
           onClick={() => setSelectedMode('starter')}
           className={cn(
-            'group relative rounded-2xl border-2 p-5 flex flex-col justify-between cursor-pointer transition-all duration-200 select-none shadow-xs',
+            'group relative rounded-md border-2 p-5 flex flex-col justify-between cursor-pointer transition-all duration-200 select-none shadow-xs',
             selectedMode === 'starter'
               ? 'border-primary bg-primary/5 dark:bg-primary/10 ring-2 ring-primary/30 shadow-md'
               : 'border-border bg-card hover:border-primary/50 hover:bg-accent/40'
@@ -395,7 +395,7 @@ export function TechStackPage() {
             <div className="flex items-start justify-between gap-3">
               <div
                 className={cn(
-                  'h-10 w-10 rounded-xl flex items-center justify-center transition-colors',
+                  'h-10 w-10 rounded-md flex items-center justify-center transition-colors',
                   selectedMode === 'starter'
                     ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'bg-primary/10 text-primary group-hover:bg-primary/20'
@@ -405,7 +405,7 @@ export function TechStackPage() {
               </div>
               <div
                 className={cn(
-                  'h-5 w-5 rounded-full flex items-center justify-center border transition-all',
+                  'h-5 w-5 rounded-md flex items-center justify-center border transition-all',
                   selectedMode === 'starter'
                     ? 'border-primary bg-primary text-primary-foreground'
                     : 'border-muted-foreground/40 bg-background'
@@ -431,7 +431,7 @@ export function TechStackPage() {
           <div className="pt-4">
             <span
               className={cn(
-                'text-xs font-medium block text-center py-1.5 rounded-lg transition-colors',
+                'text-xs font-medium block text-center py-1.5 rounded-md transition-colors',
                 selectedMode === 'starter' ? 'text-primary font-semibold' : 'text-muted-foreground'
               )}
             >
@@ -444,7 +444,7 @@ export function TechStackPage() {
         <div
           onClick={() => setSelectedMode('manual')}
           className={cn(
-            'group relative rounded-2xl border-2 p-5 flex flex-col justify-between cursor-pointer transition-all duration-200 select-none shadow-xs',
+            'group relative rounded-md border-2 p-5 flex flex-col justify-between cursor-pointer transition-all duration-200 select-none shadow-xs',
             selectedMode === 'manual'
               ? 'border-primary bg-primary/5 dark:bg-primary/10 ring-2 ring-primary/30 shadow-md'
               : 'border-border bg-card hover:border-primary/50 hover:bg-accent/40'
@@ -454,7 +454,7 @@ export function TechStackPage() {
             <div className="flex items-start justify-between gap-3">
               <div
                 className={cn(
-                  'h-10 w-10 rounded-xl flex items-center justify-center transition-colors',
+                  'h-10 w-10 rounded-md flex items-center justify-center transition-colors',
                   selectedMode === 'manual'
                     ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'bg-muted text-muted-foreground group-hover:bg-muted/80'
@@ -464,7 +464,7 @@ export function TechStackPage() {
               </div>
               <div
                 className={cn(
-                  'h-5 w-5 rounded-full flex items-center justify-center border transition-all',
+                  'h-5 w-5 rounded-md flex items-center justify-center border transition-all',
                   selectedMode === 'manual'
                     ? 'border-primary bg-primary text-primary-foreground'
                     : 'border-muted-foreground/40 bg-background'
@@ -490,7 +490,7 @@ export function TechStackPage() {
           <div className="pt-4">
             <span
               className={cn(
-                'text-xs font-medium block text-center py-1.5 rounded-lg transition-colors',
+                'text-xs font-medium block text-center py-1.5 rounded-md transition-colors',
                 selectedMode === 'manual' ? 'text-primary font-semibold' : 'text-muted-foreground'
               )}
             >
@@ -514,7 +514,7 @@ export function TechStackPage() {
                   key={pack.id}
                   onClick={() => setSelectedStarterPack(pack.id)}
                   className={cn(
-                    'p-4 rounded-xl border cursor-pointer transition-all space-y-2',
+                    'p-4 rounded-md border cursor-pointer transition-all space-y-2',
                     isSelected
                       ? 'border-primary bg-primary/5 ring-1 ring-primary'
                       : 'border-border bg-card hover:border-primary/40'
@@ -526,7 +526,7 @@ export function TechStackPage() {
                     </span>
                     <div
                       className={cn(
-                        'h-4 w-4 rounded-full flex items-center justify-center border text-[10px]',
+                        'h-4 w-4 rounded-md flex items-center justify-center border text-[10px]',
                         isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'
                       )}
                     >
@@ -540,7 +540,7 @@ export function TechStackPage() {
                     {pack.tags.map((tag) => (
                       <span
                         key={tag}
-                        className="text-[10px] px-2 py-0.5 rounded bg-muted text-foreground/80 font-mono"
+                        className="text-[10px] px-2 py-0.5 rounded-md bg-muted text-foreground/80 font-mono"
                       >
                         {tag}
                       </span>
@@ -588,7 +588,7 @@ export function TechStackPage() {
                     <select
                       value={currentVal}
                       onChange={(e) => handleCategorySelectChange(cat.id, e.target.value)}
-                      className="h-9 w-full rounded-lg border border-border bg-background px-3 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                      className="h-9 w-full rounded-md border border-border bg-background px-3 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
                     >
                       <option value="">Pilih {cat.title}...</option>
                       {cat.options.map((opt) => (

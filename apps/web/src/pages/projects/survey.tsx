@@ -289,7 +289,7 @@ export function SurveyPage() {
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-12">
       {error && (
-        <div className="p-3.5 rounded-xl border border-destructive/30 bg-destructive/10 text-xs text-destructive flex items-center justify-between">
+        <div className="p-3.5 rounded-md border border-destructive/30 bg-destructive/10 text-xs text-destructive flex items-center justify-between">
           <span>{error}</span>
           <button
             type="button"
@@ -360,7 +360,7 @@ export function SurveyPage() {
                           ? handleCheckboxToggle(q.id, opt)
                           : handleRadioSelect(q.id, opt)
                       }
-                      className={`p-3 rounded-xl border text-xs cursor-pointer transition-all flex items-start justify-between gap-3 ${
+                      className={`p-3 rounded-md border text-xs cursor-pointer transition-all flex items-start justify-between gap-3 ${
                         isSelected
                           ? 'border-primary bg-primary/10 text-foreground font-medium shadow-2xs'
                           : 'border-border/70 hover:bg-muted/40 text-foreground/80'
@@ -370,7 +370,7 @@ export function SurveyPage() {
                         <div className="mt-0.5 shrink-0">
                           {isCheckbox ? (
                             <div
-                              className={`h-4 w-4 rounded border flex items-center justify-center transition-colors ${
+                              className={`h-4 w-4 rounded-md border flex items-center justify-center transition-colors ${
                                 isSelected
                                   ? 'bg-primary border-primary text-primary-foreground'
                                   : 'border-muted-foreground/40'
@@ -399,7 +399,7 @@ export function SurveyPage() {
                 {/* Opsi Lainnya */}
                 <div
                   onClick={() => handleOtherClick(q.id)}
-                  className={`p-3 rounded-xl border text-xs cursor-pointer transition-all ${
+                  className={`p-3 rounded-md border text-xs cursor-pointer transition-all ${
                     isOtherActive
                       ? 'border-primary bg-primary/5 text-foreground'
                       : 'border-dashed border-border hover:bg-muted/30 text-muted-foreground'

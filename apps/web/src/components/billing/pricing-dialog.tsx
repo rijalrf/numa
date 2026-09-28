@@ -22,13 +22,13 @@ const PLANS = [
     name: 'Free Trial',
     price: 'Rp 0',
     period: '',
-    description: 'Coba siklus wawancara kebutuhan dan ringkasan produk.',
+    description: 'Coba hingga tahap PRD untuk 1 proyek pertama Anda.',
     features: [
       '1 proyek aktif',
       '1 putaran survey kebutuhan',
-      'Maksimal 1.000 karakter ide awal',
-      'Ringkasan kebutuhan produk',
-      'Wawancara Konsultan Produk',
+      'Maksimal 1.000 karakter per pesan',
+      'Chat brainstorming ide',
+      'Rekomendasi Tech Stack & PRD',
     ],
     tier: 'free' as const,
     cta: 'Paket Dasar',
@@ -42,7 +42,7 @@ const PLANS = [
     features: [
       '2 proyek aktif per bulan',
       '3 putaran survey kebutuhan adaptif',
-      'Maksimal 2.000 karakter ide awal',
+      'Maksimal 2.000 karakter per pesan',
       'Rekomendasi Tech Stack & PRD',
       'Board task atomik',
       'Ekspor dokumen PRD (.md)',
@@ -61,7 +61,7 @@ const PLANS = [
     features: [
       '5 proyek aktif per bulan',
       '4 putaran survey mendalam',
-      'Maksimal 4.000 karakter ide awal',
+      'Maksimal 4.000 karakter per pesan',
       'Rekomendasi Tech Stack & PRD',
       'Board task atomik + edge cases',
       'Ekspor paket lengkap (.zip & .md)',
@@ -128,7 +128,7 @@ export function PricingDialog({
       onClick={onClose}
     >
       <div
-        className="bg-card border border-border rounded-2xl shadow-2xl max-w-4xl w-full p-6 space-y-6 my-8 text-foreground transition-all relative"
+        className="bg-card border border-border rounded-md shadow-2xl max-w-4xl w-full p-6 space-y-6 my-8 text-foreground transition-all relative"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Modal */}
@@ -152,7 +152,7 @@ export function PricingDialog({
 
         {/* Banner Pesan Error */}
         {errorMsg && (
-          <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-center gap-2">
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-center gap-2">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{errorMsg}</span>
           </div>
@@ -167,7 +167,7 @@ export function PricingDialog({
             return (
               <div
                 key={plan.id}
-                className={`relative rounded-xl border p-5 flex flex-col transition-all ${
+                className={`relative rounded-md border p-5 flex flex-col transition-all ${
                   isCurrent
                     ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/30'
                     : isHighlight
@@ -176,11 +176,11 @@ export function PricingDialog({
                 }`}
               >
                 {isCurrent ? (
-                  <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 bg-primary text-primary-foreground text-[10px] font-mono uppercase tracking-wider rounded-full shadow-xs">
+                  <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 bg-primary text-primary-foreground text-[10px] font-mono uppercase tracking-wider rounded-md shadow-xs">
                     Paket Aktif
                   </div>
                 ) : isHighlight ? (
-                  <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 bg-primary/90 text-primary-foreground text-[10px] font-mono uppercase tracking-wider rounded-full shadow-xs">
+                  <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 bg-primary/90 text-primary-foreground text-[10px] font-mono uppercase tracking-wider rounded-md shadow-xs">
                     Paling Populer
                   </div>
                 ) : null}

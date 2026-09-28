@@ -42,7 +42,7 @@ export function LandingPage() {
     <div
       ref={containerRef}
       data-page="landing"
-      className="noise-overlay bg-background font-sans text-foreground antialiased dark:bg-[#0A0F0F] dark:text-white"
+      className="noise-overlay bg-background font-sans text-foreground antialiased dark:bg-black dark:text-white"
       style={{ scrollBehavior: 'smooth' }}
     >
       <div ref={glowRef} className="cursor-glow" />

@@ -76,12 +76,12 @@ export function TaskDetailDialog({ task, isOpen, onClose }: TaskDetailDialogProp
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto no-scrollbar">
-      <div className="bg-card border border-border rounded-2xl shadow-2xl max-w-3xl w-full p-6 space-y-5 my-8 text-foreground transition-all">
+      <div className="bg-card border border-border rounded-md shadow-2xl max-w-3xl w-full p-6 space-y-5 my-8 text-foreground transition-all">
         {/* Header Dialog */}
         <div className="flex items-start justify-between gap-4 border-b border-border/80 pb-4">
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-xs font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded">
+              <span className="font-mono text-xs font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-md">
                 {taskIdLabel}
               </span>
               <Badge variant="outline" className="text-xs font-semibold">
@@ -107,7 +107,7 @@ export function TaskDetailDialog({ task, isOpen, onClose }: TaskDetailDialogProp
           <button
             type="button"
             onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-muted shrink-0"
+            className="text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-md hover:bg-muted shrink-0"
             aria-label="Tutup dialog"
           >
             <X className="h-5 w-5" />
@@ -122,9 +122,9 @@ export function TaskDetailDialog({ task, isOpen, onClose }: TaskDetailDialogProp
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                 <BookOpen className="h-3.5 w-3.5" /> Requirements PRD
               </h3>
-              <div className="flex flex-wrap gap-2 p-3 rounded-lg border border-border bg-muted/20">
+              <div className="flex flex-wrap gap-2 p-3 rounded-md border border-border bg-muted/20">
                 {ctx.requirement_ids.map((id) => (
-                  <span key={id} className="font-mono text-xs font-bold text-primary px-2 py-0.5 rounded bg-primary/10 border border-primary/20">
+                  <span key={id} className="font-mono text-xs font-bold text-primary px-2 py-0.5 rounded-md bg-primary/10 border border-primary/20">
                     {id}
                   </span>
                 ))}
@@ -138,7 +138,7 @@ export function TaskDetailDialog({ task, isOpen, onClose }: TaskDetailDialogProp
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Deskripsi
               </h3>
-              <p className="text-sm text-foreground/90 bg-muted/20 p-3 rounded-lg border border-border/60 leading-relaxed">
+              <p className="text-sm text-foreground/90 bg-muted/20 p-3 rounded-md border border-border/60 leading-relaxed">
                 {task.description}
               </p>
             </div>
@@ -154,7 +154,7 @@ export function TaskDetailDialog({ task, isOpen, onClose }: TaskDetailDialogProp
                 {task.dependsOn.map((dep) => (
                   <div
                     key={dep.dependsOn.id}
-                    className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-muted/20 text-xs"
+                    className="flex items-center justify-between p-2.5 rounded-md border border-border bg-muted/20 text-xs"
                   >
                     <span className="font-medium truncate mr-2">
                       #{dep.dependsOn.order} {dep.dependsOn.title}
@@ -177,7 +177,7 @@ export function TaskDetailDialog({ task, isOpen, onClose }: TaskDetailDialogProp
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                 <CheckSquare className="h-3.5 w-3.5 text-primary" /> Kriteria Penerimaan (Acceptance Criteria)
               </h3>
-              <div className="p-3 rounded-lg border border-border bg-muted/20 space-y-2">
+              <div className="p-3 rounded-md border border-border bg-muted/20 space-y-2">
                 {task.acceptanceCriteria.map((ac, i) => (
                   <div key={i} className="flex items-start gap-2 text-xs">
                     <span className="text-primary font-bold mt-0.5">-</span>
@@ -206,7 +206,7 @@ export function TaskDetailDialog({ task, isOpen, onClose }: TaskDetailDialogProp
                   <span>{copiedCmd ? 'Tersalin' : 'Salin Perintah'}</span>
                 </Button>
               </div>
-              <div className="p-3 rounded-lg bg-black text-emerald-400 font-mono text-xs overflow-x-auto border border-border space-y-1">
+              <div className="p-3 rounded-md bg-black text-emerald-400 font-mono text-xs overflow-x-auto border border-border space-y-1">
                 {ctx.validation_commands.map((cmd, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <span className="text-muted-foreground select-none">$</span>
@@ -223,7 +223,7 @@ export function TaskDetailDialog({ task, isOpen, onClose }: TaskDetailDialogProp
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                 <ListOrdered className="h-3.5 w-3.5" /> Langkah Implementasi
               </h3>
-              <ol className="p-3 rounded-lg border border-border bg-muted/20 space-y-2 list-decimal list-inside text-xs text-foreground/90">
+              <ol className="p-3 rounded-md border border-border bg-muted/20 space-y-2 list-decimal list-inside text-xs text-foreground/90">
                 {ctx.implementation_steps.map((step, i) => (
                   <li key={i} className="leading-relaxed">
                     <span>{step.replace(/^\d+[\.\)]\s*/, '')}</span>
@@ -245,7 +245,7 @@ export function TaskDetailDialog({ task, isOpen, onClose }: TaskDetailDialogProp
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                 {/* Files to create */}
                 {ctx?.files_to_create && ctx.files_to_create.length > 0 && (
-                  <div className="p-3 rounded-lg border border-border bg-muted/10 space-y-1.5">
+                  <div className="p-3 rounded-md border border-border bg-muted/10 space-y-1.5">
                     <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 block">
                       Rekomendasi File Dibuat:
                     </span>
@@ -261,7 +261,7 @@ export function TaskDetailDialog({ task, isOpen, onClose }: TaskDetailDialogProp
 
                 {/* Files to modify */}
                 {ctx?.files_to_modify && ctx.files_to_modify.length > 0 && (
-                  <div className="p-3 rounded-lg border border-border bg-muted/10 space-y-1.5">
+                  <div className="p-3 rounded-md border border-border bg-muted/10 space-y-1.5">
                     <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 block">
                       Rekomendasi File Dimodifikasi:
                     </span>
@@ -277,7 +277,7 @@ export function TaskDetailDialog({ task, isOpen, onClose }: TaskDetailDialogProp
 
                 {/* Readonly files */}
                 {ctx?.files_readonly && ctx.files_readonly.length > 0 && (
-                  <div className="p-3 rounded-lg border border-border bg-muted/10 space-y-1.5">
+                  <div className="p-3 rounded-md border border-border bg-muted/10 space-y-1.5">
                     <span className="text-xs font-semibold text-muted-foreground block">
                       File Referensi (Read-Only):
                     </span>
@@ -293,7 +293,7 @@ export function TaskDetailDialog({ task, isOpen, onClose }: TaskDetailDialogProp
 
                 {/* Forbidden files */}
                 {ctx?.forbidden && ctx.forbidden.length > 0 && (
-                  <div className="p-3 rounded-lg border border-destructive/30 bg-destructive/5 space-y-1.5">
+                  <div className="p-3 rounded-md border border-destructive/30 bg-destructive/5 space-y-1.5">
                     <span className="text-xs font-semibold text-destructive flex items-center gap-1">
                       <Ban className="h-3 w-3" /> Dilarang Keras Disentuh:
                     </span>
@@ -312,7 +312,7 @@ export function TaskDetailDialog({ task, isOpen, onClose }: TaskDetailDialogProp
 
           {/* Failure Context / Blocked Reason */}
           {task.blockedReason && (
-            <div className="p-3 rounded-lg border border-destructive/30 bg-destructive/10 space-y-1">
+            <div className="p-3 rounded-md border border-destructive/30 bg-destructive/10 space-y-1">
               <div className="text-xs font-semibold text-destructive flex items-center gap-1.5">
                 <AlertCircle className="h-3.5 w-3.5" /> Catatan Masalah / Blocked Reason:
               </div>

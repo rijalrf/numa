@@ -10,14 +10,13 @@ const PLANS = [
     name: 'Free Trial',
     price: 'Rp 0',
     period: '',
-    description: 'Coba siklus penuh untuk 1 proyek pertama Anda.',
+    description: 'Coba hingga tahap PRD untuk 1 proyek pertama Anda.',
     features: [
-      '1 proyek (sekali coba)',
-      '10 putaran chat brainstorming',
+      '1 proyek aktif',
+      '1 putaran survey kebutuhan',
       'Maksimal 1.000 karakter per pesan',
+      'Chat brainstorming ide',
       'Rekomendasi Tech Stack & PRD',
-      'Board task atomik',
-      'Akses CLI numa aktif',
     ],
     cta: 'Mulai Gratis',
     tier: 'free' as const,
@@ -31,7 +30,7 @@ const PLANS = [
     description: 'Cocok untuk solo developer dan indie hacker.',
     features: [
       '2 proyek aktif per bulan',
-      '15 putaran chat per proyek',
+      '3 putaran survey kebutuhan adaptif',
       'Maksimal 2.000 karakter per pesan',
       'Rekomendasi Tech Stack & PRD',
       'Board task atomik',
@@ -49,8 +48,8 @@ const PLANS = [
     period: '/bln',
     description: 'Untuk freelancer dan pengembang aktif.',
     features: [
-      '6 proyek aktif per bulan',
-      '25 putaran chat per proyek',
+      '5 proyek aktif per bulan',
+      '4 putaran survey mendalam',
       'Maksimal 4.000 karakter per pesan',
       'Rekomendasi Tech Stack & PRD',
       'Board task atomik + edge cases',
@@ -124,14 +123,14 @@ export function PricingSection() {
           {PLANS.map((plan) => (
             <div
               key={plan.id}
-              className={`relative rounded-2xl border ${
+              className={`relative rounded-md border ${
                 plan.highlight
                   ? 'border-numa-primary shadow-[0_0_50px_-15px_rgba(45,126,121,.25)] ring-1 ring-numa-primary/50'
                   : 'border-border/80 shadow-sm dark:border-white/[.06] dark:shadow-none'
-              } bg-card dark:bg-numa-card p-8 flex flex-col pricing-card`}
+              } bg-card dark:bg-neutral-950 p-8 flex flex-col pricing-card`}
             >
               {plan.highlight && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-numa-primary text-white text-[11px] font-mono uppercase tracking-wider rounded-full shadow-sm">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-numa-primary text-white text-[11px] font-mono uppercase tracking-wider rounded-md shadow-sm">
                   Paling Populer
                 </div>
               )}
@@ -157,7 +156,7 @@ export function PricingSection() {
                 type="button"
                 onClick={() => handleSelectPlan(plan.tier)}
                 disabled={loadingTier !== null}
-                className={`mt-8 w-full rounded-full py-3 text-sm font-medium text-center flex items-center justify-center gap-2 transition-all ${
+                className={`mt-8 w-full rounded-md py-3 text-sm font-medium text-center flex items-center justify-center gap-2 transition-all ${
                   plan.highlight
                     ? 'bg-numa-primary text-white font-semibold hover:shadow-[0_0_30px_rgba(45,126,121,0.35)]'
                     : 'border border-border bg-background text-foreground/80 hover:bg-accent hover:text-foreground dark:border-white/[.08] dark:bg-transparent dark:text-numa-text dark:hover:border-white/20 dark:hover:text-white'

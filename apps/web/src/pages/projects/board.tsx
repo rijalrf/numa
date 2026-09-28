@@ -209,7 +209,7 @@ export function BoardPage() {
     <div className="space-y-4">
       {/* Banner Error jika terjadi kesalahan */}
       {error && (
-        <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-destructive/30 bg-destructive/10 text-xs text-destructive">
+        <div className="flex items-center justify-between gap-3 p-3 rounded-md border border-destructive/30 bg-destructive/10 text-xs text-destructive">
           <div className="flex items-center gap-2 min-w-0">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span className="truncate">{error}</span>
@@ -253,7 +253,7 @@ export function BoardPage() {
 
       {/* Banner Sukses saat task berhasil dirancang */}
       {successMessage && (
-        <div className="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-xs text-emerald-700 dark:text-emerald-400">
+        <div className="flex items-center justify-between gap-3 p-2.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 text-xs text-emerald-700 dark:text-emerald-400">
           <div className="flex items-center gap-2 min-w-0">
             <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
             <span>{successMessage}</span>
@@ -261,7 +261,7 @@ export function BoardPage() {
           <button
             type="button"
             onClick={() => setSuccessMessage(null)}
-            className="text-muted-foreground hover:text-foreground p-0.5 rounded transition-colors"
+            className="text-muted-foreground hover:text-foreground p-0.5 rounded-md transition-colors"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -306,8 +306,8 @@ export function BoardPage() {
 
       {/* Tampilan Empty State jika tasks kosong */}
       {!tasks.length ? (
-        <div className="flex flex-col items-center justify-center p-12 text-center border border-dashed rounded-xl bg-card/50 space-y-4 min-h-[420px]">
-          <div className="h-12 w-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center mx-auto">
+        <div className="flex flex-col items-center justify-center p-12 text-center border border-dashed rounded-md bg-card/50 space-y-4 min-h-[420px]">
+          <div className="h-12 w-12 rounded-md bg-primary/10 text-primary flex items-center justify-center mx-auto">
             <Layers className="h-6 w-6" />
           </div>
           <div className="space-y-1.5 max-w-md mx-auto">

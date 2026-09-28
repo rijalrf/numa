@@ -339,13 +339,13 @@ export function TreePage() {
       {/* Floating Toolbar & Status (Kiri Atas) */}
       <div className="absolute top-4 left-4 z-20 flex items-center gap-2 flex-wrap max-w-[calc(100%-240px)]">
         {isLocked && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-background/90 backdrop-blur-md border border-border/80 rounded-xl text-xs text-muted-foreground shadow-md">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-background/90 backdrop-blur-md border border-border/80 rounded-md text-xs text-muted-foreground shadow-md">
             <Lock className="h-3.5 w-3.5 text-primary shrink-0" />
             <span className="font-medium">Terkunci (Read-Only)</span>
           </div>
         )}
 
-        <div className="flex items-center gap-1 bg-background/90 backdrop-blur-md border border-border/80 p-1 rounded-xl shadow-md text-xs">
+        <div className="flex items-center gap-1 bg-background/90 backdrop-blur-md border border-border/80 p-1 rounded-md shadow-md text-xs">
           <Badge variant="outline" className="text-xs px-2.5 py-1 font-normal border-0 text-muted-foreground">
             Total {nodes.length} Simpul
           </Badge>
@@ -354,7 +354,7 @@ export function TreePage() {
             type="button"
             onClick={() => setViewMode('architecture')}
             className={cn(
-              'px-3 py-1 rounded-lg font-medium transition-colors flex items-center gap-1.5 cursor-pointer',
+              'px-3 py-1 rounded-md font-medium transition-colors flex items-center gap-1.5 cursor-pointer',
               viewMode === 'architecture'
                 ? 'bg-primary/15 text-primary font-semibold shadow-2xs'
                 : 'text-muted-foreground hover:text-foreground'
@@ -367,7 +367,7 @@ export function TreePage() {
             type="button"
             onClick={() => setViewMode('full')}
             className={cn(
-              'px-3 py-1 rounded-lg font-medium transition-colors flex items-center gap-1.5 cursor-pointer',
+              'px-3 py-1 rounded-md font-medium transition-colors flex items-center gap-1.5 cursor-pointer',
               viewMode === 'full'
                 ? 'bg-primary/15 text-primary font-semibold shadow-2xs'
                 : 'text-muted-foreground hover:text-foreground'
@@ -380,7 +380,7 @@ export function TreePage() {
       </div>
 
       {/* Floating Controls HUD (Kanan Atas) */}
-      <div className="absolute top-4 right-4 z-20 flex items-center gap-1.5 bg-background/90 backdrop-blur-md border border-border/80 p-1.5 rounded-xl shadow-md">
+      <div className="absolute top-4 right-4 z-20 flex items-center gap-1.5 bg-background/90 backdrop-blur-md border border-border/80 p-1.5 rounded-md shadow-md">
         <Button
           size="icon"
           variant="ghost"
@@ -425,7 +425,7 @@ export function TreePage() {
       </div>
 
       {/* Floating Hint (Kiri Bawah) */}
-      <div className="absolute bottom-4 left-4 z-20 pointer-events-none text-xs text-muted-foreground bg-background/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-border/70 shadow-xs flex items-center gap-2">
+      <div className="absolute bottom-4 left-4 z-20 pointer-events-none text-xs text-muted-foreground bg-background/90 backdrop-blur-md px-3 py-1.5 rounded-md border border-border/70 shadow-xs flex items-center gap-2">
         <span className="h-2 w-2 rounded-full bg-primary" />
         <span>Geser kanvas (drag) untuk bernavigasi • Klik kartu untuk rincian</span>
       </div>
@@ -525,7 +525,7 @@ export function TreePage() {
                     height: `${layout.nodeHeight || 88}px`,
                   }}
                   className={cn(
-                    'tree-node-card cursor-pointer rounded-xl p-3 flex flex-col justify-between transition-all duration-200',
+                    'tree-node-card cursor-pointer rounded-md p-3 flex flex-col justify-between transition-all duration-200',
                     'hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.98]',
                     isApp
                       ? 'bg-gradient-to-br from-primary to-primary/90 text-primary-foreground border border-primary/50 shadow-md shadow-primary/20 ring-1 ring-primary/30'
@@ -558,7 +558,7 @@ export function TreePage() {
                     {node.children.length > 0 && (
                       <span
                         className={cn(
-                          'text-[10px] px-1.5 py-0.5 rounded-full font-mono font-medium',
+                          'text-[10px] px-1.5 py-0.5 rounded-md font-mono font-medium',
                           isApp
                             ? 'bg-primary-foreground/20 text-primary-foreground'
                             : 'bg-muted text-muted-foreground'
@@ -586,7 +586,7 @@ export function TreePage() {
                         <span
                           key={reqId}
                           className={cn(
-                            'text-[9px] font-mono px-1 py-0.5 rounded font-semibold',
+                            'text-[9px] font-mono px-1 py-0.5 rounded-md font-semibold',
                             isApp
                               ? 'bg-primary-foreground/20 text-primary-foreground'
                               : 'bg-primary/10 text-primary border border-primary/20'
@@ -621,14 +621,14 @@ export function TreePage() {
             onClick={() => setSelectedNode(null)}
           >
             <div
-              className="bg-card border border-border rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4 relative animate-in zoom-in-95 duration-150"
+              className="bg-card border border-border rounded-md shadow-2xl max-w-lg w-full p-6 space-y-4 relative animate-in zoom-in-95 duration-150"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Tombol Tutup */}
               <button
                 type="button"
                 onClick={() => setSelectedNode(null)}
-                className="absolute top-4 right-4 text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors"
+                className="absolute top-4 right-4 text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-muted transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -660,7 +660,7 @@ export function TreePage() {
                     </span>
                     <div
                       onClick={() => setSelectedNode(selectedNode.parent!)}
-                      className="p-3 rounded-xl bg-muted/40 hover:bg-muted/80 border border-border flex items-center justify-between cursor-pointer transition-colors"
+                      className="p-3 rounded-md bg-muted/40 hover:bg-muted/80 border border-border flex items-center justify-between cursor-pointer transition-colors"
                     >
                       <span className="text-xs font-medium text-foreground truncate mr-2">
                         {selectedNode.parent.label}
@@ -708,7 +708,7 @@ export function TreePage() {
                         <div
                           key={child.id}
                           onClick={() => setSelectedNode(child)}
-                          className="p-2.5 rounded-xl bg-muted/20 hover:bg-muted/60 border border-border/60 text-xs flex items-center justify-between cursor-pointer transition-colors"
+                          className="p-2.5 rounded-md bg-muted/20 hover:bg-muted/60 border border-border/60 text-xs flex items-center justify-between cursor-pointer transition-colors"
                         >
                           <div className="flex items-center gap-2 min-w-0 pr-2">
                             <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
@@ -729,7 +729,7 @@ export function TreePage() {
                   )}
                 </div>
 
-                <div className="rounded-xl bg-muted/40 p-3 text-[11px] text-muted-foreground">
+                <div className="rounded-md bg-muted/40 p-3 text-[11px] text-muted-foreground">
                   Detail struktur ini bersifat <strong>read-only</strong>. Seluruh task pengerjaan otomatis tersedia pada Board Task dan dapat dijalankan melalui CLI <code>numa</code>.
                 </div>
               </div>

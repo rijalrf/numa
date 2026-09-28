@@ -1,8 +1,17 @@
 export function LandingFooter() {
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
+    e.preventDefault();
+    const elem = document.getElementById(targetId);
+    if (elem) {
+      elem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      window.history.pushState(null, '', `#${targetId}`);
+    }
+  };
+
   return (
-    <footer className="border-t border-border/80 bg-slate-50/70 dark:border-white/[.06] dark:bg-[#060909]">
+    <footer className="border-t border-border/80 bg-slate-50/70 dark:border-white/[.06] dark:bg-black">
       <div className="mx-auto max-w-7xl px-6 py-14">
-        <div className="grid gap-10 md:grid-cols-[1.6fr_1fr_1fr_1fr] md:gap-8">
+        <div className="grid gap-10 md:grid-cols-[1.6fr_1fr] md:gap-8">
           <div>
             <div className="flex items-center gap-2.5">
               <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-numa-primary to-numa-accent">
@@ -15,29 +24,34 @@ export function LandingFooter() {
           <div>
             <p className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground dark:text-numa-muted">Produk</p>
             <ul className="space-y-3 text-sm text-foreground/80 dark:text-numa-text">
-              <li><a href="#features" className="transition-colors hover:text-foreground dark:hover:text-white">Fitur</a></li>
-              <li><a href="#workflow" className="transition-colors hover:text-foreground dark:hover:text-white">Cara Kerja</a></li>
-              <li><a href="#pricing" className="transition-colors hover:text-foreground dark:hover:text-white">Harga</a></li>
+              <li>
+                <a
+                  href="#features"
+                  onClick={(e) => handleNavClick(e, 'features')}
+                  className="transition-colors hover:text-foreground dark:hover:text-white cursor-pointer"
+                >
+                  Fitur
+                </a>
+              </li>
+              <li>
+                <a
+                  href="#workflow"
+                  onClick={(e) => handleNavClick(e, 'workflow')}
+                  className="transition-colors hover:text-foreground dark:hover:text-white cursor-pointer"
+                >
+                  Cara Kerja
+                </a>
+              </li>
+              <li>
+                <a
+                  href="#pricing"
+                  onClick={(e) => handleNavClick(e, 'pricing')}
+                  className="transition-colors hover:text-foreground dark:hover:text-white cursor-pointer"
+                >
+                  Harga
+                </a>
+              </li>
             </ul>
-          </div>
-          <div>
-            <p className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground dark:text-numa-muted">Sumber Daya</p>
-            <ul className="space-y-3 text-sm text-foreground/80 dark:text-numa-text">
-              <li><a href="#" className="transition-colors hover:text-foreground dark:hover:text-white">Dokumentasi</a></li>
-              <li><a href="#" className="transition-colors hover:text-foreground dark:hover:text-white">Referensi CLI</a></li>
-              <li><a href="#" className="transition-colors hover:text-foreground dark:hover:text-white">Catatan Rilis</a></li>
-            </ul>
-          </div>
-          <div>
-            <p className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground dark:text-numa-muted">Komunitas</p>
-            <div className="flex items-center gap-4">
-              <a href="#" className="text-muted-foreground transition-colors hover:text-foreground dark:text-numa-muted dark:hover:text-white">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
-              </a>
-              <a href="#" className="text-muted-foreground transition-colors hover:text-foreground dark:text-numa-muted dark:hover:text-white">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"/></svg>
-              </a>
-            </div>
           </div>
         </div>
         <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-border/80 pt-8 sm:flex-row dark:border-white/[.06]">

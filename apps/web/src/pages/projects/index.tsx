@@ -40,7 +40,7 @@ export function ProjectsPage() {
         >
           <CardHeader>
             <div className="flex items-center gap-2 text-foreground font-semibold text-base group-hover:text-primary transition-colors">
-              <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors shrink-0">
+              <div className="h-8 w-8 rounded-md bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors shrink-0">
                 <Plus className="h-4 w-4" />
               </div>
               <CardTitle className="text-base leading-snug">Buat Proyek Baru</CardTitle>

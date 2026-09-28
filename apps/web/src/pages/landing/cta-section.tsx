@@ -17,7 +17,7 @@ export function CtaSection() {
         <div className="mt-8 cta-fade">
           <Link
             to="/login"
-            className="group inline-flex items-center gap-2 rounded-full bg-numa-primary px-8 py-4 text-sm font-semibold text-white transition-all hover:shadow-[0_0_40px_rgba(45,126,121,.4)]"
+            className="group inline-flex items-center gap-2 rounded-md bg-numa-primary px-8 py-4 text-sm font-semibold text-white transition-all hover:shadow-[0_0_40px_rgba(45,126,121,.4)]"
           >
             Mulai Sekarang
             <ArrowUpRight size={16} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />

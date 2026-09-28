@@ -59,7 +59,7 @@ export const MarkdownView = React.memo(function MarkdownView({
             </blockquote>
           ),
           pre: ({ children }) => (
-            <pre className="p-3.5 rounded-xl bg-muted/60 border border-border/60 overflow-x-auto my-2.5 font-mono text-xs text-foreground leading-relaxed">
+            <pre className="p-3.5 rounded-md bg-muted/60 border border-border/60 overflow-x-auto my-2.5 font-mono text-xs text-foreground leading-relaxed">
               {children}
             </pre>
           ),
@@ -74,13 +74,13 @@ export const MarkdownView = React.memo(function MarkdownView({
               );
             }
             return (
-              <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-[11px] text-foreground border border-border/50 inline align-baseline" {...props}>
+              <code className="px-1.5 py-0.5 rounded-md bg-muted font-mono text-[11px] text-foreground border border-border/50 inline align-baseline" {...props}>
                 {children}
               </code>
             );
           },
           table: ({ children }) => (
-            <div className="overflow-x-auto my-4 border border-border/70 rounded-xl">
+            <div className="overflow-x-auto my-4 border border-border/70 rounded-md">
               <table className="w-full text-left text-xs sm:text-sm border-collapse">
                 {children}
               </table>

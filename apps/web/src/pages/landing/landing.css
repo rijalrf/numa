@@ -1,5 +1,17 @@
 /* Scoped styles untuk landing page Numa */
 
+html {
+  scroll-behavior: smooth;
+}
+
+[data-page="landing"] {
+  scroll-behavior: smooth;
+}
+
+[data-page="landing"] section[id] {
+  scroll-margin-top: 5rem;
+}
+
 [data-page="landing"] .noise-overlay::after {
   content: '';
   position: fixed;
@@ -54,7 +66,7 @@
   z-index: 2;
 }
 .dark [data-page="landing"] .pipeline-dot {
-  background: #0A0F0F;
+  background: #000000;
 }
 [data-page="landing"] .pipeline-dot.active {
   background: #2D7E79;
@@ -70,12 +82,6 @@
   transition: transform 0.4s cubic-bezier(0.03, 0.98, 0.52, 0.99);
 }
 
-[data-page="landing"] .orbit-item {
-  animation: orbit 20s linear infinite;
-}
-[data-page="landing"] .orbit-item-sm {
-  animation: orbit 14s linear infinite reverse;
-}
 [data-page="landing"] .pulse-ring {
   animation: pulse-ring 3.5s ease-in-out infinite;
 }
@@ -137,9 +143,18 @@
 
 @keyframes orbit {
   0% {
-    transform: rotate(0deg) translateX(120px) rotate(0deg);
+    transform: rotate(0deg) translateX(140px) rotate(0deg);
   }
   100% {
-    transform: rotate(360deg) translateX(120px) rotate(-360deg);
+    transform: rotate(360deg) translateX(140px) rotate(-360deg);
+  }
+}
+
+@keyframes orbit-inner {
+  0% {
+    transform: rotate(360deg) translateX(90px) rotate(-360deg);
+  }
+  100% {
+    transform: rotate(0deg) translateX(90px) rotate(0deg);
   }
 }

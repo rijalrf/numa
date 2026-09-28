@@ -135,7 +135,7 @@ ${executionLoopText}
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto no-scrollbar">
-      <div className="bg-card border border-border rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-5 my-8 text-foreground transition-all">
+      <div className="bg-card border border-border rounded-md shadow-2xl max-w-2xl w-full p-6 space-y-5 my-8 text-foreground transition-all">
         {/* Header Modal */}
         <div className="flex items-center justify-between border-b border-border/80 pb-3">
           <div className="flex items-center gap-2">
@@ -172,7 +172,7 @@ ${executionLoopText}
 
         {/* Banner Pesan Error Unduhan */}
         {downloadError && (
-          <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-center justify-between gap-2">
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span>{downloadError}</span>
               {downloadError.includes('upgrade') && (
@@ -200,9 +200,9 @@ ${executionLoopText}
         {view === 'menu' && (
           <div className="space-y-3.5">
             {/* Opsi 1: Download PRD .md */}
-            <div className="rounded-xl border border-border/80 bg-muted/20 hover:bg-muted/40 transition-colors p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="rounded-md border border-border/80 bg-muted/20 hover:bg-muted/40 transition-colors p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-start gap-3">
-                <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0 mt-0.5 sm:mt-0">
+                <div className="p-2 rounded-md bg-primary/10 text-primary shrink-0 mt-0.5 sm:mt-0">
                   <FileText className="h-5 w-5" />
                 </div>
                 <div>
@@ -232,9 +232,9 @@ ${executionLoopText}
             </div>
 
             {/* Opsi 2: Download Paket Lengkap .zip */}
-            <div className="rounded-xl border border-border/80 bg-muted/20 hover:bg-muted/40 transition-colors p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="rounded-md border border-border/80 bg-muted/20 hover:bg-muted/40 transition-colors p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-start gap-3">
-                <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5 sm:mt-0">
+                <div className="p-2 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5 sm:mt-0">
                   <Archive className="h-5 w-5" />
                 </div>
                 <div>
@@ -269,9 +269,9 @@ ${executionLoopText}
             </div>
 
             {/* Opsi 3: Eksekusi Coding Agent */}
-            <div className="rounded-xl border border-primary/40 bg-primary/5 hover:bg-primary/10 transition-colors p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="rounded-md border border-primary/40 bg-primary/5 hover:bg-primary/10 transition-colors p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-start gap-3">
-                <div className="p-2 rounded-lg bg-primary text-primary-foreground shrink-0 mt-0.5 sm:mt-0">
+                <div className="p-2 rounded-md bg-primary text-primary-foreground shrink-0 mt-0.5 sm:mt-0">
                   <Bot className="h-5 w-5" />
                 </div>
                 <div>
@@ -301,7 +301,7 @@ ${executionLoopText}
           <div className="space-y-4">
             {/* Peringatan Keamanan Token */}
             {inputToken ? (
-              <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3.5 flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3.5 flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
                 <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <div>
                   <span className="font-semibold block">Peringatan Keamanan Token PAT:</span>
@@ -311,7 +311,7 @@ ${executionLoopText}
                 </div>
               </div>
             ) : (
-              <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3.5 flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3.5 flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
                 <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <div>
                   <span className="font-semibold block">Token PAT Belum Ditemukan:</span>
@@ -323,7 +323,7 @@ ${executionLoopText}
             )}
 
             {/* Toggle Mode Persetujuan */}
-            <div className="rounded-xl border border-border/80 bg-muted/20 p-3.5 space-y-2">
+            <div className="rounded-md border border-border/80 bg-muted/20 p-3.5 space-y-2">
               <span className="text-xs font-semibold text-foreground block">
                 Pilih Mode Eksekusi Agent:
               </span>
@@ -331,7 +331,7 @@ ${executionLoopText}
                 <button
                   type="button"
                   onClick={() => setApprovalMode('approval')}
-                  className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                  className={`p-2.5 rounded-md border text-left transition-all cursor-pointer ${
                     approvalMode === 'approval'
                       ? 'border-primary bg-primary/10 text-foreground font-medium'
                       : 'border-border/60 bg-background/50 text-muted-foreground hover:bg-muted/40'
@@ -349,7 +349,7 @@ ${executionLoopText}
                 <button
                   type="button"
                   onClick={() => setApprovalMode('full_auto')}
-                  className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                  className={`p-2.5 rounded-md border text-left transition-all cursor-pointer ${
                     approvalMode === 'full_auto'
                       ? 'border-primary bg-primary/10 text-foreground font-medium'
                       : 'border-border/60 bg-background/50 text-muted-foreground hover:bg-muted/40'
@@ -367,7 +367,7 @@ ${executionLoopText}
             </div>
 
             {/* Master Prompt Code Block */}
-            <div className="rounded-xl border border-border overflow-hidden space-y-0">
+            <div className="rounded-md border border-border overflow-hidden space-y-0">
               <div className="bg-muted/70 px-3 py-2 border-b flex items-center justify-between gap-2">
                 <span className="text-xs font-mono font-medium text-foreground">
                   Master-Prompt-Loop.md

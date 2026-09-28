@@ -35,16 +35,16 @@ export function TerminalSection() {
           <p className="mt-4 text-muted-foreground dark:text-numa-muted-light text-base max-w-lg mx-auto">Master prompt terstruktur memandu AI coding agent menjalankan CLI numa secara otonom: mengambil task terisolasi, menghormati batas bounded context, dan memvalidasi hasil.</p>
         </div>
 
-        <div className="rounded-2xl border border-border/80 bg-[#080C0C] overflow-hidden shadow-2xl shadow-black/10 dark:border-white/[.08] dark:shadow-black/40">
+        <div className="rounded-md border border-border/80 bg-black overflow-hidden shadow-2xl shadow-black/10 dark:border-white/[.08] dark:shadow-black/40">
           {/* Window chrome */}
-          <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/[.06] bg-[#0A0E0E]">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/[.06] bg-neutral-950">
             <div className="flex items-center gap-2">
               <div className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]/80"></div>
               <div className="h-2.5 w-2.5 rounded-full bg-[#febc2e]/80"></div>
               <div className="h-2.5 w-2.5 rounded-full bg-[#28c840]/80"></div>
               <span className="ml-4 font-mono text-[11px] text-numa-dim">~/projects/my-app</span>
             </div>
-            <div className="flex items-center gap-1.5 rounded-full bg-numa-primary/10 border border-numa-primary/20 px-3 py-1">
+            <div className="flex items-center gap-1.5 rounded-md bg-numa-primary/10 border border-numa-primary/20 px-3 py-1">
               <Bot className="text-numa-accent" size={12} />
               <span className="font-mono text-[10px] text-numa-accent">AI Agent</span>
             </div>
