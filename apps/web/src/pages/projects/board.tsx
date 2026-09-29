@@ -1,6 +1,6 @@
 // Board page: papan Kanban task implementasi project dengan kolom User Story & kolom card.
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@/lib/http';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import {
   Layers,
   X,
   History,
+  GitCommit,
 } from 'lucide-react';
 import { useWizardNav } from '@/components/layout/wizard-nav';
 import { ExecutionDialog } from '@/components/execution/execution-dialog';
@@ -23,7 +24,8 @@ import {
   type TaskDetail,
 } from '@/components/kanban/task-detail-dialog';
 import { CycleBar, type ProjectCycleItem } from '@/components/cycle/cycle-bar';
-import { ChangeCycleDialog } from '@/components/cycle/change-cycle-dialog';
+import { CycleDetailDialog } from '@/components/cycle/cycle-detail-dialog';
+import { ChangeRequestPanel } from '@/components/cycle/change-request-panel';
 
 type Task = TaskDetail;
 
@@ -45,10 +47,9 @@ export function BoardPage() {
   // State Change Cycle
   const [cycles, setCycles] = useState<ProjectCycleItem[]>([]);
   const [activeCycleId, setActiveCycleId] = useState<string | null | 'all'>('all');
-  const [openCycleId, setOpenCycleId] = useState<string | null>(null);
   const [initialTaskCounts, setInitialTaskCounts] = useState<{ total: number; done: number }>({ total: 0, done: 0 });
-  const [changeCycleOpen, setChangeCycleOpen] = useState(false);
   const [viewCycleId, setViewCycleId] = useState<string | null>(null);
+  const [changePanelOpen, setChangePanelOpen] = useState(false);
 
   const isGeneratingRef = useRef(false);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -200,12 +201,10 @@ export function BoardPage() {
     try {
       const res = await api<{
         cycles: ProjectCycleItem[];
-        openCycleId: string | null;
         initialTaskCounts: { total: number; done: number };
       }>(`/api/projects/${projectId}/cycles`);
 
       setCycles(res.cycles || []);
-      setOpenCycleId(res.openCycleId || null);
       if (res.initialTaskCounts) setInitialTaskCounts(res.initialTaskCounts);
     } catch (err) {
       console.error('Gagal memuat riwayat siklus:', err);
@@ -279,7 +278,6 @@ export function BoardPage() {
     { status: 'DONE', label: 'Done' },
   ];
 
-  const allTasksDone = tasks.length > 0 && tasks.every((t) => t.status === 'DONE');
   const selectedCycleObj = typeof activeCycleId === 'string' && activeCycleId !== 'all'
     ? cycles.find((c) => c.id === activeCycleId)
     : null;
@@ -406,23 +404,14 @@ export function BoardPage() {
             cycles={cycles}
             activeCycleId={activeCycleId}
             onSelectCycle={(id) => setActiveCycleId(id)}
-            openCycleId={openCycleId}
             initialTaskCounts={initialTaskCounts}
-            allTasksDone={allTasksDone}
-            onRequestChange={() => {
-              setViewCycleId(null);
-              setChangeCycleOpen(true);
-            }}
           />
           {selectedCycleObj && (
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => {
-                setViewCycleId(selectedCycleObj.id);
-                setChangeCycleOpen(true);
-              }}
+              onClick={() => setViewCycleId(selectedCycleObj.id)}
               className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
             >
               <History className="h-3.5 w-3.5" />
@@ -451,6 +440,15 @@ export function BoardPage() {
               />
             </button>
           </label>
+
+          <Button
+            size="sm"
+            onClick={() => setChangePanelOpen(true)}
+            className="gap-1.5 font-medium h-8"
+          >
+            <GitCommit className="h-3.5 w-3.5" />
+            <span>Minta Perubahan</span>
+          </Button>
 
           <Button
             size="sm"
@@ -588,18 +586,16 @@ export function BoardPage() {
         description="Batas kuota proyek untuk paket Anda saat ini telah tercapai. Upgrade ke paket yang lebih tinggi untuk merancang dan mengeksekusi lebih banyak proyek."
       />
 
-      <ChangeCycleDialog
+      <CycleDetailDialog
         projectId={projectId!}
-        isOpen={changeCycleOpen}
-        onClose={() => {
-          setChangeCycleOpen(false);
-          setViewCycleId(null);
-        }}
-        onCycleGenerated={async () => {
-          await loadCycles();
-          await loadTasks('manual');
-        }}
-        viewCycleId={viewCycleId}
+        cycleId={viewCycleId}
+        onClose={() => setViewCycleId(null)}
+      />
+
+      <ChangeRequestPanel
+        projectId={projectId!}
+        isOpen={changePanelOpen}
+        onClose={() => setChangePanelOpen(false)}
       />
     </div>
   );

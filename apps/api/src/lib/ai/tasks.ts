@@ -365,6 +365,7 @@ Aturan taskId dan depends_on (WAJIB KONSISTEN):
 - 'depends_on' HARUS mereferensikan 'taskId' task prasyarat (misal ["TASK-001"]). Jangan gunakan ID sembarang agar Execution Graph dapat terhubung sempurna.
 
 Aturan khusus FRONTEND (Design System Contract & UI/UX Specs):
+- Default app shell: sidebar menu (nav kiri + konten utama); header hanya untuk info global. Ikuti panduan skill .claude/skills/numa-frontend/SKILL.md.
 - Terapkan Design System Contract: mobile-first, clean layout, semantic HTML, dan konsistensi visual.
 - Spacing terstandarisasi: gunakan kelipatan 4px (Tailwind: gap-1, gap-2, p-3, p-4, p-6, space-y-4).
 - Tangani state interaksi secara lengkap pada acceptance criteria: idle, loading (spinner/skeleton), error, dan success.

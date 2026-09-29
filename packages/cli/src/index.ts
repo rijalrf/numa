@@ -506,13 +506,14 @@ program
       const skillsTargetDir = path.join(targetDir, '.claude', 'skills');
       fs.mkdirSync(skillsTargetDir, { recursive: true });
 
-      // Salin 4 bundled skills
+      // Salin 5 bundled skills
       const bundledSkillsDir = path.resolve(__dirname, '../skills');
       const staticSkills = [
         { file: 'test-driven-development.md', name: 'numa-tdd' },
         { file: 'incremental-implementation.md', name: 'numa-incremental' },
         { file: 'api-and-interface-design.md', name: 'numa-api-design' },
         { file: 'security-and-hardening.md', name: 'numa-security' },
+        { file: 'frontend-ui-engineering.md', name: 'numa-frontend' },
       ];
 
       for (const s of staticSkills) {
@@ -550,6 +551,7 @@ Proyek ini menggunakan standar arsitektur dan skill pack Numa:
 - Implementasi Bertahap: .claude/skills/numa-incremental/SKILL.md
 - Desain API: .claude/skills/numa-api-design/SKILL.md
 - Pengerasan Keamanan: .claude/skills/numa-security/SKILL.md
+- Desain Frontend: .claude/skills/numa-frontend/SKILL.md
 
 Patuhi seluruh Acceptance Criteria dan aturan layering sebelum menjalankan \`numa done\`.
 ${markerEnd}\n`;

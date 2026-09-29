@@ -387,68 +387,60 @@ async function runTest() {
   }
   console.log('Semua task pembangunan awal telah berstatus DONE.');
 
-  console.log('\n--- 13. TEST CHANGE CYCLE ("MINTA PERUBAHAN") ---');
-  // Analisis permintaan perubahan adaptif
-  const analyzeRes = await authedFetch(`/api/projects/${projectId}/cycles/analyze`, {
+  console.log('\n--- 13. TEST CHANGE REQUEST VIA SURVEY ("MINTA PERUBAHAN") ---');
+  // Ajukan permintaan perubahan: survey direset dan wizard kembali ke tahap survey
+  const changeReqRes = await authedFetch(`/api/projects/${projectId}/change-request`, {
     method: 'POST',
     body: JSON.stringify({
       request: 'Tambahkan validasi email pada formulir kontak dan tombol ekspor CSV untuk log aktivitas',
     }),
   });
-  assert.strictEqual(analyzeRes.status, 200, 'Cycle analyze status harus 200');
-  const analyzeJson = await analyzeRes.json();
-  const cycleId = analyzeJson.cycleId;
-  assert(cycleId, 'CycleId harus dikembalikan oleh server');
-  console.log(`Analisis siklus OK. Clarity: ${analyzeJson.analysis?.clarity}, cycleId: ${cycleId}`);
+  assert.strictEqual(changeReqRes.status, 200, 'Change request status harus 200');
+  const changeReqJson = await changeReqRes.json();
+  assert.strictEqual(changeReqJson.wizardStep, 'survey', 'wizardStep harus kembali ke survey');
+  console.log('Permintaan perubahan diterima. wizardStep =', changeReqJson.wizardStep);
 
-  // Bila AI meminta klarifikasi, jawab klarifikasi tersebut
-  if (analyzeJson.needsClarification && analyzeJson.questions?.length > 0) {
-    const answers = analyzeJson.questions.map((q: any) => ({
-      question: q.question,
-      answer: q.options?.[0] || 'Gunakan format standar CSV dengan delimiter koma.',
-    }));
-    const clarifyRes = await authedFetch(`/api/projects/${projectId}/cycles/${cycleId}/clarify`, {
+  // Pertanyaan survey baru harus digenerate ulang
+  const changeSurveyRes = await authedFetch(`/api/projects/${projectId}/survey`);
+  assert.strictEqual(changeSurveyRes.status, 200, 'GET survey status harus 200');
+  const changeSurveyData = await changeSurveyRes.json();
+  assert(
+    Array.isArray(changeSurveyData.questions) && changeSurveyData.questions.length > 0,
+    'Survey perubahan harus memiliki daftar pertanyaan baru'
+  );
+  console.log(`Survey perubahan putaran ${changeSurveyData.round} memuat ${changeSurveyData.questions.length} pertanyaan baru.`);
+
+  // Jawab seluruh putaran survey hingga tuntas menggunakan Saran Numa
+  let currentSurvey = changeSurveyData;
+  for (let putaranKe = 1; putaranKe <= 10; putaranKe++) {
+    const changeAnswers = currentSurvey.questions
+      .filter((q: any) => q.round === currentSurvey.round)
+      .map((q: any) => ({
+        questionId: q.id,
+        value: q.kind === 'checkbox' ? [q.suggestion] : q.suggestion,
+      }));
+    const changeSubmitRes = await authedFetch(`/api/projects/${projectId}/survey/submit`, {
       method: 'POST',
-      body: JSON.stringify({ answers }),
+      body: JSON.stringify({ round: currentSurvey.round, answers: changeAnswers }),
     });
-    assert.strictEqual(clarifyRes.status, 200, 'Cycle clarify status harus 200');
-    console.log('Jawaban klarifikasi berhasil dikirim.');
+    assert.strictEqual(changeSubmitRes.status, 200, 'Submit survey status harus 200');
+    const changeSubmitData = await changeSubmitRes.json();
+    if (changeSubmitData.done) {
+      console.log('Survey perubahan selesai. Ringkasan produk diperbarui.');
+      break;
+    }
+    const nextSurveyRes = await authedFetch(`/api/projects/${projectId}/survey`);
+    assert.strictEqual(nextSurveyRes.status, 200, 'GET survey putaran lanjutan status harus 200');
+    currentSurvey = await nextSurveyRes.json();
+    console.log(`Lanjut ke survey putaran ${currentSurvey.round}...`);
   }
 
-  // Generate task untuk siklus perubahan
-  const cycleGenRes = await authedFetch(`/api/projects/${projectId}/cycles/${cycleId}/generate`, {
-    method: 'POST',
-    body: JSON.stringify({ confirm: true, split: 'single' }),
-  });
-  assert.strictEqual(cycleGenRes.status, 200, 'Cycle generate status harus 200');
-  const cycleGenJson = await cycleGenRes.json();
-  assert.strictEqual(cycleGenJson.ok, true, 'Cycle generate harus bernilai ok: true');
-  console.log(`Task delta untuk siklus perubahan berhasil dibuat: ${cycleGenJson.tasks?.length} tasks.`);
-
-  // Verifikasi filter task berdasarkan cycleId
-  const cycleTasksRes = await authedFetch(`/api/projects/${projectId}/tasks?cycleId=${cycleId}`);
-  assert.strictEqual(cycleTasksRes.status, 200, 'Filter tasks by cycleId harus 200');
-  const cycleTasksJson = await cycleTasksRes.json();
-  assert(cycleTasksJson.tasks.length > 0, 'Harus ada task yang terdaftar pada cycleId ini');
-  assert.strictEqual(cycleTasksJson.tasks[0].cycleId, cycleId, 'Task harus memiliki cycleId yang valid');
-  console.log('Verifikasi filter task berdasarkan cycleId OK.');
-
-  // Verifikasi endpoint riwayat siklus
-  const cyclesListRes = await authedFetch(`/api/projects/${projectId}/cycles`);
-  assert.strictEqual(cyclesListRes.status, 200, 'Get cycles list harus 200');
-  const cyclesListJson = await cyclesListRes.json();
-  assert.strictEqual(cyclesListJson.openCycleId, cycleId, 'openCycleId harus merujuk ke siklus yang sedang aktif');
-  console.log('Verifikasi riwayat siklus OK.');
-
-  // Selesaikan seluruh task pada siklus ini dan verifikasi auto-transition status siklus ke DONE
-  for (const ct of cycleTasksJson.tasks) {
-    const compRes = await agentFetch(`/api/agent/tasks/${ct.id}/complete`, { method: 'POST' });
-    assert.strictEqual(compRes.status, 200, 'Complete cycle task via agent harus 200');
-  }
-  const cycleDetailRes = await authedFetch(`/api/projects/${projectId}/cycles/${cycleId}`);
-  const cycleDetailJson = await cycleDetailRes.json();
-  assert.strictEqual(cycleDetailJson.cycle?.status, 'DONE', 'Status siklus harus otomatis berubah menjadi DONE');
-  console.log('Status siklus otomatis beralih ke DONE setelah seluruh task selesai OK.');
+  // Selesaikan survey dan arahkan wizard ke tech stack
+  const changeCompleteRes = await authedFetch(`/api/projects/${projectId}/survey/complete`, { method: 'POST' });
+  assert.strictEqual(changeCompleteRes.status, 200, 'Survey complete status harus 200');
+  const changeCompleteJson = await changeCompleteRes.json();
+  assert.strictEqual(changeCompleteJson.wizardStep, 'techstack', 'wizardStep harus diarahkan ke techstack');
+  console.log('Survey perubahan selesai. wizardStep =', changeCompleteJson.wizardStep);
 
   console.log('\n=== SEMUA TEST E2E BERHASIL 100%! ===');
 }

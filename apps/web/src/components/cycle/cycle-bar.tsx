@@ -1,4 +1,4 @@
-// CycleBar: Komponen pengalih siklus dan pemicu alur "Minta Perubahan" di papan Kanban.
+// CycleBar: Komponen pengalih siklus di papan Kanban.
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,11 +13,6 @@ import {
 import {
   GitBranch,
   ChevronDown,
-  Plus,
-  CheckCircle2,
-  Clock,
-  Sparkles,
-  Info,
 } from 'lucide-react';
 
 export interface ProjectCycleItem {
@@ -42,20 +37,14 @@ interface CycleBarProps {
   cycles: ProjectCycleItem[];
   activeCycleId: string | null | 'all';
   onSelectCycle: (cycleId: string | null | 'all') => void;
-  openCycleId: string | null;
   initialTaskCounts: { total: number; done: number };
-  allTasksDone: boolean;
-  onRequestChange: () => void;
 }
 
 export function CycleBar({
   cycles,
   activeCycleId,
   onSelectCycle,
-  openCycleId,
   initialTaskCounts,
-  allTasksDone,
-  onRequestChange,
 }: CycleBarProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
@@ -69,14 +58,6 @@ export function CycleBar({
     if (!found) return 'Pilih Siklus';
     return `Siklus #${found.number}: ${found.title}`;
   })();
-
-  const canRequestChange = allTasksDone && !openCycleId;
-
-  const disabledReason = !allTasksDone
-    ? 'Selesaikan semua task terlebih dahulu sebelum meminta perubahan baru.'
-    : openCycleId
-    ? 'Masih ada siklus perubahan aktif yang sedang berjalan.'
-    : '';
 
   return (
     <div className="flex flex-wrap items-center gap-2.5">
@@ -183,29 +164,6 @@ export function CycleBar({
           })}
         </DropdownMenuContent>
       </DropdownMenu>
-
-      {/* Tombol Minta Perubahan */}
-      <div className="relative group">
-        <Button
-          type="button"
-          size="sm"
-          onClick={onRequestChange}
-          disabled={!canRequestChange}
-          className="h-8 gap-1.5 text-xs font-medium"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          <span>Minta Perubahan</span>
-        </Button>
-
-        {!canRequestChange && disabledReason && (
-          <div className="absolute left-0 bottom-full mb-1.5 hidden group-hover:flex z-50 w-64 p-2 rounded-md bg-popover text-popover-foreground text-[11px] shadow-lg border border-border/80 pointer-events-none">
-            <div className="flex items-start gap-1.5">
-              <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
-              <span>{disabledReason}</span>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }

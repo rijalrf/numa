@@ -13,13 +13,13 @@ type Project = {
   idea: string;
   status: string;
   wizardStep?: string;
+  stage?: string;
   updatedAt: string;
 };
 
 function getProjectStageUrl(p: Project): string {
-  const step = p.wizardStep || 'techstack';
-  if (step === 'done') return `/projects/${p.id}/board`;
-  if (step === 'chat' || step === 'interview') return `/projects/${p.id}/techstack`;
+  const step = p.stage || p.wizardStep || 'techstack';
+  if (step === 'done' || step === 'guide' || step === 'board') return `/projects/${p.id}/board`;
   return `/projects/${p.id}/${step}`;
 }
 
@@ -74,7 +74,7 @@ export function ProjectsPage() {
               <div className="flex items-start justify-between gap-2">
                 <CardTitle className="text-base leading-snug">{p.name}</CardTitle>
                 <Badge variant="outline" className="text-[10px] shrink-0 font-medium">
-                  {STAGE_LABELS[p.wizardStep || 'interview'] || p.wizardStep}
+                  {STAGE_LABELS[p.stage || p.wizardStep || 'interview'] || p.stage || p.wizardStep}
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{p.idea}</p>

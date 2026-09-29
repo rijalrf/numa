@@ -159,13 +159,50 @@ const CreateProjectBody = z.object({
   idea: z.string().min(10).max(4000),
 });
 
+// Tahap terjauh yang dicapai project: max(wizardStep, artefak yang sudah ada).
+// Dipakai kartu project untuk "Buka Tahap Terakhir" — wizardStep bisa saja
+// mundur sengaja (mis. balik brainstorm / alur perubahan), tapi pekerjaan
+// terjauh tetap di papan.
+function furthestStage(p: {
+  wizardStep: string | null;
+  prd: { id: string } | null;
+  _count: { stacks: number; treeNodes: number; tasks: number };
+}): string {
+  let rank = STAGE_ORDER[p.wizardStep ?? 'techstack'] ?? 1;
+  if (p._count.stacks > 0) rank = Math.max(rank, STAGE_ORDER.techstack);
+  if (p.prd) rank = Math.max(rank, STAGE_ORDER.prd);
+  if (p._count.treeNodes > 0) rank = Math.max(rank, STAGE_ORDER.tree);
+  if (p._count.tasks > 0) rank = Math.max(rank, STAGE_ORDER.board);
+  if (rank <= STAGE_ORDER.survey) return 'survey';
+  if (rank === STAGE_ORDER.techstack) return 'techstack';
+  if (rank === STAGE_ORDER.prd) return 'prd';
+  if (rank === STAGE_ORDER.tree) return 'tree';
+  return 'board'; // board | guide | done -> papan
+}
+
 app.get('/api/projects', requireUser, async (req: AuthedRequest, res) => {
   const projects = await prisma.project.findMany({
     where: { userId: req.userId },
     orderBy: { updatedAt: 'desc' },
-    select: { id: true, name: true, idea: true, status: true, wizardStep: true, createdAt: true, updatedAt: true },
+    select: {
+      id: true,
+      name: true,
+      idea: true,
+      status: true,
+      wizardStep: true,
+      createdAt: true,
+      updatedAt: true,
+      prd: { select: { id: true } },
+      _count: { select: { stacks: true, treeNodes: true, tasks: true } },
+    },
   });
-  res.json({ projects });
+  res.json({
+    projects: projects.map((p) => {
+      const stage = furthestStage(p);
+      const { prd, _count, ...rest } = p;
+      return { ...rest, stage };
+    }),
+  });
 });
 
 app.post('/api/projects', requireUser, async (req: AuthedRequest, res) => {
@@ -1202,6 +1239,7 @@ ${archMd}
 - [ ] Endpoint GET list mendukung pagination (?page, ?limit)
 - [ ] Operasi stok/saldo/kuota dalam $transaction atomik (baca dan tulis dalam transaksi yang sama)
 - [ ] DELETE endpoint cek relasi aktif sebelum hapus (tolak 409 jika ada relasi aktif)
+- [ ] Frontend: app shell default sidebar menu (nav kiri + konten utama), lihat skill numa-frontend
 - [ ] Frontend: dilarang window.alert(), gunakan AlertBanner atau Toast
 - [ ] Frontend: semua label punya htmlFor yang sesuai dengan id input, tombol ikon punya aria-label
 - [ ] Frontend: loading state pakai skeleton loader, bukan teks polos
@@ -1854,187 +1892,66 @@ app.get('/api/projects/:id/cycles/:cycleId', requireUser, async (req: AuthedRequ
   res.json({ cycle });
 });
 
-const CycleAnalyzeBody = z.object({
-  request: z.string().min(8, 'Permintaan perubahan minimal 8 karakter').max(2000),
-  clarifyAnswers: z.array(z.object({ question: z.string(), answer: z.string() })).optional(),
+const ChangeRequestBody = z.object({
+  request: z.string().min(8, 'Permintaan perubahan minimal 8 karakter').max(4000),
 });
 
-app.post('/api/projects/:id/cycles/analyze', requireUser, async (req: AuthedRequest, res) => {
-  const parsed = CycleAnalyzeBody.safeParse(req.body);
+// Ajukan permintaan perubahan: reset survey agar proses discovery diulang seperti proyek baru
+app.post('/api/projects/:id/change-request', requireUser, async (req: AuthedRequest, res) => {
+  const parsed = ChangeRequestBody.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Permintaan tidak valid.' });
   }
 
-  const project = await prisma.project.findFirst({
-    where: { id: req.params.id, userId: req.userId },
-    include: {
-      prd: true,
-      treeNodes: true,
-      tasks: {
-        select: { id: true, title: true, layer: true, status: true, aiContext: true },
-      },
-    },
-  });
-  if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
-
-  // Guard: Semua task wajib DONE
-  const pendingTasks = project.tasks.filter((t) => t.status !== 'DONE');
-  if (pendingTasks.length > 0) {
-    return res.status(409).json({
-      error: `Masih ada ${pendingTasks.length} task yang belum selesai. Selesaikan semua task sebelum memulai siklus baru.`,
+  const { config } = await getUserPlan(req.userId);
+  if (parsed.data.request.length > config.charLimit) {
+    return res.status(400).json({
+      error: `Permintaan terlalu panjang (${parsed.data.request.length} karakter). Maksimal ${config.charLimit} karakter untuk paket ${config.name}.`,
     });
   }
-
-  // Guard: Tidak boleh ada cycle OPEN
-  const activeCycle = await prisma.projectCycle.findFirst({
-    where: { projectId: project.id, status: 'OPEN' },
-  });
-  if (activeCycle) {
-    return res.status(409).json({
-      error: `Masih ada siklus aktif "${activeCycle.title}". Selesaikan siklus tersebut terlebih dahulu.`,
-    });
-  }
-
-  const completedTasks = project.tasks.map((t) => {
-    const ctx = (t.aiContext ?? {}) as any;
-    const files = [
-      ...(ctx.files_to_create ?? []),
-      ...(ctx.files_to_modify ?? []),
-    ];
-    return { title: t.title, layer: t.layer, files };
-  });
-
-  const tree = project.treeNodes.map((n) => ({ label: n.label, kind: n.kind }));
 
   try {
-    const analysis = await analyzeChangeRequest({
-      projectId: project.id,
-      request: parsed.data.request,
-      prd: project.prd?.content ? readPrdContent(project.prd.content) : null,
-      tree,
-      repoSummary: project.repoSummary,
-      completedTasks,
-      clarifyAnswers: parsed.data.clarifyAnswers,
+    const project = await prisma.project.findFirst({
+      where: { id: req.params.id, userId: req.userId },
+      include: { tasks: { select: { status: true } } },
     });
+    if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
 
-    // Tentukan nomor cycle berikutnya
-    const maxCycle = await prisma.projectCycle.findFirst({
-      where: { projectId: project.id },
-      orderBy: { number: 'desc' },
-      select: { number: true },
-    });
-    const nextNumber = (maxCycle?.number ?? 0) + 1;
-
-    // Hapus draft lama jika ada
-    await prisma.projectCycle.deleteMany({
-      where: { projectId: project.id, status: 'DRAFT' },
-    });
-
-    const cycle = await prisma.projectCycle.create({
-      data: {
-        projectId: project.id,
-        number: nextNumber,
-        title: parsed.data.request.slice(0, 60),
-        request: parsed.data.request,
-        status: 'DRAFT',
-        type: analysis.type,
-        size: analysis.size,
-        impact: analysis as any,
-        clarify: parsed.data.clarifyAnswers ?? [],
-      },
-    });
-
-    if (analysis.clarity === 'VAGUE' && (!parsed.data.clarifyAnswers || parsed.data.clarifyAnswers.length === 0)) {
-      return res.json({
-        needsClarification: true,
-        cycleId: cycle.id,
-        questions: analysis.clarificationQuestions ?? [],
-        analysis,
+    // Guard: seluruh task wajib selesai sebelum perubahan dimulai
+    const pendingCount = project.tasks.filter((t) => t.status !== 'DONE').length;
+    if (pendingCount > 0) {
+      return res.status(409).json({
+        error: `Masih ada ${pendingCount} task yang belum selesai. Selesaikan semua task sebelum memulai perubahan.`,
       });
     }
 
-    return res.json({
-      needsClarification: false,
-      cycleId: cycle.id,
-      analysis,
+    // Guard: tidak boleh ada siklus yang masih aktif
+    const activeCycle = await prisma.projectCycle.findFirst({
+      where: { projectId: project.id, status: 'OPEN' },
     });
-  } catch (err) {
-    console.error(`[cycles/analyze] Gagal menganalisis perubahan project ${project.id}:`, err);
-    return res.status(502).json({
-      error: 'AI gagal menganalisis permintaan perubahan.',
-      detail: (err as Error).message,
-    });
-  }
-});
+    if (activeCycle) {
+      return res.status(409).json({
+        error: `Masih ada siklus aktif "${activeCycle.title}" yang harus diselesaikan terlebih dahulu.`,
+      });
+    }
 
-const CycleClarifyBody = z.object({
-  answers: z.array(z.object({ question: z.string(), answer: z.string() })),
-});
+    // Reset data survey; jawaban ikut terhapus lewat cascade DiscoveryAnswer
+    await prisma.discoveryQuestion.deleteMany({ where: { projectId: project.id } });
 
-app.post('/api/projects/:id/cycles/:cycleId/clarify', requireUser, async (req: AuthedRequest, res) => {
-  const parsed = CycleClarifyBody.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: 'Jawaban klarifikasi tidak valid.' });
-  }
-
-  const project = await prisma.project.findFirst({
-    where: { id: req.params.id, userId: req.userId },
-    include: {
-      prd: true,
-      treeNodes: true,
-      tasks: {
-        select: { id: true, title: true, layer: true, status: true, aiContext: true },
-      },
-    },
-  });
-  if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
-
-  const cycle = await prisma.projectCycle.findFirst({
-    where: { id: req.params.cycleId, projectId: project.id, status: 'DRAFT' },
-  });
-  if (!cycle) return res.status(404).json({ error: 'Draft siklus tidak ditemukan.' });
-
-  const completedTasks = project.tasks.map((t) => {
-    const ctx = (t.aiContext ?? {}) as any;
-    const files = [
-      ...(ctx.files_to_create ?? []),
-      ...(ctx.files_to_modify ?? []),
-    ];
-    return { title: t.title, layer: t.layer, files };
-  });
-
-  const tree = project.treeNodes.map((n) => ({ label: n.label, kind: n.kind }));
-
-  try {
-    const analysis = await analyzeChangeRequest({
-      projectId: project.id,
-      request: cycle.request,
-      prd: project.prd?.content ? readPrdContent(project.prd.content) : null,
-      tree,
-      repoSummary: project.repoSummary,
-      completedTasks,
-      clarifyAnswers: parsed.data.answers,
-    });
-
-    const updated = await prisma.projectCycle.update({
-      where: { id: cycle.id },
+    // Lampirkan permintaan perubahan ke ide agar survey/summary/PRD berikutnya melihatnya
+    await prisma.project.update({
+      where: { id: project.id },
       data: {
-        clarify: parsed.data.answers,
-        impact: analysis as any,
-        type: analysis.type,
-        size: analysis.size,
+        idea: `${project.idea}\n\n---\nPERUBAHAN DIMINTA:\n${parsed.data.request}`,
+        wizardStep: 'survey',
       },
     });
 
-    return res.json({
-      ok: true,
-      cycleId: updated.id,
-      analysis,
-    });
+    res.json({ ok: true, wizardStep: 'survey' });
   } catch (err) {
-    console.error(`[cycles/clarify] Gagal memperbarui klarifikasi cycle ${cycle.id}:`, err);
+    console.error(`[change-request] Gagal memproses permintaan perubahan project ${req.params.id}:`, err);
     return res.status(502).json({
-      error: 'AI gagal memproses jawaban klarifikasi.',
+      error: 'Gagal memproses permintaan perubahan.',
       detail: (err as Error).message,
     });
   }
@@ -2099,8 +2016,10 @@ app.post('/api/projects/:id/cycles/:cycleId/generate', requireUser, async (req: 
       });
     }
 
-    let prdDeltaPayload: any = {};
-    if (impact.needsPrdChange && impact.newRequirements && impact.newRequirements.length > 0 && project.prd) {
+    let prdDeltaPayload: any = cycle.prdDelta ?? {};
+    const hasExistingPrdDelta = prdDeltaPayload && typeof prdDeltaPayload === 'object' && Object.keys(prdDeltaPayload).length > 0;
+
+    if (!hasExistingPrdDelta && impact.needsPrdChange && impact.newRequirements && impact.newRequirements.length > 0 && project.prd) {
       prdDeltaPayload = {
         summary: impact.prdChangeSummary ?? impact.summary,
         newRequirements: impact.newRequirements,
@@ -2190,6 +2109,11 @@ app.post('/api/projects/:id/cycles/:cycleId/generate', requireUser, async (req: 
             type: impact.type ?? cycle.type,
             size: impact.size ?? cycle.size,
           },
+        });
+
+        await tx.project.update({
+          where: { id: project.id },
+          data: { wizardStep: 'board' },
         });
       },
       { timeout: 60000 }
