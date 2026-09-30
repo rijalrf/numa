@@ -1,7 +1,7 @@
 // Board page: papan Kanban task implementasi project dengan kolom User Story & kolom card.
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { api } from '@/lib/http';
+import { api, downloadFile } from '@/lib/http';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +15,7 @@ import {
   X,
   History,
   GitCommit,
+  Download,
 } from 'lucide-react';
 import { useWizardNav } from '@/components/layout/wizard-nav';
 import { ExecutionDialog } from '@/components/execution/execution-dialog';
@@ -43,6 +44,8 @@ export function BoardPage() {
   const [projectName, setProjectName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [downloadingZip, setDownloadingZip] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   // State Change Cycle
   const [cycles, setCycles] = useState<ProjectCycleItem[]>([]);
@@ -92,6 +95,52 @@ export function BoardPage() {
     }
   };
 
+  const handleDownloadZip = async () => {
+    if (!projectId) return;
+    setDownloadingZip(true);
+    setDownloadError(null);
+    try {
+      await downloadFile(`/api/projects/${projectId}/export.zip`, `${projectName || 'Proyek'}_paket.zip`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Gagal mengunduh Paket Lengkap.';
+      setDownloadError(msg);
+    } finally {
+      setDownloadingZip(false);
+    }
+  };
+
+  const extraNav = useMemo(
+    () => (
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleDownloadZip}
+          disabled={downloadingZip || loading || generating || !tasks.length}
+          className="gap-1.5 font-medium h-8"
+        >
+          {downloadingZip ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Download className="h-3.5 w-3.5" />
+          )}
+          <span>{downloadingZip ? 'Mengunduh...' : 'Unduh Paket (.zip)'}</span>
+        </Button>
+
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setChangePanelOpen(true)}
+          className="gap-1.5 font-medium h-8"
+        >
+          <GitCommit className="h-3.5 w-3.5" />
+          <span>Minta Perubahan</span>
+        </Button>
+      </div>
+    ),
+    [downloadingZip, loading, generating, tasks.length, projectId, projectName]
+  );
+
   useWizardNav({
     back: {
       label: 'Kembali',
@@ -100,11 +149,12 @@ export function BoardPage() {
     next:
       !loading && !generating && tasks.length > 0
         ? {
-            label: 'Perintah Eksekusi',
+            label: 'Agent AI Prompt',
             onClick: () => setExecutionDialogOpen(true),
             hideIcon: true,
           }
         : null,
+    extra: extraNav,
   });
 
   const pollForGeneratedTasks = useCallback(() => {
@@ -358,6 +408,33 @@ export function BoardPage() {
         </div>
       )}
 
+      {/* Banner Pesan Error Unduhan ZIP */}
+      {downloadError && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{downloadError}</span>
+            {downloadError.includes('upgrade') && (
+              <button
+                type="button"
+                onClick={() => setPricingOpen(true)}
+                className="underline font-semibold ml-1 hover:text-foreground cursor-pointer"
+              >
+                Lihat Paket
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setDownloadError(null)}
+            className="p-1 hover:bg-destructive/20 rounded text-destructive shrink-0 cursor-pointer"
+            aria-label="Tutup pesan error"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Banner Sukses saat task berhasil dirancang */}
       {successMessage && (
         <div className="flex items-center justify-between gap-3 p-2.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 text-xs text-emerald-700 dark:text-emerald-400">
@@ -440,15 +517,6 @@ export function BoardPage() {
               />
             </button>
           </label>
-
-          <Button
-            size="sm"
-            onClick={() => setChangePanelOpen(true)}
-            className="gap-1.5 font-medium h-8"
-          >
-            <GitCommit className="h-3.5 w-3.5" />
-            <span>Minta Perubahan</span>
-          </Button>
 
           <Button
             size="sm"

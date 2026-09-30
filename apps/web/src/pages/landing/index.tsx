@@ -24,10 +24,29 @@ import {
   Plus,
 } from 'lucide-react';
 import { ArchitectureSvg } from './architecture-svg';
-import { ThemeToggle } from '@/components/ui/theme-toggle';
 import './landing.css';
 
 export function LandingPage() {
+  // Animasi scroll reveal saat elemen masuk ke viewport
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('revealed');
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.1, rootMargin: '0px 0px -40px 0px' }
+    );
+
+    const elements = document.querySelectorAll('.scroll-reveal');
+    elements.forEach((el) => observer.observe(el));
+
+    return () => observer.disconnect();
+  }, []);
+
   // --- Motion / Hero Animation ---
   const [animationPaused, setAnimationPaused] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -298,7 +317,6 @@ export function LandingPage() {
             <span className="nav-note">
               <span className="status-dot"></span>Dari ide ke eksekusi
             </span>
-            <ThemeToggle />
             <Link to="/login" className="button button-small button-dark">
               Coba Numa
               <ArrowUpRight />
@@ -327,10 +345,6 @@ export function LandingPage() {
           <a href="#paket" onClick={closeMobileMenu}>
             Paket
           </a>
-          <div className="flex items-center justify-between py-2 border-t border-[var(--line)] mt-2">
-            <span className="text-xs text-[var(--muted)]">Tema</span>
-            <ThemeToggle />
-          </div>
         </nav>
       </header>
 
@@ -410,7 +424,7 @@ export function LandingPage() {
               <span className="hero-caption">IDE → KONTEKS → KODE</span>
             </div>
 
-            <div className="pipeline-ribbon" aria-label="Lima tahap alur Numa">
+            <div className="pipeline-ribbon scroll-reveal" aria-label="Lima tahap alur Numa">
               <div className="ribbon-intro">
                 Satu alur utuh.
                 <br />
@@ -453,7 +467,7 @@ export function LandingPage() {
               </a>
             </div>
 
-            <div className="stack-line">
+            <div className="stack-line scroll-reveal">
               <p>Fondasi yang sudah kamu kenal.</p>
               <div className="stack-logos">
                 <span className="stack-logo">
@@ -487,7 +501,7 @@ export function LandingPage() {
 
         {/* WORKFLOW */}
         <section id="alur" className="workflow-section page-shell">
-          <div className="section-heading">
+          <div className="section-heading scroll-reveal">
             <div className="heading-with-index">
               <span className="section-index">01</span>
               <h2 className="section-title">
@@ -502,7 +516,7 @@ export function LandingPage() {
             </p>
           </div>
 
-          <div className="workflow-grid">
+          <div className="workflow-grid scroll-reveal">
             <div>
               <div className="step-list" role="tablist" aria-label="Tahapan kerja Numa">
                 {[
@@ -605,7 +619,7 @@ export function LandingPage() {
 
         {/* KENDALI */}
         <section id="kendali" className="control-section">
-          <div className="control-grid page-shell">
+          <div className="control-grid page-shell scroll-reveal">
             <div className="control-heading">
               <p className="eyebrow">
                 <span className="tiny-line"></span>02 / KONTEKS JELAS. KENDALI PENUH.
@@ -646,7 +660,7 @@ export function LandingPage() {
         </section>
 
         {/* AGENT TERMINAL */}
-        <section id="agent" className="agent-section page-shell">
+        <section id="agent" className="agent-section page-shell scroll-reveal">
           <div className="agent-copy">
             <p className="eyebrow">
               <span className="status-dot"></span>DARI WORKSPACE KE TERMINALMU
@@ -734,7 +748,7 @@ export function LandingPage() {
 
         {/* PRICING */}
         <section id="paket" className="pricing-section page-shell">
-          <div className="pricing-heading">
+          <div className="pricing-heading scroll-reveal">
             <div>
               <p className="eyebrow">
                 <span className="tiny-line"></span>03 / RUANG UNTUK TUMBUH
@@ -748,7 +762,7 @@ export function LandingPage() {
             </p>
           </div>
 
-          <div className="pricing-table">
+          <div className="pricing-table scroll-reveal">
             <article className="price-row">
               <div>
                 <h3 className="plan-name">Free Trial</h3>
@@ -828,7 +842,7 @@ export function LandingPage() {
         </section>
 
         {/* FAQ */}
-        <section id="faq" className="faq-section page-shell">
+        <section id="faq" className="faq-section page-shell scroll-reveal">
           <div className="faq-heading">
             <p className="eyebrow">
               <span className="tiny-line"></span>SEBELUM MULAI
@@ -885,7 +899,7 @@ export function LandingPage() {
         </section>
 
         {/* CLOSING */}
-        <section className="closing">
+        <section className="closing scroll-reveal">
           <div className="closing-inner page-shell">
             <div>
               <p className="eyebrow">

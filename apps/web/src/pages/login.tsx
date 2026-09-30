@@ -1,4 +1,4 @@
-// Halaman masuk Numa: autentikasi aman via Google OAuth.
+// Halaman masuk Numa: autentikasi aman via Google OAuth (default light mode).
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { signIn } from '@/lib/auth-client';
@@ -46,31 +46,31 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-foreground flex flex-col items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-4 relative overflow-hidden">
       {/* Background ambient glow dan grid pattern */}
-      <div className="absolute -top-40 left-1/2 -translate-x-1/2 h-[450px] w-[600px] rounded-full bg-numa-primary/20 blur-[120px] pointer-events-none" />
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none" />
+      <div className="absolute -top-40 left-1/2 -translate-x-1/2 h-[450px] w-[600px] rounded-full bg-numa-primary/10 blur-[120px] pointer-events-none" />
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#00000008_1px,transparent_1px),linear-gradient(to_bottom,#00000008_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none" />
 
       {/* Navigasi kembali ke Beranda */}
       <Link
         to="/"
-        className="inline-flex items-center gap-2 text-xs text-numa-text hover:text-white transition-colors mb-6 group relative z-10"
+        className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors mb-6 group relative z-10"
       >
         <ArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" />
         <span>Kembali ke Beranda</span>
       </Link>
 
-      {/* Card Login Modern */}
-      <div className="relative w-full max-w-md rounded-md border border-white/[.08] bg-neutral-950/90 p-8 shadow-[0_0_50px_rgba(45,126,121,.15)] backdrop-blur-xl z-10">
+      {/* Card Login */}
+      <div className="relative w-full max-w-md rounded-xl border border-border bg-card p-8 shadow-sm backdrop-blur-xl z-10">
         {/* Logo dan Header */}
         <div className="text-center mb-8">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-[#193c34] border border-[#2b584a] text-[#dceda7] shadow-[0_0_24px_rgba(220,237,167,.15)]">
             <NumaLogoIcon className="h-8 w-8 text-[#dceda7]" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white flex items-center justify-center gap-1.5">
-            numa<span className="text-[#dceda7]">.</span>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center justify-center gap-1.5">
+            numa<span className="text-[#193c34]">.</span>
           </h1>
-          <p className="mt-2 text-xs text-numa-text leading-relaxed">
+          <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
             AI Software Factory untuk mengubah ide menjadi aplikasi siap eksekusi
           </p>
         </div>
@@ -81,11 +81,11 @@ export function LoginPage() {
             type="button"
             onClick={loginWithGoogle}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-3 rounded-md border border-white/10 bg-white/[.04] px-4 py-3 text-sm font-medium text-white transition-all hover:bg-white/[.08] hover:border-white/20 active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_2px_12px_rgba(0,0,0,0.3)] cursor-pointer"
+            className="w-full flex items-center justify-center gap-3 rounded-md border border-border bg-background px-4 py-3 text-sm font-medium text-foreground transition-all hover:bg-muted hover:border-foreground/20 active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed shadow-xs cursor-pointer"
           >
             {loading ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin text-numa-accent" />
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
                 <span>Mengalihkan ke Google...</span>
               </>
             ) : (
@@ -106,8 +106,8 @@ export function LoginPage() {
         </div>
 
         {/* Footer info keamanan */}
-        <div className="mt-8 pt-6 border-t border-white/[.06] flex items-center justify-center gap-2 text-[11px] text-numa-muted">
-          <ShieldCheck className="h-3.5 w-3.5 text-numa-accent/80 shrink-0" />
+        <div className="mt-8 pt-6 border-t border-border flex items-center justify-center gap-2 text-[11px] text-muted-foreground">
+          <ShieldCheck className="h-3.5 w-3.5 text-primary/80 shrink-0" />
           <span>Autentikasi resmi & aman via Google OAuth</span>
         </div>
       </div>

@@ -1,7 +1,10 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@/lib/auth-client';
+import { api } from '@/lib/http';
 import { LoginPage } from '@/pages/login';
 import { LandingPage } from '@/pages/landing';
+import { OnboardingPage } from '@/pages/onboarding';
 import { ProfilePage } from '@/pages/profile';
 import { ProjectsPage } from '@/pages/projects/index';
 import { ChatPage } from '@/pages/chat';
@@ -18,6 +21,30 @@ function Protected({ children }: { children: React.ReactNode }) {
   const { data, isPending } = useSession();
   if (isPending) return <div className="p-8 text-muted-foreground">Memuat...</div>;
   if (!data?.user) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
+function RequireOnboarding({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  const { data: session } = useSession();
+  const q = useQuery({
+    queryKey: ['user-profile'],
+    queryFn: () => api<{ user: { onboardingCompletedAt: string | null } }>('/api/user/profile'),
+    enabled: !!session?.user,
+    retry: false,
+  });
+
+  if (q.isLoading || q.isPending) return <div className="p-8 text-muted-foreground">Memuat...</div>;
+  if (q.isError) return <div className="p-8 text-destructive">Gagal memuat profil. Muat ulang halaman.</div>;
+
+  const done = !!q.data?.user?.onboardingCompletedAt;
+  if (!done && location.pathname !== '/onboarding') {
+    return <Navigate to="/onboarding" replace />;
+  }
+  if (done && location.pathname === '/onboarding') {
+    return <Navigate to="/chat" replace />;
+  }
+
   return <>{children}</>;
 }
 
@@ -39,10 +66,13 @@ export function App() {
       <Route
         element={
           <Protected>
-            <WizardLayout />
+            <RequireOnboarding>
+              <WizardLayout />
+            </RequireOnboarding>
           </Protected>
         }
       >
+        <Route path="/onboarding" element={<OnboardingPage />} />
         <Route path="/dashboard" element={<Navigate to="/chat" replace />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/profile" element={<ProfilePage />} />

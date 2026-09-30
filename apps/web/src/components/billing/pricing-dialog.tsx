@@ -134,10 +134,7 @@ export function PricingDialog({
         {/* Header Modal */}
         <div className="flex items-start justify-between border-b border-border/80 pb-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" />
-              <h2 className="text-lg font-bold leading-tight">{title}</h2>
-            </div>
+            <h2 className="text-lg font-bold leading-tight">{title}</h2>
             <p className="text-xs text-muted-foreground">{description}</p>
           </div>
           <button

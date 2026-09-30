@@ -16,6 +16,8 @@ export interface WizardNavConfig {
   back?: WizardNavAction | null;
   next?: WizardNavAction | null;
   extra?: React.ReactNode;
+  headerTitle?: string;
+  headerSubtitle?: string;
 }
 
 interface WizardNavContextType {
@@ -66,7 +68,13 @@ export function useWizardNav(config: WizardNavConfig | null) {
     config?.next?.loading,
     config?.next?.variant,
     config?.extra,
+    config?.headerTitle,
+    config?.headerSubtitle,
   ]);
+}
+
+export function useWizardNavContext() {
+  return useContext(WizardNavContext);
 }
 
 export function WizardNav() {

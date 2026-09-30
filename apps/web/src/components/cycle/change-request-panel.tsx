@@ -68,7 +68,7 @@ export function ChangeRequestPanel({ projectId, isOpen, onClose }: ChangeRequest
       onClick={onClose}
     >
       <div
-        className="relative h-full w-full max-w-[420px] bg-card border-l border-border shadow-2xl flex flex-col animate-in slide-in-from-right duration-300"
+        className="relative h-full w-full max-w-[500px] bg-card border-l border-border shadow-2xl flex flex-col animate-in slide-in-from-right duration-300"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Panel */}
@@ -88,11 +88,11 @@ export function ChangeRequestPanel({ projectId, isOpen, onClose }: ChangeRequest
         </div>
 
         {/* Tengah: Konten / Panduan / Pesan Error */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          <div className="rounded-md border border-border/80 bg-muted/20 p-3.5 space-y-2">
-            <div className="text-xs font-semibold text-foreground">
+        <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col justify-center items-center text-center space-y-4">
+          <div className="max-w-sm space-y-2.5">
+            <h3 className="text-sm font-semibold text-foreground">
               Alur Pengajuan Perubahan
-            </div>
+            </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
               Jelaskan perubahan atau fitur baru yang ingin Anda tambahkan. AI akan memperbarui PRD
               dengan sistem delta append tanpa menghapus task yang telah selesai.
@@ -104,7 +104,7 @@ export function ChangeRequestPanel({ projectId, isOpen, onClose }: ChangeRequest
           </div>
 
           {error && (
-            <div className="flex items-start gap-2 p-3 rounded-md border border-destructive/30 bg-destructive/10 text-xs text-destructive">
+            <div className="w-full flex items-start gap-2 p-3 rounded-md border border-destructive/30 bg-destructive/10 text-xs text-destructive text-left">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>

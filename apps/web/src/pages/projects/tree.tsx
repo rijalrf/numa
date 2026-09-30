@@ -374,7 +374,7 @@ export function TreePage() {
             )}
           >
             <ListTree className="h-3.5 w-3.5" />
-            <span>Semua Simpul ({nodes.length})</span>
+            <span>Semua Simpul</span>
           </button>
         </div>
       </div>

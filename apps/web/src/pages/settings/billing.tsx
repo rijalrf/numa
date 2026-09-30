@@ -4,7 +4,7 @@ import { api } from '@/lib/http';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { CreditCard, Check, Sparkles, Loader2, AlertCircle } from 'lucide-react';
+import { CreditCard, Check, Loader2, AlertCircle, ArrowDown } from 'lucide-react';
 
 interface UserPlanData {
   plan: 'free' | 'starter' | 'pro';
@@ -15,6 +15,12 @@ interface UserPlanData {
   charLimit: number;
   expiresAt: string | null;
 }
+
+const TIER_RANK: Record<string, number> = {
+  free: 0,
+  starter: 1,
+  pro: 2,
+};
 
 const AVAILABLE_PLANS = [
   {
@@ -116,13 +122,6 @@ export function BillingPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-10">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Langganan & Paket</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Pantau status paket aktif, pemakaian kuota proyek, dan kelola peningkatan paket akun Anda.
-        </p>
-      </div>
-
       {errorMsg && (
         <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-3">
           <AlertCircle className="h-4 w-4 shrink-0" />
@@ -212,6 +211,9 @@ export function BillingPage() {
         <div className="grid gap-6 md:grid-cols-3">
           {AVAILABLE_PLANS.map((plan) => {
             const isCurrent = currentPlan === plan.id;
+            const currentRank = TIER_RANK[currentPlan] ?? 0;
+            const planRank = TIER_RANK[plan.tier] ?? 0;
+            const isDowngrade = planRank < currentRank;
 
             return (
               <div
@@ -258,6 +260,25 @@ export function BillingPage() {
                     <Button variant="outline" className="w-full text-xs" disabled>
                       Pilihan Awal
                     </Button>
+                  ) : isDowngrade ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => handleUpgrade(plan.tier)}
+                      disabled={loadingTier !== null}
+                      className="w-full text-xs gap-1.5"
+                    >
+                      {loadingTier === plan.tier ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Memproses...</span>
+                        </>
+                      ) : (
+                        <>
+                          <ArrowDown className="h-3.5 w-3.5" />
+                          <span>Downgrade ke {plan.name}</span>
+                        </>
+                      )}
+                    </Button>
                   ) : (
                     <Button
                       onClick={() => handleUpgrade(plan.tier)}
@@ -270,10 +291,7 @@ export function BillingPage() {
                           <span>Memproses...</span>
                         </>
                       ) : (
-                        <>
-                          <Sparkles className="h-3.5 w-3.5" />
-                          <span>Tingkatkan ke {plan.name}</span>
-                        </>
+                        <span>Upgrade ke {plan.name}</span>
                       )}
                     </Button>
                   )}

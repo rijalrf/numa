@@ -254,10 +254,16 @@ export function SurveyPage() {
     }
   };
 
+  const isSummaryView = Boolean(surveyData?.isComplete && surveyData?.summary);
+
   useWizardNav(
     loading || !surveyData
       ? null
       : {
+          headerTitle: isSummaryView ? 'Ringkasan Kebutuhan' : undefined,
+          headerSubtitle: isSummaryView
+            ? 'Rangkuman spesifikasi dan kebutuhan produk dari hasil survey'
+            : undefined,
           back:
             currentRound > 1 && !surveyData.isComplete
               ? {

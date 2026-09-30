@@ -1,9 +1,9 @@
 // Halaman PRD: View atau real-time streaming dokumen kebutuhan produk
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { api } from '@/lib/http';
+import { api, downloadFile } from '@/lib/http';
 import { Button } from '@/components/ui/button';
-import { Sparkles, RefreshCw, Loader2, ArrowRight } from 'lucide-react';
+import { Sparkles, RefreshCw, Loader2, ArrowRight, Download, AlertCircle, X } from 'lucide-react';
 import { isStageLocked } from '@/lib/constants';
 import { useWizardNav } from '@/components/layout/wizard-nav';
 import { PricingDialog } from '@/components/billing/pricing-dialog';
@@ -12,11 +12,14 @@ import { MarkdownView } from '@/components/ui/markdown-view';
 export function PrdPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
+  const [projectName, setProjectName] = useState<string>('');
   const [markdown, setMarkdown] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [downloadingPrd, setDownloadingPrd] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [userPlan, setUserPlan] = useState<{ plan: string; planName: string } | null>(null);
   const [pricingOpen, setPricingOpen] = useState(false);
   const streamingRef = useRef(false);
@@ -104,11 +107,12 @@ export function PrdPage() {
     const loadPrd = async () => {
       try {
         const [projectRes, billingRes] = await Promise.all([
-          api<{ project?: { wizardStep?: string } }>(`/api/projects/${projectId}`),
+          api<{ project?: { wizardStep?: string; name?: string } }>(`/api/projects/${projectId}`),
           api<{ plan: string; planName: string }>('/api/billing/usage').catch(() => null),
         ]);
 
         if (billingRes) setUserPlan(billingRes);
+        if (projectRes.project?.name) setProjectName(projectRes.project.name);
 
         const currentStep = projectRes.project?.wizardStep || 'prd';
         const locked = isStageLocked(currentStep, 'prd');
@@ -159,6 +163,40 @@ export function PrdPage() {
     navigate(`/projects/${projectId}/tree`);
   };
 
+  const handleDownloadPrd = async () => {
+    if (!projectId) return;
+    setDownloadingPrd(true);
+    setDownloadError(null);
+    try {
+      await downloadFile(`/api/projects/${projectId}/prd/download`, `${projectName || 'Proyek'}_PRD.md`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Gagal mengunduh PRD.';
+      setDownloadError(msg);
+    } finally {
+      setDownloadingPrd(false);
+    }
+  };
+
+  const extraNav = useMemo(
+    () => (
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={handleDownloadPrd}
+        disabled={downloadingPrd || !markdown || generating}
+        className="gap-1.5 font-medium h-8"
+      >
+        {downloadingPrd ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Download className="h-3.5 w-3.5" />
+        )}
+        <span>{downloadingPrd ? 'Mengunduh...' : 'Unduh PRD'}</span>
+      </Button>
+    ),
+    [downloadingPrd, markdown, generating, projectName, projectId]
+  );
+
   useWizardNav({
     back: {
       label: 'Kembali',
@@ -169,10 +207,38 @@ export function PrdPage() {
       onClick: handleNextStep,
       disabled: !markdown || generating,
     },
+    extra: extraNav,
   });
 
   return (
     <div className="max-w-4xl mx-auto w-full space-y-6 pb-16">
+      {/* Banner Pesan Error Unduhan */}
+      {downloadError && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{downloadError}</span>
+            {downloadError.includes('upgrade') && (
+              <button
+                type="button"
+                onClick={() => setPricingOpen(true)}
+                className="underline font-semibold ml-1 hover:text-foreground cursor-pointer"
+              >
+                Lihat Paket
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setDownloadError(null)}
+            className="p-1 hover:bg-destructive/20 rounded text-destructive shrink-0 cursor-pointer"
+            aria-label="Tutup pesan error"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Paywall Banner untuk Free Plan */}
       {userPlan?.plan === 'free' && markdown && !generating && (
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-950 dark:text-amber-200">

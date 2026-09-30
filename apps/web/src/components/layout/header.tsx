@@ -5,7 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/http';
 import { signOut, useSession } from '@/lib/auth-client';
 import { ensureDefaultToken } from '@/lib/ensure-default-token';
-import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { useTheme } from '@/components/theme-provider';
+import { useWizardNavContext } from './wizard-nav';
 import { NumaLogo } from '@/components/ui/numa-logo';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +19,18 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ChevronDown, LogOut, FolderGit2, User, CreditCard, Sparkles } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronLeft,
+  Check,
+  LogOut,
+  FolderGit2,
+  User,
+  CreditCard,
+  Sun,
+  Moon,
+  Monitor,
+} from 'lucide-react';
 
 function getPageHeaderInfo(pathname: string): { title: string; subtitle?: string } | null {
   if (pathname.includes('/survey') || pathname.includes('/interview')) {
@@ -95,8 +107,19 @@ export function Header() {
   const { data } = useSession();
   const navigate = useNavigate();
   const location = useLocation();
+  const { theme, setTheme } = useTheme();
   const [pricingOpen, setPricingOpen] = useState(false);
-  const pageInfo = getPageHeaderInfo(location.pathname);
+  const { config: wizardNavConfig } = useWizardNavContext();
+  const staticPageInfo = getPageHeaderInfo(location.pathname);
+  const pageInfo = staticPageInfo
+    ? {
+        title: wizardNavConfig?.headerTitle || staticPageInfo.title,
+        subtitle:
+          wizardNavConfig?.headerSubtitle !== undefined
+            ? wizardNavConfig.headerSubtitle
+            : staticPageInfo.subtitle,
+      }
+    : null;
 
   // Pastikan token default dibuat pada sesi pertama
   useEffect(() => {
@@ -157,44 +180,45 @@ export function Header() {
           )}
         </div>
 
-        {/* Kanan: Nama App Hasil Generate + Toggle Tema + Paket & Profile */}
+        {/* Kanan: Nama App | Level Info | Profile */}
         <div className="flex items-center gap-3 shrink-0 justify-end">
           {projectName && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted/60 border border-border/70 max-w-[200px] sm:max-w-[260px]">
-              <span className="text-xs font-semibold text-foreground truncate" title={projectName}>
+            <>
+              <span
+                className="text-sm sm:text-base font-bold text-foreground tracking-tight truncate max-w-[180px] sm:max-w-[260px]"
+                title={projectName}
+              >
                 {projectName}
               </span>
-            </div>
+              <div className="h-5 w-[1px] bg-border shrink-0" />
+            </>
           )}
-
-          <ThemeToggle />
 
           {data?.user ? (
             <div className="flex items-center gap-2.5">
-              {/* Nama Paket dan Tombol Upgrade di sisi profil */}
+              {/* Tombol Upgrade & Level Info */}
               <div className="flex items-center gap-1.5">
+                {planData?.plan !== 'pro' && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="default"
+                    onClick={() => setPricingOpen(true)}
+                    className="h-7 px-2.5 text-xs font-semibold cursor-pointer shrink-0 shadow-xs"
+                  >
+                    Upgrade
+                  </Button>
+                )}
                 <Badge
                   variant="outline"
                   className="text-xs font-semibold px-2 py-0.5 bg-primary/10 border-primary/25 text-primary shrink-0"
                 >
                   {planData?.planName || 'Free Trial'}
                 </Badge>
-                {planData?.plan !== 'pro' && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setPricingOpen(true)}
-                    className="h-7 px-2 text-xs gap-1 font-medium border-primary/40 text-primary hover:bg-primary/10 hover:text-primary cursor-pointer shrink-0"
-                  >
-                    <Sparkles className="h-3 w-3 text-primary" />
-                    <span>Upgrade</span>
-                  </Button>
-                )}
               </div>
 
               <DropdownMenu>
-                <DropdownMenuTrigger className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors text-sm">
+                <DropdownMenuTrigger className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors text-sm cursor-pointer">
                   <Avatar className="h-8 w-8">
                     {data.user.image && <AvatarImage src={data.user.image} alt={data.user.name ?? 'Pengguna'} />}
                     <AvatarFallback className="bg-primary text-primary-foreground">
@@ -203,24 +227,74 @@ export function Header() {
                   </Avatar>
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuContent align="end" className="w-56 overflow-visible">
                   <div className="px-3 py-2 text-sm">
                     <div className="font-medium">{data.user.name || 'Pengguna'}</div>
                     <div className="text-xs text-muted-foreground mt-0.5">{data.user.email}</div>
                   </div>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem className="cursor-pointer" onClick={() => navigate('/projects')}>
-                    <FolderGit2 className="h-4 w-4 mr-2" />
-                    Proyek Saya
-                  </DropdownMenuItem>
                   <DropdownMenuItem className="cursor-pointer" onClick={() => navigate('/profile')}>
                     <User className="h-4 w-4 mr-2" />
                     Profil & Token
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="cursor-pointer" onClick={() => navigate('/projects')}>
+                    <FolderGit2 className="h-4 w-4 mr-2" />
+                    Proyek Saya
                   </DropdownMenuItem>
                   <DropdownMenuItem className="cursor-pointer" onClick={() => navigate('/settings/billing')}>
                     <CreditCard className="h-4 w-4 mr-2" />
                     Langganan & Paket
                   </DropdownMenuItem>
+
+                  {/* Menu Tampilan dengan Submenu on Hover */}
+                  <div className="relative group/theme">
+                    <div className="flex items-center justify-between px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground cursor-pointer select-none">
+                      <div className="flex items-center">
+                        <Sun className="h-4 w-4 mr-2 text-muted-foreground" />
+                        <span>Tampilan</span>
+                      </div>
+                      <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+                    </div>
+
+                    {/* Submenu hover (muncul di sisi kiri menu utama) */}
+                    <div className="absolute right-full top-0 pr-1 hidden group-hover/theme:block z-50">
+                      <div className="w-36 rounded-md border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-0">
+                        <DropdownMenuItem
+                          className="cursor-pointer flex items-center justify-between"
+                          onClick={() => setTheme('light')}
+                        >
+                          <div className="flex items-center">
+                            <Sun className="h-4 w-4 mr-2 text-muted-foreground" />
+                            <span>Terang</span>
+                          </div>
+                          {theme === 'light' && <Check className="h-3.5 w-3.5 text-primary" />}
+                        </DropdownMenuItem>
+
+                        <DropdownMenuItem
+                          className="cursor-pointer flex items-center justify-between"
+                          onClick={() => setTheme('dark')}
+                        >
+                          <div className="flex items-center">
+                            <Moon className="h-4 w-4 mr-2 text-muted-foreground" />
+                            <span>Gelap</span>
+                          </div>
+                          {theme === 'dark' && <Check className="h-3.5 w-3.5 text-primary" />}
+                        </DropdownMenuItem>
+
+                        <DropdownMenuItem
+                          className="cursor-pointer flex items-center justify-between"
+                          onClick={() => setTheme('system')}
+                        >
+                          <div className="flex items-center">
+                            <Monitor className="h-4 w-4 mr-2 text-muted-foreground" />
+                            <span>Sistem</span>
+                          </div>
+                          {theme === 'system' && <Check className="h-3.5 w-3.5 text-primary" />}
+                        </DropdownMenuItem>
+                      </div>
+                    </div>
+                  </div>
+
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     className="cursor-pointer text-red-600 focus:text-red-600"

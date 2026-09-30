@@ -1,15 +1,25 @@
 // Halaman profil: info akun form kolom + pengelolaan Token Akses Agen (PAT) terpusat.
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/lib/auth-client';
+import { useTheme } from '@/components/theme-provider';
 import { api } from '@/lib/http';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Copy, Check, Trash2, KeyRound, Loader2, ShieldCheck } from 'lucide-react';
-import { useWizardNav } from '@/components/layout/wizard-nav';
+import {
+  Copy,
+  Check,
+  Trash2,
+  KeyRound,
+  Loader2,
+  ShieldCheck,
+  Sun,
+  Moon,
+  Monitor,
+  Palette,
+} from 'lucide-react';
 
 type Token = {
   id: string;
@@ -21,8 +31,8 @@ type Token = {
 
 export function ProfilePage() {
   const { data } = useSession();
-  const navigate = useNavigate();
   const qc = useQueryClient();
+  const { theme, setTheme } = useTheme();
   const [tokenName, setTokenName] = useState('Token Default');
   const [newToken, setNewToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -46,14 +56,6 @@ export function ProfilePage() {
       localStorage.removeItem('numa_new_default_pat');
     }
   }, []);
-
-  useWizardNav({
-    back: {
-      label: 'Kembali',
-      onClick: () => navigate(-1),
-    },
-    next: null,
-  });
 
   const tokensQ = useQuery({
     queryKey: ['agent-tokens'],
@@ -256,6 +258,79 @@ export function ProfilePage() {
                 )}
               </div>
             ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Pengaturan Tampilan (Appearance) */}
+      <Card className="border-border shadow-xs">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
+            <Palette className="h-5 w-5 text-primary" />
+            Tampilan (Appearance)
+          </CardTitle>
+          <CardDescription>
+            Pilih preferensi tema antarmuka aplikasi Numa.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-xl">
+            <button
+              type="button"
+              onClick={() => setTheme('light')}
+              className={`p-3.5 rounded-md border text-left transition-all cursor-pointer flex flex-col justify-between gap-2.5 ${
+                theme === 'light'
+                  ? 'border-primary bg-primary/10 text-foreground font-medium ring-1 ring-primary/40'
+                  : 'border-border/70 bg-background hover:bg-muted/40 text-muted-foreground'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <Sun className="h-4 w-4 text-primary" />
+                {theme === 'light' && <Check className="h-4 w-4 text-primary" />}
+              </div>
+              <div>
+                <span className="font-semibold text-xs text-foreground block">Mode Terang</span>
+                <span className="text-[11px] opacity-80 leading-relaxed block mt-0.5">Tampilan bersih dengan latar cerah</span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTheme('dark')}
+              className={`p-3.5 rounded-md border text-left transition-all cursor-pointer flex flex-col justify-between gap-2.5 ${
+                theme === 'dark'
+                  ? 'border-primary bg-primary/10 text-foreground font-medium ring-1 ring-primary/40'
+                  : 'border-border/70 bg-background hover:bg-muted/40 text-muted-foreground'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <Moon className="h-4 w-4 text-primary" />
+                {theme === 'dark' && <Check className="h-4 w-4 text-primary" />}
+              </div>
+              <div>
+                <span className="font-semibold text-xs text-foreground block">Mode Gelap</span>
+                <span className="text-[11px] opacity-80 leading-relaxed block mt-0.5">Nyaman untuk kondisi minim cahaya</span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTheme('system')}
+              className={`p-3.5 rounded-md border text-left transition-all cursor-pointer flex flex-col justify-between gap-2.5 ${
+                theme === 'system'
+                  ? 'border-primary bg-primary/10 text-foreground font-medium ring-1 ring-primary/40'
+                  : 'border-border/70 bg-background hover:bg-muted/40 text-muted-foreground'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <Monitor className="h-4 w-4 text-primary" />
+                {theme === 'system' && <Check className="h-4 w-4 text-primary" />}
+              </div>
+              <div>
+                <span className="font-semibold text-xs text-foreground block">Ikuti Sistem</span>
+                <span className="text-[11px] opacity-80 leading-relaxed block mt-0.5">Menyesuaikan pengaturan OS Anda</span>
+              </div>
+            </button>
           </div>
         </CardContent>
       </Card>

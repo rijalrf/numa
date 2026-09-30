@@ -20,6 +20,10 @@ model User {
   name           String?
   emailVerified  Boolean    @default(false)
   image          String?
+  codingExperience      String?
+  referralSource        String?
+  referralDetail        String?
+  onboardingCompletedAt DateTime?
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 

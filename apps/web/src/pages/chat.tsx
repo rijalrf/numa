@@ -122,7 +122,7 @@ export function ChatPage() {
         {/* Headline & Subhead */}
         <div className="text-center space-y-2">
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
-            Dari ide mentah jadi aplikasi siap eksekusi
+            Dari ide jadi aplikasi siap eksekusi
           </h1>
 
           <p className="text-sm text-muted-foreground max-w-lg mx-auto leading-relaxed">
