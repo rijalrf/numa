@@ -6,6 +6,7 @@ import { api } from '@/lib/http';
 import { signOut, useSession } from '@/lib/auth-client';
 import { ensureDefaultToken } from '@/lib/ensure-default-token';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { NumaLogo } from '@/components/ui/numa-logo';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { PricingDialog } from '@/components/billing/pricing-dialog';
@@ -135,11 +136,8 @@ export function Header() {
       <div className="px-6 py-2.5 flex items-center justify-between gap-4">
         {/* Kiri: Logo Numa + Pemisah + Judul Halaman & Label Deskripsi */}
         <div className="flex items-center gap-3.5 min-w-0">
-          <Link to="/chat" className="flex items-center gap-2 shrink-0">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-[#2D7E79] to-[#76B8A7]">
-              <span className="text-xs font-bold text-white">N</span>
-            </div>
-            <span className="font-semibold text-lg tracking-tight text-foreground">Numa</span>
+          <Link to="/chat" className="flex items-center shrink-0">
+            <NumaLogo size="default" />
           </Link>
 
           {pageInfo && (

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { signIn } from '@/lib/auth-client';
 import { ArrowLeft, ShieldCheck, Loader2, AlertCircle } from 'lucide-react';
+import { NumaLogoIcon } from '@/components/ui/numa-logo';
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -63,10 +64,12 @@ export function LoginPage() {
       <div className="relative w-full max-w-md rounded-md border border-white/[.08] bg-neutral-950/90 p-8 shadow-[0_0_50px_rgba(45,126,121,.15)] backdrop-blur-xl z-10">
         {/* Logo dan Header */}
         <div className="text-center mb-8">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-md bg-gradient-to-br from-numa-primary to-numa-accent shadow-[0_0_24px_rgba(118,184,167,.3)]">
-            <span className="text-xl font-bold text-white">N</span>
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-[#193c34] border border-[#2b584a] text-[#dceda7] shadow-[0_0_24px_rgba(220,237,167,.15)]">
+            <NumaLogoIcon className="h-8 w-8 text-[#dceda7]" />
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-white">Masuk ke Numa</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-white flex items-center justify-center gap-1.5">
+            numa<span className="text-[#dceda7]">.</span>
+          </h1>
           <p className="mt-2 text-xs text-numa-text leading-relaxed">
             AI Software Factory untuk mengubah ide menjadi aplikasi siap eksekusi
           </p>

@@ -3,52 +3,52 @@
 @tailwind utilities;
 
 /* Tema Numa:
-   - Terang: putih bersih dengan aksen teal.
-   - Gelap: hitam dengan aksen teal. */
+   - Terang: paper cerah dengan hijau ink (#193c34) dan pine (#034d49).
+   - Gelap: deep pine slate dengan aksen lime (#dceda7) dan sage (#88c495). */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 174 30% 10%;
+    --background: 75 25% 98%;
+    --foreground: 166 41% 17%;
     --card: 0 0% 100%;
-    --card-foreground: 174 30% 10%;
+    --card-foreground: 166 41% 17%;
     --popover: 0 0% 100%;
-    --popover-foreground: 174 30% 10%;
-    --primary: 174 47% 33%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 174 20% 96%;
-    --secondary-foreground: 174 30% 15%;
-    --muted: 174 20% 96%;
-    --muted-foreground: 174 10% 40%;
-    --accent: 174 25% 93%;
-    --accent-foreground: 174 30% 15%;
+    --popover-foreground: 166 41% 17%;
+    --primary: 166 41% 17%;
+    --primary-foreground: 75 67% 95%;
+    --secondary: 114 18% 95%;
+    --secondary-foreground: 166 41% 17%;
+    --muted: 114 15% 93%;
+    --muted-foreground: 160 10% 40%;
+    --accent: 75 40% 92%;
+    --accent-foreground: 166 41% 17%;
     --destructive: 0 72% 50%;
     --destructive-foreground: 0 0% 100%;
-    --border: 174 15% 90%;
-    --input: 174 15% 85%;
-    --ring: 174 47% 33%;
+    --border: 114 15% 86%;
+    --input: 114 15% 85%;
+    --ring: 122 25% 44%;
     --radius: 0.5rem;
   }
 
   .dark {
-    --background: 0 0% 0%;
-    --foreground: 0 0% 92%;
-    --card: 0 0% 5%;
-    --card-foreground: 0 0% 92%;
-    --popover: 0 0% 5%;
-    --popover-foreground: 0 0% 92%;
-    --primary: 168 35% 56%;
-    --primary-foreground: 0 0% 6%;
-    --secondary: 0 0% 12%;
-    --secondary-foreground: 0 0% 92%;
-    --muted: 0 0% 12%;
-    --muted-foreground: 0 0% 60%;
-    --accent: 0 0% 14%;
-    --accent-foreground: 0 0% 92%;
+    --background: 165 25% 5%;
+    --foreground: 75 20% 92%;
+    --card: 165 20% 7%;
+    --card-foreground: 75 20% 92%;
+    --popover: 165 20% 7%;
+    --popover-foreground: 75 20% 92%;
+    --primary: 75 67% 79%;
+    --primary-foreground: 166 41% 12%;
+    --secondary: 165 15% 12%;
+    --secondary-foreground: 75 20% 92%;
+    --muted: 165 15% 12%;
+    --muted-foreground: 160 10% 60%;
+    --accent: 165 18% 14%;
+    --accent-foreground: 75 20% 92%;
     --destructive: 0 60% 45%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14%;
-    --input: 0 0% 18%;
-    --ring: 168 35% 56%;
+    --border: 165 15% 14%;
+    --input: 165 15% 18%;
+    --ring: 75 67% 79%;
   }
 }
 
