@@ -1,0 +1,57 @@
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import type { TaskDetail } from '@/components/kanban/task-detail-dialog';
+
+type Props = {
+  task: TaskDetail;
+  onClick: () => void;
+};
+
+export function TaskCard({ task, onClick }: Props) {
+  const taskIdLabel = task.aiContext?.taskId || (task.order ? `#${task.order}` : undefined);
+  const reqIds = task.aiContext?.requirement_ids;
+
+  return (
+    <Card
+      onClick={onClick}
+      className="cursor-pointer hover:shadow-md hover:border-primary/50 transition-all border-border bg-card"
+    >
+      <CardHeader className="pb-1.5 pt-2.5 px-3">
+        {taskIdLabel && (
+          <div className="mb-1">
+            <span className="font-mono text-[10px] text-muted-foreground font-semibold">
+              {taskIdLabel}
+            </span>
+          </div>
+        )}
+        <CardTitle className="text-xs font-semibold leading-snug">{task.title}</CardTitle>
+      </CardHeader>
+      <CardContent className="px-3 pb-2.5 pt-0">
+        {task.description && (
+          <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
+            {task.description}
+          </p>
+        )}
+        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+          <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+            {task.layer}
+          </Badge>
+          {reqIds && reqIds.length > 0 && (
+            <div className="flex flex-wrap gap-1 items-center">
+              {reqIds.slice(0, 2).map((r) => (
+                <span key={r} className="font-mono text-[9px] font-bold text-primary bg-primary/10 px-1 py-0.5 rounded border border-primary/20">
+                  {r}
+                </span>
+              ))}
+              {reqIds.length > 2 && (
+                <span className="font-mono text-[9px] text-muted-foreground">
+                  +{reqIds.length - 2}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

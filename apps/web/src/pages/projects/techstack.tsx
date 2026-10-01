@@ -2,20 +2,21 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import {
   Sparkles,
-  Check,
   Package,
   Layers,
-  Database,
   Lock,
   AlertCircle,
 } from 'lucide-react';
 import { api } from '@/lib/http';
-import { cn } from '@/lib/utils';
+import { pollAiJob } from '@/lib/ai-job';
 import { isStageLocked } from '@/lib/constants';
 import { useWizardNav } from '@/components/layout/wizard-nav';
+import { ModeCard } from '@/components/wizard/mode-card';
+import { GoldenPackList } from '@/components/wizard/golden-pack-list';
+import { SelectedTechsList } from '@/components/wizard/selected-techs-list';
+import { NumaLoader } from '@/components/ui/numa-loader';
 
 export const GOLDEN_PACKS = [
   {
@@ -117,25 +118,40 @@ export function TechStackPage() {
     setErrorMessage(null);
 
     try {
-      const recRes = await api<{ techStack?: string[]; reasoning?: string }>(
-        `/api/projects/${projectId}/techstack/recommend`,
-        { method: 'POST' }
-      );
+      await api(`/api/projects/${projectId}/techstack/recommend`, { method: 'POST' });
 
-      const stackList = recRes.techStack && recRes.techStack.length > 0 ? recRes.techStack : [];
+      // Job berjalan di background — poll sampai hasil rekomendasi tersedia
+      pollAiJob(projectId, 'techstack_recommend', {
+        onDone: async (result) => {
+          const stackList = result?.techStack && result.techStack.length > 0 ? result.techStack : [];
 
-      if (stackList.length === 0) {
-        setErrorMessage('Gagal menghasilkan rekomendasi teknologi dari AI. Silakan pilih paket secara manual.');
-        setGeneratingAi(false);
-        return;
-      }
+          if (stackList.length === 0) {
+            setErrorMessage('Gagal menghasilkan rekomendasi teknologi dari AI. Silakan pilih paket secara manual.');
+            setGeneratingAi(false);
+            return;
+          }
 
-      await api(`/api/projects/${projectId}/techstack`, {
-        method: 'PUT',
-        body: JSON.stringify({ techStack: stackList }),
+          try {
+            await api(`/api/projects/${projectId}/techstack`, {
+              method: 'PUT',
+              body: JSON.stringify({ techStack: stackList }),
+            });
+            navigate(`/projects/${projectId}/prd`);
+          } catch (err) {
+            console.error('Gagal menyimpan tech stack:', err);
+            setErrorMessage((err as Error).message || 'Gagal menyimpan pilihan teknologi.');
+            setGeneratingAi(false);
+          }
+        },
+        onFailed: (error) => {
+          setErrorMessage(error || 'AI gagal merekomendasikan teknologi.');
+          setGeneratingAi(false);
+        },
+        onTimeout: () => {
+          setErrorMessage('Proses rekomendasi memakan waktu lama. Silakan coba lagi.');
+          setGeneratingAi(false);
+        },
       });
-
-      navigate(`/projects/${projectId}/prd`);
     } catch (err) {
       console.error('Error saat generate & simpan teknologi AI:', err);
       setErrorMessage((err as Error).message || 'Terjadi kesalahan saat memproses rekomendasi AI.');
@@ -187,7 +203,9 @@ export function TechStackPage() {
   };
 
   useWizardNav(
-    isLocked
+    generatingAi
+      ? null
+      : isLocked
       ? {
           back: {
             label: 'Kembali',
@@ -241,25 +259,23 @@ export function TechStackPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-4 space-y-4">
-            {selected.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic py-2">
-                Tidak ada data teknologi tersimpan.
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {selected.map((item) => (
-                  <span
-                    key={item}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary/10 text-primary border border-primary/30 text-xs font-medium"
-                  >
-                    <Check className="h-3 w-3" />
-                    <span>{item}</span>
-                  </span>
-                ))}
-              </div>
-            )}
+            <SelectedTechsList items={selected} />
           </CardContent>
         </Card>
+      </div>
+    );
+  }
+
+  // ============================================================
+  // TAMPILAN LOADING AI REKOMENDASI
+  // ============================================================
+  if (generatingAi) {
+    return (
+      <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center">
+        <NumaLoader
+          label="Merekomendasikan tech stack..."
+          sublabel="AI sedang menganalisis kebutuhan proyek dan mencocokkan teknologi optimal"
+        />
       </div>
     );
   }
@@ -287,123 +303,23 @@ export function TechStackPage() {
 
       {/* Grid 2 Mode Utama */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
-        {/* CARD 1: Rekomendasi AI */}
-        <div
+        <ModeCard
+          icon={<Sparkles className="h-5 w-5" />}
+          title="Rekomendasi AI"
+          description="AI menganalisis kebutuhan proyek dan mencocokkan ke Golden Stack + database paling optimal secara otomatis."
+          badge={{ text: 'Rekomendasi', className: 'border-primary/40 text-primary' }}
+          isSelected={selectedMode === 'ai'}
           onClick={() => setSelectedMode('ai')}
-          className={cn(
-            'group relative rounded-md border-2 p-5 flex flex-col justify-between cursor-pointer transition-all duration-200 select-none shadow-xs',
-            selectedMode === 'ai'
-              ? 'border-primary bg-primary/5 dark:bg-primary/10 ring-2 ring-primary/30 shadow-md'
-              : 'border-border bg-card hover:border-primary/50 hover:bg-accent/40'
-          )}
-        >
-          <div className="space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div
-                className={cn(
-                  'h-10 w-10 rounded-md flex items-center justify-center transition-colors',
-                  selectedMode === 'ai'
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'bg-primary/10 text-primary group-hover:bg-primary/20'
-                )}
-              >
-                <Sparkles className="h-5 w-5" />
-              </div>
-              <div
-                className={cn(
-                  'h-5 w-5 rounded-md flex items-center justify-center border transition-all',
-                  selectedMode === 'ai'
-                    ? 'border-primary bg-primary text-primary-foreground'
-                    : 'border-muted-foreground/40 bg-background'
-                )}
-              >
-                {selectedMode === 'ai' && <Check className="h-3 w-3 stroke-[3]" />}
-              </div>
-            </div>
+        />
 
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-foreground">Rekomendasi AI</h3>
-                <Badge variant="outline" className="text-[9px] border-primary/40 text-primary font-medium px-1.5 py-0">
-                  Rekomendasi
-                </Badge>
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                AI menganalisis kebutuhan proyek dan mencocokkan ke Golden Stack + database paling optimal secara otomatis.
-              </p>
-            </div>
-          </div>
-
-          <div className="pt-4">
-            <span
-              className={cn(
-                'text-xs font-medium block text-center py-1.5 rounded-md transition-colors',
-                selectedMode === 'ai' ? 'text-primary font-semibold' : 'text-muted-foreground'
-              )}
-            >
-              {selectedMode === 'ai' ? 'Pilihan Terpilih' : 'Klik untuk memilih'}
-            </span>
-          </div>
-        </div>
-
-        {/* CARD 2: Pilih Golden Stack */}
-        <div
+        <ModeCard
+          icon={<Package className="h-5 w-5" />}
+          title="Pilih Golden Stack"
+          description="Pilih kombinasi framework teruji (React+Express, Vue+NestJS, Next.js, atau Laravel) beserta database pilihan."
+          badge={{ text: '4 Paket', className: 'border-border text-muted-foreground' }}
+          isSelected={selectedMode === 'pack'}
           onClick={() => setSelectedMode('pack')}
-          className={cn(
-            'group relative rounded-md border-2 p-5 flex flex-col justify-between cursor-pointer transition-all duration-200 select-none shadow-xs',
-            selectedMode === 'pack'
-              ? 'border-primary bg-primary/5 dark:bg-primary/10 ring-2 ring-primary/30 shadow-md'
-              : 'border-border bg-card hover:border-primary/50 hover:bg-accent/40'
-          )}
-        >
-          <div className="space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div
-                className={cn(
-                  'h-10 w-10 rounded-md flex items-center justify-center transition-colors',
-                  selectedMode === 'pack'
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'bg-primary/10 text-primary group-hover:bg-primary/20'
-                )}
-              >
-                <Package className="h-5 w-5" />
-              </div>
-              <div
-                className={cn(
-                  'h-5 w-5 rounded-md flex items-center justify-center border transition-all',
-                  selectedMode === 'pack'
-                    ? 'border-primary bg-primary text-primary-foreground'
-                    : 'border-muted-foreground/40 bg-background'
-                )}
-              >
-                {selectedMode === 'pack' && <Check className="h-3 w-3 stroke-[3]" />}
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-foreground">Pilih Golden Stack</h3>
-                <Badge variant="outline" className="text-[9px] border-border text-muted-foreground font-medium px-1.5 py-0">
-                  4 Paket
-                </Badge>
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Pilih kombinasi framework teruji (React+Express, Vue+NestJS, Next.js, atau Laravel) beserta database pilihan.
-              </p>
-            </div>
-          </div>
-
-          <div className="pt-4">
-            <span
-              className={cn(
-                'text-xs font-medium block text-center py-1.5 rounded-md transition-colors',
-                selectedMode === 'pack' ? 'text-primary font-semibold' : 'text-muted-foreground'
-              )}
-            >
-              {selectedMode === 'pack' ? 'Pilihan Terpilih' : 'Klik untuk memilih'}
-            </span>
-          </div>
-        </div>
+        />
       </div>
 
       {/* Daftar 4 Golden Pack jika mode 'pack' dipilih */}
@@ -414,97 +330,15 @@ export function TechStackPage() {
             <span>Pilih Paket dan Database:</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {GOLDEN_PACKS.map((pack) => {
-              const isSelected = selectedPackId === pack.id;
-              const currentDb = selectedDbByPack[pack.id] || pack.dbOptions[0].id;
-
-              return (
-                <div
-                  key={pack.id}
-                  onClick={() => setSelectedPackId(pack.id)}
-                  className={cn(
-                    'p-4 rounded-md border cursor-pointer transition-all space-y-3 flex flex-col justify-between',
-                    isSelected
-                      ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                      : 'border-border bg-card hover:border-primary/40'
-                  )}
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-foreground">
-                        {pack.title}
-                      </span>
-                      <div
-                        className={cn(
-                          'h-4 w-4 rounded-md flex items-center justify-center border text-[10px]',
-                          isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'
-                        )}
-                      >
-                        {isSelected && <Check className="h-2.5 w-2.5 stroke-[3]" />}
-                      </div>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground leading-snug">
-                      {pack.description}
-                    </p>
-                    <div className="flex flex-wrap gap-1 pt-1">
-                      {pack.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="text-[10px] px-2 py-0.5 rounded-md bg-muted text-foreground/80 font-mono"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Pilihan Database per Pack */}
-                  <div
-                    className="pt-3 border-t border-border/70 space-y-1.5"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="flex items-center gap-1.5 text-[11px] font-medium text-foreground">
-                      <Database className="h-3 w-3 text-primary" />
-                      <span>Database:</span>
-                    </div>
-                    <div className="grid grid-cols-1 gap-1">
-                      {pack.dbOptions.map((db) => {
-                        const isDbSelected = currentDb === db.id;
-                        return (
-                          <label
-                            key={db.id}
-                            className={cn(
-                              'flex items-center gap-2 p-1.5 rounded-md text-[11px] cursor-pointer transition-colors border',
-                              isDbSelected
-                                ? 'bg-primary/10 border-primary/40 text-primary font-medium'
-                                : 'hover:bg-muted/60 border-transparent text-muted-foreground'
-                            )}
-                            onClick={() => {
-                              setSelectedPackId(pack.id);
-                              setSelectedDbByPack((prev) => ({ ...prev, [pack.id]: db.id }));
-                            }}
-                          >
-                            <input
-                              type="radio"
-                              name={`db-${pack.id}`}
-                              checked={isDbSelected}
-                              onChange={() => {
-                                setSelectedPackId(pack.id);
-                                setSelectedDbByPack((prev) => ({ ...prev, [pack.id]: db.id }));
-                              }}
-                              className="h-3 w-3 text-primary focus:ring-primary border-border"
-                            />
-                            <span>{db.label}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <GoldenPackList
+            selectedPackId={selectedPackId}
+            selectedDbByPack={selectedDbByPack}
+            onSelectPack={setSelectedPackId}
+            onSelectDb={(packId, dbId) => {
+              setSelectedPackId(packId);
+              setSelectedDbByPack((prev) => ({ ...prev, [packId]: dbId }));
+            }}
+          />
         </div>
       )}
     </div>

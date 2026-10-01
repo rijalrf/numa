@@ -3,10 +3,6 @@ import { createAuthClient } from 'better-auth/react';
 
 function resolveApiUrl() {
   if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1') {
-      return 'http://localhost:6655';
-    }
     return window.location.origin;
   }
   return import.meta.env.VITE_API_URL ?? 'http://localhost:6655';

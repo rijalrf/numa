@@ -150,3 +150,27 @@ export async function probeHealth(cfg: Config): Promise<boolean> {
     return false;
   }
 }
+
+// Pastikan project aktif sudah dipilih. Bila belum, tampilkan daftar project
+// yang bisa diakses token ini lalu arahkan user ke `numa switch <project-id>`.
+export async function ensureActiveProject(cfg: Config): Promise<boolean> {
+  if (cfg.projectId) return true;
+  console.error('Project aktif belum dipilih.');
+  try {
+    const result = await api.listScopes(cfg);
+    const projects: Array<{ id: string; name: string }> =
+      (result as any)?.scopes ?? (Array.isArray(result) ? result : []);
+    if (projects.length > 0) {
+      console.error('\nDaftar project yang tersedia untuk token ini:');
+      for (const p of projects) {
+        console.error(`  - ${p.name} (${p.id})`);
+      }
+      console.error('\nPilih project aktif dengan: numa switch <project-id>');
+    } else {
+      console.error('Belum ada project yang dapat diakses oleh token ini.');
+    }
+  } catch (err: any) {
+    console.error('Gagal mengambil daftar project:', err?.message || err);
+  }
+  return false;
+}

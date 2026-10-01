@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Numa Loading Preview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 60px;
+    padding: 40px 20px;
+    background: #111;
+    color: #ccc;
+  }
+
+  h1 {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #666;
+  }
+
+  .preview-grid {
+    display: flex;
+    gap: 48px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .preview-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    padding: 48px 56px;
+    border-radius: 16px;
+    border: 1px solid #222;
+  }
+
+  .preview-card.dark-card {
+    background: #0a0f0d;
+    border-color: #1a2a22;
+  }
+
+  .preview-card.light-card {
+    background: #ffffff;
+    border-color: #e5e7eb;
+  }
+
+  .preview-card.auto-card {
+    background: #0a0f0d;
+    border-color: #1a2a22;
+  }
+
+  @media (prefers-color-scheme: light) {
+    .preview-card.auto-card {
+      background: #ffffff;
+      border-color: #e5e7eb;
+    }
+  }
+
+  .card-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .dark-card .card-label { color: #4a5a42; }
+  .light-card .card-label { color: #9ca3af; }
+  .auto-card .card-label { color: #4a5a42; }
+  @media (prefers-color-scheme: light) {
+    .auto-card .card-label { color: #9ca3af; }
+  }
+
+  /* --- Numa Loader Core --- */
+  .numa-loader {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .numa-loader svg {
+    width: 64px;
+    height: 64px;
+  }
+
+  .numa-loader .logo-path {
+    stroke-width: 3;
+    stroke-linejoin: round;
+    fill: none;
+    stroke-dasharray: 82;
+    stroke-dashoffset: 82;
+    animation: numa-draw 1.8s ease-in-out infinite;
+  }
+
+  .numa-loader .dot {
+    opacity: 0;
+    animation: numa-blink 1.8s ease-in-out infinite;
+  }
+
+  .numa-loader .label {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  @keyframes numa-draw {
+    0%   { stroke-dashoffset: 82; }
+    50%  { stroke-dashoffset: 0; }
+    100% { stroke-dashoffset: -82; }
+  }
+
+  @keyframes numa-blink {
+    0%, 40%  { opacity: 0; }
+    50%, 70% { opacity: 1; }
+    80%, 100%{ opacity: 0; }
+  }
+
+  /* --- Dark Mode --- */
+  .numa-loader.dark .logo-bg { fill: #193c34; }
+  .numa-loader.dark .logo-path { stroke: #dceda7; }
+  .numa-loader.dark .dot { fill: #dceda7; }
+  .numa-loader.dark .label { color: #dceda7; }
+  .numa-loader.dark .label .period { color: #758a52; }
+
+  /* --- Light Mode --- */
+  .numa-loader.light .logo-bg { fill: #193c34; }
+  .numa-loader.light .logo-path { stroke: #dceda7; }
+  .numa-loader.light .dot { fill: #758a52; }
+  .numa-loader.light .label { color: #193c34; }
+  .numa-loader.light .label .period { color: #758a52; }
+
+  /* --- Auto (System Theme) --- */
+  .numa-loader.auto .logo-bg { fill: #193c34; }
+  .numa-loader.auto .logo-path { stroke: #dceda7; }
+  .numa-loader.auto .dot { fill: #dceda7; }
+  .numa-loader.auto .label { color: #dceda7; }
+  .numa-loader.auto .label .period { color: #758a52; }
+
+  @media (prefers-color-scheme: light) {
+    .numa-loader.auto .logo-bg { fill: #193c34; }
+    .numa-loader.auto .logo-path { stroke: #dceda7; }
+    .numa-loader.auto .dot { fill: #758a52; }
+    .numa-loader.auto .label { color: #193c34; }
+    .numa-loader.auto .label .period { color: #758a52; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Preview Loading Animasi Numa</h1>
+
+<div class="preview-grid">
+
+  <!-- Dark Mode -->
+  <div class="preview-card dark-card">
+    <span class="card-label">Dark Mode</span>
+    <div class="numa-loader dark">
+      <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect class="logo-bg" width="32" height="32" rx="7"/>
+        <path class="logo-path" d="M5 25V8l9 7V5l13 10v12L14 17v10L5 20"/>
+        <circle class="dot" cx="27" cy="25" r="2"/>
+      </svg>
+      <span class="label">numa<span class="period">.</span></span>
+    </div>
+  </div>
+
+  <!-- Light Mode -->
+  <div class="preview-card light-card">
+    <span class="card-label">Light Mode</span>
+    <div class="numa-loader light">
+      <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect class="logo-bg" width="32" height="32" rx="7"/>
+        <path class="logo-path" d="M5 25V8l9 7V5l13 10v12L14 17v10L5 20"/>
+        <circle class="dot" cx="27" cy="25" r="2"/>
+      </svg>
+      <span class="label">numa<span class="period">.</span></span>
+    </div>
+  </div>
+
+  <!-- Auto / System Theme -->
+  <div class="preview-card auto-card">
+    <span class="card-label">Auto (System)</span>
+    <div class="numa-loader auto">
+      <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect class="logo-bg" width="32" height="32" rx="7"/>
+        <path class="logo-path" d="M5 25V8l9 7V5l13 10v12L14 17v10L5 20"/>
+        <circle class="dot" cx="27" cy="25" r="2"/>
+      </svg>
+      <span class="label">numa<span class="period">.</span></span>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

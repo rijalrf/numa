@@ -2,16 +2,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@/lib/http';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { pollAiJob } from '@/lib/ai-job';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { PricingDialog } from '@/components/billing/pricing-dialog';
 import { MarkdownView } from '@/components/ui/markdown-view';
-import {
-  Loader2,
-  CheckCircle2,
-} from 'lucide-react';
+import { NumaLoader } from '@/components/ui/numa-loader';
 import { useWizardNav } from '@/components/layout/wizard-nav';
+import { useSurveyAnswers } from '@/hooks/use-survey-answers';
+import { QuestionCard } from '@/components/wizard/question-card';
+import { SurveyProgress } from '@/components/wizard/survey-progress';
 
 interface SurveyQuestion {
   id: string;
@@ -38,15 +37,10 @@ interface SurveyData {
   summary?: string;
   wizardStep: string;
   plan: 'free' | 'starter' | 'pro';
+  generationStatus?: 'idle' | 'generating' | 'done' | 'failed';
+  generationError?: string | null;
   questions: SurveyQuestion[];
 }
-
-const ROUND_LABELS: Record<number, string> = {
-  1: 'Masalah Utama & Pengguna',
-  2: 'Fitur Inti & Alur Kerja',
-  3: 'Aturan Bisnis & Akses',
-  4: 'Batasan & Ukuran Sukses',
-};
 
 export function SurveyPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -56,12 +50,23 @@ export function SurveyPage() {
   const [submitting, setSubmitting] = useState(false);
   const [surveyData, setSurveyData] = useState<SurveyData | null>(null);
   const [currentRound, setCurrentRound] = useState(1);
-  const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
-  const [otherText, setOtherText] = useState<Record<string, string>>({});
-  const [showOtherInput, setShowOtherInput] = useState<Record<string, boolean>>({});
-  const [skipped, setSkipped] = useState<Record<string, boolean>>({});
   const [pricingOpen, setPricingOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+
+  const {
+    answers,
+    otherText,
+    showOtherInput,
+    skipped,
+    initFromQuestions,
+    handleRadioSelect,
+    handleCheckboxToggle,
+    handleSelectSuggestion,
+    handleOtherChange,
+    handleOtherClick,
+    handleSkipToggle,
+  } = useSurveyAnswers();
 
   const loadSurvey = useCallback(async () => {
     if (!projectId) return;
@@ -69,31 +74,41 @@ export function SurveyPage() {
     setError(null);
     try {
       const data = await api<SurveyData>(`/api/projects/${projectId}/survey`);
-      setSurveyData(data);
-      setCurrentRound(data.round);
 
-      // Inisialisasi state jawaban hanya dari data tersimpan (tanpa pre-select saran)
-      const initialAnswers: Record<string, string | string[]> = {};
-      const initialOthers: Record<string, string> = {};
-      const initialShowOthers: Record<string, boolean> = {};
-
-      for (const q of data.questions) {
-        if (q.value !== null && q.value !== undefined) {
-          initialAnswers[q.id] = q.value;
-        } else if (q.answer) {
-          if (q.kind === 'checkbox') {
-            const splitted = q.answer.split(',').map((s) => s.trim());
-            initialAnswers[q.id] = splitted;
-          } else {
-            initialAnswers[q.id] = q.answer;
-          }
+      // Belum ada pertanyaan: kickstart generate round 1 sebagai job async
+      if (data.questions.length === 0) {
+        if (data.generationStatus === 'failed') {
+          setSurveyData(data);
+          setError(data.generationError || 'AI gagal menyusun pertanyaan survey.');
+          setLoading(false);
+          return;
         }
+        if (data.generationStatus === 'done') {
+          setSurveyData(data);
+          setError('Penyusunan pertanyaan survey tidak menghasilkan hasil. Silakan muat ulang halaman.');
+          setLoading(false);
+          return;
+        }
+        if (data.generationStatus !== 'generating') {
+          setGenerating(true);
+          setLoading(false);
+          try {
+            await api(`/api/projects/${projectId}/survey/generate`, { method: 'POST' });
+          } catch {
+            // fallback: polling akan tetap mencoba membaca status
+          }
+          pollSurveyJob('survey_round');
+          return;
+        }
+        setGenerating(true);
+        setLoading(false);
+        pollSurveyJob('survey_round');
+        return;
       }
 
-      setAnswers(initialAnswers);
-      setOtherText(initialOthers);
-      setShowOtherInput(initialShowOthers);
-      setSkipped({});
+      setSurveyData(data);
+      setCurrentRound(data.round);
+      initFromQuestions(data.questions);
     } catch (err) {
       console.error('Gagal memuat survey:', err);
       setError('Gagal memuat pertanyaan survey.');
@@ -102,73 +117,35 @@ export function SurveyPage() {
     }
   }, [projectId]);
 
+  // Poll job AI async (survey_round / survey_summary), lalu muat ulang data.
+  const pollSurveyJob = useCallback(
+    (type: 'survey_round' | 'survey_summary') => {
+      if (!projectId) return;
+      setGenerating(true);
+      pollAiJob(projectId, type, {
+        onDone: async () => {
+          setGenerating(false);
+          setSubmitting(false);
+          await loadSurvey();
+        },
+        onFailed: (err) => {
+          setGenerating(false);
+          setSubmitting(false);
+          setError(err || 'AI gagal menyusun pertanyaan survey.');
+        },
+        onTimeout: () => {
+          setGenerating(false);
+          setSubmitting(false);
+          setError('Proses penyusunan survey memakan waktu lama. Silakan muat ulang halaman.');
+        },
+      });
+    },
+    [projectId, loadSurvey]
+  );
+
   useEffect(() => {
     loadSurvey();
   }, [loadSurvey]);
-
-  const handleRadioSelect = (questionId: string, val: string) => {
-    setSkipped((prev) => (prev[questionId] ? { ...prev, [questionId]: false } : prev));
-    setAnswers((prev) => ({ ...prev, [questionId]: val }));
-    setShowOtherInput((prev) => ({ ...prev, [questionId]: false }));
-  };
-
-  const handleCheckboxToggle = (questionId: string, val: string) => {
-    setSkipped((prev) => (prev[questionId] ? { ...prev, [questionId]: false } : prev));
-    setAnswers((prev) => {
-      const current = (prev[questionId] as string[]) || [];
-      const next = current.includes(val)
-        ? current.filter((item) => item !== val)
-        : [...current, val];
-      return { ...prev, [questionId]: next };
-    });
-  };
-
-  const handleSelectSuggestion = (q: SurveyQuestion) => {
-    if (!q.suggestion) return;
-    setSkipped((prev) => (prev[q.id] ? { ...prev, [q.id]: false } : prev));
-    if (q.kind === 'checkbox') {
-      setAnswers((prev) => ({
-        ...prev,
-        [q.id]: [q.suggestion!],
-      }));
-    } else {
-      setAnswers((prev) => ({
-        ...prev,
-        [q.id]: q.suggestion!,
-      }));
-    }
-    setShowOtherInput((prev) => ({ ...prev, [q.id]: false }));
-  };
-
-  const handleOtherChange = (questionId: string, text: string) => {
-    setOtherText((prev) => ({ ...prev, [questionId]: text }));
-    setAnswers((prev) => ({ ...prev, [questionId]: text }));
-  };
-
-  const handleOtherClick = (questionId: string) => {
-    setSkipped((prev) => (prev[questionId] ? { ...prev, [questionId]: false } : prev));
-    setShowOtherInput((prev) => ({ ...prev, [questionId]: true }));
-    const currentText = otherText[questionId] || '';
-    setAnswers((prev) => ({ ...prev, [questionId]: currentText }));
-  };
-
-  const handleSkipToggle = (questionId: string) => {
-    const willSkip = !skipped[questionId];
-    setSkipped((prev) => ({ ...prev, [questionId]: willSkip }));
-    if (willSkip) {
-      setAnswers((prev) => {
-        const next = { ...prev };
-        delete next[questionId];
-        return next;
-      });
-      setOtherText((prev) => {
-        const next = { ...prev };
-        delete next[questionId];
-        return next;
-      });
-      setShowOtherInput((prev) => ({ ...prev, [questionId]: false }));
-    }
-  };
 
   const handleSubmitRound = async () => {
     if (!surveyData || submitting) return;
@@ -204,6 +181,7 @@ export function SurveyPage() {
         totalRounds: number;
         name?: string;
         summary?: string;
+        status?: string;
       }>(`/api/projects/${projectId}/survey/submit`, {
         method: 'POST',
         body: JSON.stringify({
@@ -212,17 +190,21 @@ export function SurveyPage() {
         }),
       });
 
+      // AI generate round berikutnya / summary berjalan sebagai job async
+      if (res.status === 'generating') {
+        pollSurveyJob(res.done ? 'survey_summary' : 'survey_round');
+        return;
+      }
+
       if (res.done) {
-        // Survey selesai, perbarui data summary
         await loadSurvey();
       } else if (res.nextRound) {
-        // Pindah ke putaran berikutnya
         await loadSurvey();
       }
+      setSubmitting(false);
     } catch (err: any) {
       console.error('Gagal kirim jawaban survey:', err);
       setError(err?.message || 'Gagal mengirimkan jawaban survey.');
-    } finally {
       setSubmitting(false);
     }
   };
@@ -276,20 +258,23 @@ export function SurveyPage() {
             label: submitting ? 'Menyimpan...' : 'Lanjut',
             onClick: surveyData.isComplete ? handleProceedToTechStack : handleSubmitRound,
             disabled: submitting,
+            loading: submitting,
           },
         }
   );
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-xs text-muted-foreground">Menyiapkan pertanyaan wawancara kebutuhan...</p>
-      </div>
-    );
-  }
-
   if (!surveyData) {
+    if (loading || generating) {
+      return (
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <NumaLoader
+            label="Menyiapkan pertanyaan wawancara kebutuhan..."
+            sublabel="AI sedang menyiapkan pertanyaan awal untuk proyek Anda"
+          />
+        </div>
+      );
+    }
+
     return (
       <div className="p-8 text-center text-sm text-destructive">
         Proyek atau data survey tidak ditemukan.
@@ -297,7 +282,7 @@ export function SurveyPage() {
     );
   }
 
-  // Tampilan ketika seluruh round survey telah selesai — polos tanpa wrapper
+  // Tampilan ketika seluruh round survey telah selesai
   if (surveyData.isComplete && surveyData.summary) {
     return (
       <div className="max-w-3xl mx-auto space-y-4 pb-12">
@@ -335,156 +320,25 @@ export function SurveyPage() {
         </div>
       )}
 
-      {/* Progress Bar & Indikator Tahap */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">
-            {ROUND_LABELS[currentRound] ? `Tahap ${currentRound}: ${ROUND_LABELS[currentRound]}` : `Tahap ${currentRound}`}
-          </span>
-          <span className="text-[11px]">
-            {currentRound} dari {surveyData.totalRounds}
-          </span>
-        </div>
+      <SurveyProgress currentRound={currentRound} totalRounds={surveyData.totalRounds} />
 
-        {/* Progress Bar */}
-        <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
-          <div
-            className="bg-primary h-full transition-all duration-300 rounded-full"
-            style={{
-              width: `${Math.round((currentRound / Math.max(surveyData.totalRounds, 1)) * 100)}%`,
-            }}
-          />
-        </div>
-      </div>
-
-      {/* Kartu Pertanyaan */}
       <div className="space-y-4">
-        {currentQuestions.map((q) => {
-          const selectedVal = answers[q.id];
-          const isCheckbox = q.kind === 'checkbox';
-          const selectedArray = Array.isArray(selectedVal) ? selectedVal : [];
-          const isOtherActive = showOtherInput[q.id];
-          const isSkipped = !!skipped[q.id];
-
-          return (
-            <Card key={q.id} className={`border-border/80 shadow-xs transition-opacity ${isSkipped ? 'opacity-55' : ''}`}>
-              <CardHeader className="pb-3 pt-4 px-5">
-                <div className="flex items-start justify-between gap-3">
-                  <CardTitle className="text-sm font-semibold leading-snug text-foreground">
-                    {q.label}
-                  </CardTitle>
-
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {q.suggestion && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleSelectSuggestion(q)}
-                        disabled={isSkipped}
-                        className="text-xs h-7 px-2.5 text-primary border-primary/30 hover:bg-primary/10"
-                      >
-                        <span>Saran AI</span>
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </CardHeader>
-
-              <CardContent className="px-5 pb-5 pt-0 space-y-2.5">
-                {/* Opsi Terstruktur */}
-                {q.options.map((opt) => {
-                  const isSelected = isCheckbox
-                    ? selectedArray.includes(opt)
-                    : selectedVal === opt;
-
-                  return (
-                    <div
-                      key={opt}
-                      onClick={() =>
-                        isCheckbox
-                          ? handleCheckboxToggle(q.id, opt)
-                          : handleRadioSelect(q.id, opt)
-                      }
-                      className={`p-3 rounded-md border text-xs cursor-pointer transition-all flex items-start justify-between gap-3 ${
-                        isSelected
-                          ? 'border-primary bg-primary/10 text-foreground font-medium shadow-2xs'
-                          : 'border-border/70 hover:bg-muted/40 text-foreground/80'
-                      }`}
-                    >
-                      <div className="flex items-start gap-2.5">
-                        <div className="mt-0.5 shrink-0">
-                          {isCheckbox ? (
-                            <div
-                              className={`h-4 w-4 rounded-md border flex items-center justify-center transition-colors ${
-                                isSelected
-                                  ? 'bg-primary border-primary text-primary-foreground'
-                                  : 'border-muted-foreground/40'
-                              }`}
-                            >
-                              {isSelected && <CheckCircle2 className="h-3 w-3" />}
-                            </div>
-                          ) : (
-                            <div
-                              className={`h-4 w-4 rounded-full border flex items-center justify-center transition-colors ${
-                                isSelected
-                                  ? 'border-primary'
-                                  : 'border-muted-foreground/40'
-                              }`}
-                            >
-                              {isSelected && <div className="h-2 w-2 rounded-full bg-primary" />}
-                            </div>
-                          )}
-                        </div>
-                        <span className="leading-relaxed">{opt}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {/* Opsi Lainnya */}
-                <div
-                  onClick={() => handleOtherClick(q.id)}
-                  className={`p-3 rounded-md border text-xs cursor-pointer transition-all ${
-                    isOtherActive
-                      ? 'border-primary bg-primary/5 text-foreground'
-                      : 'border-dashed border-border hover:bg-muted/30 text-muted-foreground'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="font-medium">Opsi Lainnya (Ketik Sendiri):</span>
-                  </div>
-                  {isOtherActive ? (
-                    <Input
-                      autoFocus
-                      placeholder="Tuliskan kebutuhan atau spesifikasi Anda di sini..."
-                      value={otherText[q.id] || ''}
-                      onChange={(e) => handleOtherChange(q.id, e.target.value)}
-                      className="text-xs bg-background h-8"
-                    />
-                  ) : (
-                    <p className="text-[11px] text-muted-foreground italic">
-                      Klik untuk menuliskan jawaban bebas jika opsi di atas tidak sesuai.
-                    </p>
-                  )}
-                </div>
-
-                {/* Tombol Lewati di bawah */}
-                <div className="flex justify-end pt-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleSkipToggle(q.id)}
-                    className="text-xs h-7 px-2.5 text-muted-foreground hover:text-foreground"
-                  >
-                    {isSkipped ? 'Batal Lewati' : 'Lewati'}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+        {currentQuestions.map((q) => (
+          <QuestionCard
+            key={q.id}
+            question={q}
+            selectedValue={answers[q.id]}
+            isOtherActive={!!showOtherInput[q.id]}
+            isSkipped={!!skipped[q.id]}
+            otherTextValue={otherText[q.id] || ''}
+            onRadioSelect={handleRadioSelect}
+            onCheckboxToggle={handleCheckboxToggle}
+            onSelectSuggestion={handleSelectSuggestion}
+            onOtherClick={handleOtherClick}
+            onOtherChange={handleOtherChange}
+            onSkipToggle={handleSkipToggle}
+          />
+        ))}
       </div>
     </div>
   );

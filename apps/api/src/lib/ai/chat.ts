@@ -9,8 +9,7 @@ import {
   GENERATE_TREE_PROMPT,
 } from './prompts';
 import { prisma } from '../prisma';
-import { checkProjectLimit, getUserPlan, PLANS } from '../billing';
-import { generateSurveyRound } from '../survey';
+import { checkProjectLimit } from '../billing';
 
 // ===============================================
 // FINALIZE PROJECT DARI CHAT SESSION
@@ -42,29 +41,12 @@ export async function finalizeChatSession(sessionId: string, userId: string, ini
   }
 
   const tempName = rawIdea.length > 50 ? rawIdea.slice(0, 47) + '...' : rawIdea;
-  let appName = tempName;
 
-  // Generate nama aplikasi ringkas secara cepat
-  try {
-    const resName = await generateJson({
-      system: 'Anda adalah penamaan produk profesional. Hasilkan nama aplikasi yang ringkas, modern, dan relevan (maksimal 2-4 kata) berdasarkan ide pengguna. Bahasa Indonesia atau istilah umum industri software, TANPA EMOJI.',
-      user: `Ide aplikasi pengguna:\n${rawIdea}`,
-      schema: z.object({ name: z.string() }),
-      tier: 'cheap',
-      agentName: 'generateAppName',
-    });
-    if (resName.name && resName.name.trim().length > 0) {
-      appName = resName.name.trim();
-    }
-  } catch (err) {
-    console.warn('[chat] Gagal generate nama app cepat, gunakan tempName:', err);
-  }
-
-  // 3. Buat project baru dengan wizardStep 'survey'
+  // 3. Buat project baru dengan wizardStep 'survey' (sync — nama final diganti oleh job async)
   const project = await prisma.project.create({
     data: {
       userId,
-      name: appName,
+      name: tempName,
       idea: rawIdea,
       description: rawIdea,
       wizardStep: 'survey',
@@ -81,41 +63,36 @@ export async function finalizeChatSession(sessionId: string, userId: string, ini
     },
   });
 
-  // 5. Pre-generate pertanyaan survey round 1 langsung saat submit ide
+  return { projectId: project.id };
+}
+
+// Pekerjaan AI lanjutan setelah project dibuat: rename project dengan nama hasil AI.
+// Dijalankan sebagai job async (startAiJob chat_finalize). Survey round 1 tidak di-sini —
+// di-kickstart idempoten oleh POST /survey/generate dari halaman survey (satu jalur kode).
+export async function postFinalizeProject(projectId: string, rawIdea: string, _userId: string): Promise<{ projectId: string }> {
+  let appName = rawIdea.length > 50 ? rawIdea.slice(0, 47) + '...' : rawIdea;
+
+  // Generate nama aplikasi ringkas secara cepat
   try {
-    const { plan } = await getUserPlan(userId);
-    const totalRounds = PLANS[plan]?.surveyRounds ?? 1;
-
-    const generated = await generateSurveyRound({
-      idea: rawIdea,
-      priorAnswers: [],
-      round: 1,
-      totalRounds,
-      projectId: project.id,
+    const resName = await generateJson({
+      system: 'Anda adalah penamaan produk profesional. Hasilkan nama aplikasi yang ringkas, modern, dan relevan (maksimal 2-4 kata) berdasarkan ide pengguna. Bahasa Indonesia atau istilah umum industri software, TANPA EMOJI.',
+      user: `Ide aplikasi pengguna:\n${rawIdea}`,
+      schema: z.object({ name: z.string() }),
+      tier: 'cheap',
+      agentName: 'generateAppName',
     });
-
-    for (let i = 0; i < generated.length; i++) {
-      const q = generated[i];
-      await prisma.discoveryQuestion.create({
-        data: {
-          projectId: project.id,
-          round: 1,
-          order: i + 1,
-          question: q.label,
-          context: q.id,
-          kind: q.kind,
-          options: q.options,
-          required: q.required,
-          suggestion: q.suggestion,
-          suggestionReason: q.suggestionReason,
-        },
+    if (resName.name && resName.name.trim().length > 0) {
+      appName = resName.name.trim();
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { name: appName },
       });
     }
-  } catch (surveyErr) {
-    console.warn('[chat] Pre-generate survey round 1 gagal, fallback ke route GET /survey:', surveyErr);
+  } catch (err) {
+    console.warn('[chat] Gagal generate nama app cepat, pakai nama sementara:', err);
   }
 
-  return { projectId: project.id };
+  return { projectId };
 }
 
 // ===============================================

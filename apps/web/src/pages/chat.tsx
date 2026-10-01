@@ -9,11 +9,9 @@ import {
   Sparkles,
   ArrowRight,
   Loader2,
-  Store,
-  CalendarCheck,
-  GraduationCap,
 } from 'lucide-react';
 import { api } from '@/lib/http';
+import { EXAMPLE_IDEAS } from '@/lib/constants';
 
 export interface UserPlanInfo {
   plan: string;
@@ -32,24 +30,6 @@ export interface ChatMessage {
   payload?: any;
   createdAt?: Date;
 }
-
-const EXAMPLE_IDEAS = [
-  {
-    icon: Store,
-    title: 'Kasir Warung & Toko',
-    text: 'Aplikasi kasir warung kelontong berbasis web dengan pencatatan inventaris barang, kasir POS cepat dengan scan barcode, dan rekap omzet harian.',
-  },
-  {
-    icon: CalendarCheck,
-    title: 'Reservasi Pasien Klinik',
-    text: 'Sistem reservasi dan antrean pasien klinik gigi online dengan pemilihan jadwal dokter, reminder notifikasi WhatsApp, dan riwayat rekam medis.',
-  },
-  {
-    icon: GraduationCap,
-    title: 'LMS & Tugas Sekolah',
-    text: 'Platform kelas dan tugas untuk guru dan murid dengan fitur kuis interaktif, upload tugas file PDF, dan rekap penilaian otomatis.',
-  },
-];
 
 export function ChatPage() {
   const navigate = useNavigate();

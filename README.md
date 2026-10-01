@@ -2,7 +2,7 @@
 
 > Shape ideas into software.
 
-Workspace perencanaan dan eksekusi software yang mengubah ide produk menjadi arsitektur terstruktur dan task atomic yang siap dieksekusi oleh AI coding agent di terminal lokal. Panduan brand, design tokens, dan sistem penamaan fitur tersedia di [BRAND.md](BRAND.md). Panduan CLI lengkap di [CLI.md](CLI.md).
+Workspace perencanaan dan eksekusi software yang mengubah ide produk menjadi arsitektur terstruktur dan task atomic yang siap dieksekusi oleh AI coding agent di terminal lokal. Panduan brand, design tokens, dan sistem penamaan fitur tersedia di [BRAND.md](docs/BRAND.md). Panduan CLI lengkap di [CLI.md](docs/CLI.md).
 
 Pipeline: **Numa Brief** (Chat & Survey) -> **Numa Blueprint** (Tech Stack & PRD) -> **Numa Flow** (Tree & Roadmap) -> **Numa Forge** (Kanban Tasks) -> **Numa Agent** (CLI Runner & Change Cycle).
 

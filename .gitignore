@@ -12,5 +12,3 @@ build/
 coverage/
 *.txt
 *.tgz
-.refira/
-.agents/

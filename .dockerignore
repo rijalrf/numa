@@ -6,7 +6,9 @@ dist
 */*/dist
 .git
 .github
-.legacy_archive
+.next
+docs
+*.md
 .numa
 *.tgz
 *.log

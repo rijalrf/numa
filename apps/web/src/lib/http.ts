@@ -1,13 +1,9 @@
 // Fetch wrapper ke backend numa. credentials 'include' agar cookie session terbaca.
 export function resolveApiUrl() {
   if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1') {
-      return 'http://localhost:6655';
-    }
-    return window.location.origin;
+    return '';
   }
-  return import.meta.env.VITE_API_URL ?? 'http://localhost:6655';
+  return import.meta.env.VITE_API_URL ?? '';
 }
 
 export const API_URL = resolveApiUrl();
@@ -32,7 +28,23 @@ export async function api<T = unknown>(path: string, init: RequestInit = {}): Pr
     },
   });
   const text = await resp.text();
-  const body = text ? JSON.parse(text) : null;
+  const contentType = resp.headers.get('content-type') || '';
+  let body: any = null;
+  if (text) {
+    if (contentType.includes('application/json') || (!contentType.includes('text/html') && !text.trim().startsWith('<'))) {
+      try {
+        body = JSON.parse(text);
+      } catch {
+        throw new ApiError(`Gagal membaca format JSON dari server (HTTP ${resp.status}).`, resp.status, text);
+      }
+    } else {
+      throw new ApiError(
+        `Server mengembalikan halaman HTML alih-alih JSON (HTTP ${resp.status}). Periksa rute gateway atau batas waktu proxy.`,
+        resp.status,
+        text
+      );
+    }
+  }
   if (!resp.ok) {
     throw new ApiError(body?.error ?? `HTTP ${resp.status}`, resp.status, body);
   }

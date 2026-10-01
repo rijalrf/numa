@@ -1,5 +1,5 @@
 // Halaman PRD: View atau real-time streaming dokumen kebutuhan produk
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api, downloadFile } from '@/lib/http';
 import { Button } from '@/components/ui/button';
@@ -8,97 +8,21 @@ import { isStageLocked } from '@/lib/constants';
 import { useWizardNav } from '@/components/layout/wizard-nav';
 import { PricingDialog } from '@/components/billing/pricing-dialog';
 import { MarkdownView } from '@/components/ui/markdown-view';
+import { NumaLoader } from '@/components/ui/numa-loader';
+import { usePrdStream } from '@/hooks/use-prd-stream';
 
 export function PrdPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const [projectName, setProjectName] = useState<string>('');
-  const [markdown, setMarkdown] = useState<string>('');
   const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [downloadingPrd, setDownloadingPrd] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [userPlan, setUserPlan] = useState<{ plan: string; planName: string } | null>(null);
   const [pricingOpen, setPricingOpen] = useState(false);
-  const streamingRef = useRef(false);
 
-  // Generator PRD via SSE: kumpulkan seluruh respons sebelum render untuk mencegah kedipan layar
-  const streamPrd = useCallback(async () => {
-    if (!projectId || isLocked || generating || streamingRef.current) return;
-    streamingRef.current = true;
-    setGenerating(true);
-    setError(null);
-    setMarkdown('');
-
-    let accumulated = '';
-    let streamError: string | null = null;
-
-    try {
-      const resp = await fetch(`/api/projects/${projectId}/prd/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      if (!resp.ok) {
-        if (resp.status === 409) {
-          // Sedang berjalan di proses lain, tunggu data dari GET
-          return;
-        }
-        throw new Error('Gagal menghubungi server untuk generate PRD');
-      }
-
-      const reader = resp.body?.getReader();
-      if (!reader) throw new Error('ReadableStream tidak didukung browser');
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split('\n\n');
-        buffer = parts.pop() ?? '';
-
-        for (const block of parts) {
-          for (const line of block.split('\n')) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                if (data.delta) {
-                  accumulated += data.delta;
-                }
-                if (data.error) {
-                  console.error('Error dari SSE stream:', data.error);
-                  streamError = data.error;
-                }
-              } catch {}
-            }
-          }
-        }
-      }
-
-      // Render sekali penuh saat stream selesai
-      if (accumulated) {
-        setMarkdown(accumulated);
-        setError(null);
-      } else if (streamError) {
-        setError(streamError);
-      }
-    } catch (err: any) {
-      console.error('Error streaming PRD:', err);
-      if (!accumulated) {
-        setError(err?.message || 'Terjadi kesalahan saat menyusun PRD.');
-      }
-    } finally {
-      streamingRef.current = false;
-      setGenerating(false);
-      setLoading(false);
-    }
-  }, [projectId, isLocked, generating]);
+  const { markdown, setMarkdown, generating, error, setError, streamPrd } = usePrdStream(projectId, isLocked);
 
   // Load status project & PRD saat mount
   useEffect(() => {
@@ -197,18 +121,22 @@ export function PrdPage() {
     [downloadingPrd, markdown, generating, projectName, projectId]
   );
 
-  useWizardNav({
-    back: {
-      label: 'Kembali',
-      onClick: handleBackToTechStack,
-    },
-    next: {
-      label: 'Lanjut',
-      onClick: handleNextStep,
-      disabled: !markdown || generating,
-    },
-    extra: extraNav,
-  });
+  useWizardNav(
+    loading || generating
+      ? null
+      : {
+          back: {
+            label: 'Kembali',
+            onClick: handleBackToTechStack,
+          },
+          next: {
+            label: 'Lanjut',
+            onClick: handleNextStep,
+            disabled: !markdown || generating,
+          },
+          extra: extraNav,
+        }
+  );
 
   return (
     <div className="max-w-4xl mx-auto w-full space-y-6 pb-16">
@@ -278,16 +206,17 @@ export function PrdPage() {
         </div>
       )}
 
-      {/* Tampilan Konten PRD — Langsung viewer tanpa wrapper box */}
+      {/* Tampilan Konten PRD */}
       {loading && !generating ? (
-        <div className="flex items-center justify-center py-20 text-muted-foreground gap-3">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <p className="text-xs">Memuat dokumen PRD...</p>
+        <div className="min-h-[calc(100vh-12rem)] flex items-center justify-center">
+          <NumaLoader label="Memuat dokumen PRD..." />
         </div>
       ) : generating && !markdown ? (
-        <div className="flex items-center justify-center py-20 text-muted-foreground gap-3">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <p className="text-xs">Menyusun dokumen PRD...</p>
+        <div className="min-h-[calc(100vh-12rem)] flex items-center justify-center">
+          <NumaLoader
+            label="Menyusun dokumen PRD..."
+            sublabel="AI sedang menulis dokumen kebutuhan produk"
+          />
         </div>
       ) : markdown ? (
         <div className="select-text pt-2">

@@ -1,5 +1,6 @@
 services:
   api:
+    image: ngodingpakeaiclone-api:latest
     build:
       context: .
       dockerfile: .docker/api/Dockerfile
@@ -8,13 +9,16 @@ services:
     ports:
       - "6655:6655"
     env_file:
+      - path: .env
+        required: false
       - path: apps/api/.env
         required: false
     environment:
       - PORT=6655
       - NODE_ENV=development
-      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:admin123@host.docker.internal:5432/project_ai_planner}
-      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-http://host.docker.internal:20128/v1}
+      # Database PostgreSQL selalu mengarah ke host komputer lokal
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-admin123}@host.docker.internal:5432/${POSTGRES_DB:-project_ai_planner}?schema=public
+      - OPENAI_BASE_URL=${DOCKER_OPENAI_BASE_URL:-http://host.docker.internal:20128/v1}
       - FE_URL=${FE_URL:-http://localhost:3455,https://numa.mrijal.my.id}
       - ENABLE_EMAIL_AUTH=${ENABLE_EMAIL_AUTH:-true}
     extra_hosts:
@@ -26,6 +30,7 @@ services:
     restart: unless-stopped
 
   web:
+    image: ngodingpakeaiclone-web:latest
     build:
       context: .
       dockerfile: .docker/web/Dockerfile
@@ -40,27 +45,9 @@ services:
       - ./apps/web/public:/app/apps/web/public
       - ./apps/web/index.html:/app/apps/web/index.html
       - ./apps/web/vite.config.ts:/app/apps/web/vite.config.ts
+      - ./apps/web/tailwind.config.js:/app/apps/web/tailwind.config.js
       - ./node_modules:/app/node_modules
     depends_on:
       - api
     restart: unless-stopped
 
-  # Service database opsional jika ingin container Postgres mandiri
-  # Jalankan dengan: docker compose --profile with-db up -d
-  db:
-    image: postgres:16-alpine
-    container_name: numa-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin123}
-      POSTGRES_DB: project_ai_planner
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    profiles:
-      - with-db
-
-volumes:
-  pgdata:

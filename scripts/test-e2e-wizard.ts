@@ -4,6 +4,21 @@ import { prisma } from '../apps/api/src/lib/prisma.js';
 
 const API_BASE = 'http://localhost:6655';
 
+// Helper: poll AI job sampai selesai (max 120 detik)
+async function pollJob(authedFetch: (path: string, opts?: RequestInit) => Promise<Response>, projectId: string, jobType: string, label: string) {
+  for (let i = 0; i < 40; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    const res = await authedFetch(`/api/projects/${projectId}/ai-jobs?type=${jobType}`);
+    if (res.status === 200) {
+      const data = await res.json();
+      if (data.status === 'done') { console.log(`\n${label} selesai`); return data; }
+      if (data.status === 'failed') throw new Error(`${label} gagal: ${data.error}`);
+    }
+    process.stdout.write('.');
+  }
+  throw new Error(`${label} timeout setelah 120 detik`);
+}
+
 async function runTest() {
   console.log('--- 1. TEST REGISTER & LOGIN ---');
   const uniqueEmail = `test-wizard-${Date.now()}@numa.dev`;
@@ -81,6 +96,12 @@ async function runTest() {
   console.log('Project status: wizardStep =', projectJson.project.wizardStep);
 
   console.log('\n--- 4. TEST SURVEY WIZARD (PUTARAN 1 & SARAN NUMA) ---');
+  // Trigger generate pertanyaan survey putaran 1 (async job)
+  const surveyGenRes = await authedFetch(`/api/projects/${projectId}/survey/generate`, { method: 'POST' });
+  assert([200, 201, 202].includes(surveyGenRes.status), `POST survey/generate status harus 200/201/202, got ${surveyGenRes.status}`);
+  console.log('Survey generate dimulai, polling status...');
+  await pollJob(authedFetch, projectId, 'survey_round', 'Survey generate');
+
   // Ambil pertanyaan survey putaran 1
   const surveyGetRes = await authedFetch(`/api/projects/${projectId}/survey`);
   assert.strictEqual(surveyGetRes.status, 200, 'GET survey status harus 200');
@@ -117,14 +138,24 @@ async function runTest() {
   assert.strictEqual(submitSurveyRes.status, 200, 'Submit survey status harus 200');
   const submitSurveyData = await submitSurveyRes.json();
   assert.strictEqual(submitSurveyData.done, true, 'Survey free harus selesai setelah putaran 1');
-  assert(submitSurveyData.summary, 'Survey harus menghasilkan ringkasan produk terstruktur');
-  console.log('Survey putaran 1 selesai. Ringkasan produk:\n', submitSurveyData.summary.substring(0, 150) + '...');
+
+  // Summary di-generate async — poll sampai selesai
+  if (submitSurveyData.status === 'generating' || !submitSurveyData.summary) {
+    console.log('Survey summary sedang di-generate, polling...');
+    await pollJob(authedFetch, projectId, 'survey_summary', 'Survey summary');
+  }
+
+  // Ambil summary dari project data
+  const projAfterSummary = await authedFetch(`/api/projects/${projectId}`);
+  const projSummaryJson = await projAfterSummary.json();
+  const summary = projSummaryJson.project?.description;
+  assert(summary, 'Survey harus menghasilkan ringkasan produk terstruktur');
+  console.log('Survey putaran 1 selesai. Ringkasan produk:\n', summary.substring(0, 150) + '...');
 
   // Verifikasi survey selesai tersimpan
   const surveyAfterSubmit = await authedFetch(`/api/projects/${projectId}/survey`);
   const surveyAfterData = await surveyAfterSubmit.json();
   assert.strictEqual(surveyAfterData.isComplete, true, 'isComplete harus true');
-  assert(surveyAfterData.summary, 'Summary harus ada');
 
   console.log('\n--- 5. TEST FREE TIER PAYWALL GATE (TEMBOK UPGRADE) ---');
   // 5a. Akses /survey/complete harus ditolak untuk akun Free
@@ -161,10 +192,12 @@ async function runTest() {
   console.log('Tahap berhasil beralih ke techstack.');
 
   console.log('\n--- 7. TEST TECH STACK (REKOMENDASI ARSITEK SOFTWARE) ---');
-  // Rekomendasi tech stack
+  // Rekomendasi tech stack (async job)
   const stackRecRes = await authedFetch(`/api/projects/${projectId}/techstack/recommend`, { method: 'POST' });
   assert.strictEqual(stackRecRes.status, 200, 'Tech stack recommend harus 200');
-  const stackRecJson = await stackRecRes.json();
+  console.log('Techstack recommend dimulai, polling status...');
+  const stackJob = await pollJob(authedFetch, projectId, 'techstack_recommend', 'Techstack recommend');
+  const stackRecJson = stackJob.result || {};
   console.log('Tech stack rekomendasi:', stackRecJson.techStack);
 
   // Uji validasi penolakan Golden Stack (mis. MongoDB atau framework di luar whitelist)
@@ -219,11 +252,11 @@ async function runTest() {
   console.log('Download PRD .md OK.');
 
   console.log('\n--- 9. TEST TREE DIAGRAM (DESAINER SISTEM) ---');
-  // Generate Tree
+  // Generate Tree (async job)
   const treeGenRes = await authedFetch(`/api/projects/${projectId}/tree/generate`, { method: 'POST' });
   assert.strictEqual(treeGenRes.status, 200, 'Tree generate status harus 200');
-  const treeGenJson = await treeGenRes.json();
-  console.log(`Tree berhasil digenerate: ${treeGenJson.count} nodes`);
+  console.log('Tree generate dimulai, polling status...');
+  await pollJob(authedFetch, projectId, 'tree_generate', 'Tree generate');
 
   // Ambil Tree
   const treeGetRes = await authedFetch(`/api/projects/${projectId}/tree`);
@@ -232,11 +265,11 @@ async function runTest() {
   console.log(`Tree check OK: ${treeGetJson.nodes.length} nodes ditemukan.`);
 
   console.log('\n--- 10. TEST BOARD TASKS (TECH LEAD) ---');
-  // Generate Tasks
+  // Generate Tasks (async job)
   const tasksGenRes = await authedFetch(`/api/projects/${projectId}/tasks/generate`, { method: 'POST' });
   assert.strictEqual(tasksGenRes.status, 200, 'Tasks generate status harus 200');
-  const tasksGenJson = await tasksGenRes.json();
-  console.log(`Tasks berhasil digenerate: ${tasksGenJson.count} tasks`);
+  console.log('Tasks generate dimulai, polling status...');
+  await pollJob(authedFetch, projectId, 'tasks_generate', 'Tasks generate');
 
   // Ambil Tasks
   const tasksGetRes = await authedFetch(`/api/projects/${projectId}/tasks`);
@@ -281,9 +314,10 @@ async function runTest() {
   assert.strictEqual(stepBackJson.wizardStep, 'tree', 'Wizard step harus menjadi tree');
   console.log('Unlock tahap sebelumnya (wizard-step: tree) OK.');
 
-  // Kembalikan ke board via tasks/generate
-  await authedFetch(`/api/projects/${projectId}/tasks/generate`, {
-    method: 'POST',
+  // Kembalikan ke board via direct DB update (skip re-generate yang lambat)
+  await prisma.project.update({
+    where: { id: projectId },
+    data: { wizardStep: 'board' },
   });
   console.log('Restore wizard-step ke board OK.');
 
@@ -366,9 +400,7 @@ async function runTest() {
   const syncRes = await agentFetch('/api/agent/repo-summary', {
     method: 'POST',
     body: JSON.stringify({
-      fileTree: ['src/index.ts', 'src/routes.ts', 'package.json'],
-      manifests: { 'package.json': '{"name": "test-app", "dependencies": {}}' },
-      stats: { totalFiles: 3 },
+      summary: 'Monorepo test-app: src/index.ts (entry), src/routes.ts (router), package.json. Total 3 files.',
     }),
   });
   assert.strictEqual(syncRes.status, 200, 'Repo summary status harus 200');
@@ -400,6 +432,12 @@ async function runTest() {
   assert.strictEqual(changeReqJson.wizardStep, 'survey', 'wizardStep harus kembali ke survey');
   console.log('Permintaan perubahan diterima. wizardStep =', changeReqJson.wizardStep);
 
+  // Generate pertanyaan survey baru (async) setelah change request
+  const changeGenRes = await authedFetch(`/api/projects/${projectId}/survey/generate`, { method: 'POST' });
+  assert([200, 201, 202].includes(changeGenRes.status), `POST survey/generate setelah change request harus OK, got ${changeGenRes.status}`);
+  console.log('Survey perubahan generate dimulai, polling...');
+  await pollJob(authedFetch, projectId, 'survey_round', 'Survey perubahan generate');
+
   // Pertanyaan survey baru harus digenerate ulang
   const changeSurveyRes = await authedFetch(`/api/projects/${projectId}/survey`);
   assert.strictEqual(changeSurveyRes.status, 200, 'GET survey status harus 200');
@@ -426,8 +464,16 @@ async function runTest() {
     assert.strictEqual(changeSubmitRes.status, 200, 'Submit survey status harus 200');
     const changeSubmitData = await changeSubmitRes.json();
     if (changeSubmitData.done) {
+      // Poll summary async job
+      if (changeSubmitData.status === 'generating') {
+        await pollJob(authedFetch, projectId, 'survey_summary', 'Survey perubahan summary');
+      }
       console.log('Survey perubahan selesai. Ringkasan produk diperbarui.');
       break;
+    }
+    // Next round questions di-generate async — poll dulu
+    if (changeSubmitData.status === 'generating') {
+      await pollJob(authedFetch, projectId, 'survey_round', `Survey perubahan round ${changeSubmitData.nextRound}`);
     }
     const nextSurveyRes = await authedFetch(`/api/projects/${projectId}/survey`);
     assert.strictEqual(nextSurveyRes.status, 200, 'GET survey putaran lanjutan status harus 200');

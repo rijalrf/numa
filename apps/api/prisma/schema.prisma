@@ -110,6 +110,7 @@ model Project {
   chatSession      ChatSession?
   treeNodes        TreeNode[]
   aiCallLogs       AiCallLog[]
+  aiJobs           AiJob[]
 
   @@index([userId])
 }
@@ -393,6 +394,22 @@ model TreeNode {
 // ============================================================
 // Observability — Riwayat pemanggilan AI, token usage, dan latensi (Bab 39)
 // ============================================================
+
+// Status job AI async (fire-and-forget + polling frontend).
+model AiJob {
+  id         String    @id @default(cuid())
+  projectId  String
+  type       String    // tasks_generate | cycle_generate | roadmap_generate | survey_round | survey_summary | tree_generate | techstack_recommend | chat_finalize
+  status     String    @default("running") // running | done | failed
+  error      String?
+  result     Json?
+  createdAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, type, status])
+}
 
 model AiCallLog {
   id            String   @id @default(cuid())

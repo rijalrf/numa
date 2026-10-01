@@ -31,3 +31,30 @@ export function isStageLocked(currentStep: string | undefined | null, targetStag
   const targetRank = STAGE_ORDER[targetStage] ?? 0;
   return currentRank > targetRank;
 }
+
+import type { LucideIcon } from 'lucide-react';
+import { Store, CalendarCheck, GraduationCap } from 'lucide-react';
+
+export type ExampleIdea = {
+  icon: LucideIcon;
+  title: string;
+  text: string;
+};
+
+export const EXAMPLE_IDEAS: ExampleIdea[] = [
+  {
+    icon: Store,
+    title: 'Kasir Warung & Toko',
+    text: 'Aplikasi kasir warung kelontong berbasis web dengan pencatatan inventaris barang, kasir POS cepat dengan scan barcode, dan rekap omzet harian.',
+  },
+  {
+    icon: CalendarCheck,
+    title: 'Reservasi Pasien Klinik',
+    text: 'Sistem reservasi dan antrean pasien klinik gigi online dengan pemilihan jadwal dokter, reminder notifikasi WhatsApp, dan riwayat rekam medis.',
+  },
+  {
+    icon: GraduationCap,
+    title: 'LMS & Tugas Sekolah',
+    text: 'Platform kelas dan tugas untuk guru dan murid dengan fitur kuis interaktif, upload tugas file PDF, dan rekap penilaian otomatis.',
+  },
+];

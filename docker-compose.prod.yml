@@ -1,24 +1,4 @@
 services:
-  db:
-    image: postgres:16-alpine
-    container_name: numa-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin123}
-      POSTGRES_DB: ${POSTGRES_DB:-project_ai_planner}
-      PGDATA: /var/lib/postgresql/data/pgdata
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-project_ai_planner}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    networks:
-      - numa-net
-
   api:
     image: ${DOCKERHUB_USERNAME}/numa-api:latest
     build:
@@ -27,16 +7,14 @@ services:
       target: runner
     container_name: numa-api
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
     env_file:
       - path: .env
         required: false
     environment:
       - NODE_ENV=production
       - PORT=6655
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-admin123}@db:5432/${POSTGRES_DB:-project_ai_planner}?schema=public
+      # Database PostgreSQL berjalan langsung di host VPS
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-admin123}@host.docker.internal:5432/${POSTGRES_DB:-project_ai_planner}?schema=public
       - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
       - BETTER_AUTH_URL=${BETTER_AUTH_URL:-https://numa.opendv.xyz}
       - FE_URL=${FE_URL:-https://numa.opendv.xyz,https://numa.mrijal.my.id}
@@ -77,10 +55,6 @@ services:
         condition: service_healthy
     networks:
       - numa-net
-
-volumes:
-  pgdata:
-    name: numa_pgdata
 
 networks:
   numa-net:
