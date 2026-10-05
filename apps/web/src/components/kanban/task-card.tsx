@@ -9,7 +9,6 @@ type Props = {
 
 export function TaskCard({ task, onClick }: Props) {
   const taskIdLabel = task.aiContext?.taskId || (task.order ? `#${task.order}` : undefined);
-  const reqIds = task.aiContext?.requirement_ids;
 
   return (
     <Card
@@ -36,20 +35,6 @@ export function TaskCard({ task, onClick }: Props) {
           <Badge variant="outline" className="text-[9px] px-1.5 py-0">
             {task.layer}
           </Badge>
-          {reqIds && reqIds.length > 0 && (
-            <div className="flex flex-wrap gap-1 items-center">
-              {reqIds.slice(0, 2).map((r) => (
-                <span key={r} className="font-mono text-[9px] font-bold text-primary bg-primary/10 px-1 py-0.5 rounded border border-primary/20">
-                  {r}
-                </span>
-              ))}
-              {reqIds.length > 2 && (
-                <span className="font-mono text-[9px] text-muted-foreground">
-                  +{reqIds.length - 2}
-                </span>
-              )}
-            </div>
-          )}
         </div>
       </CardContent>
     </Card>

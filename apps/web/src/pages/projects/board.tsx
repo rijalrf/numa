@@ -122,7 +122,7 @@ export function BoardPage() {
           ) : (
             <Download className="h-3.5 w-3.5" />
           )}
-          <span>{downloadingZip ? 'Mengunduh...' : 'Unduh Paket (.zip)'}</span>
+          <span>{downloadingZip ? 'Mengunduh...' : 'Unduh Paket'}</span>
         </Button>
 
         <Button
@@ -150,7 +150,7 @@ export function BoardPage() {
           next:
             tasks.length > 0
               ? {
-                  label: 'Agent AI Prompt',
+                  label: 'AI Agent Prompt',
                   onClick: () => setExecutionDialogOpen(true),
                   hideIcon: true,
                 }

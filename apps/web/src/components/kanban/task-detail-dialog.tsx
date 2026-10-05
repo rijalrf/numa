@@ -91,16 +91,6 @@ export function TaskDetailDialog({ task, isOpen, onClose }: TaskDetailDialogProp
               <Badge variant="outline" className="text-xs font-semibold bg-muted/50">
                 {task.status}
               </Badge>
-              {ctx?.requirement_ids && ctx.requirement_ids.length > 0 && (
-                <div className="flex flex-wrap gap-1 items-center">
-                  {ctx.requirement_ids.map((reqId) => (
-                    <Badge key={reqId} variant="outline" className="text-xs font-semibold bg-primary/10 text-primary border-primary/20">
-                      <BookOpen className="h-3 w-3 mr-1" />
-                      {reqId}
-                    </Badge>
-                  ))}
-                </div>
-              )}
             </div>
             <h2 className="text-lg font-bold leading-snug">{task.title}</h2>
           </div>

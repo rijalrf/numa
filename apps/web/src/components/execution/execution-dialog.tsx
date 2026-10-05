@@ -18,7 +18,6 @@ interface ExecutionDialogProps {
 }
 
 export function ExecutionDialog({ projectId, projectName, isOpen, onClose }: ExecutionDialogProps) {
-  const [approvalMode, setApprovalMode] = useState<'approval' | 'full_auto'>('approval');
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [inputToken, setInputToken] = useState('');
 
@@ -37,9 +36,7 @@ export function ExecutionDialog({ projectId, projectName, isOpen, onClose }: Exe
   const installCommand = 'npm install -g numa-cli@latest';
   const loginCommand = `numa login ${activeToken} --api-url ${apiUrl}`;
 
-  const executionLoopText =
-    approvalMode === 'approval'
-      ? `## 2. Loop Eksekusi (Wajib Persetujuan Pengguna Tiap Task)
+  const executionLoopText = `## 2. Loop Eksekusi (Wajib Persetujuan Pengguna Tiap Task)
 Untuk setiap task yang dikerjakan:
 1. Jalankan \`numa next\` untuk mengambil task aktif berikutnya. Jika sudah tidak ada task lagi, hentikan loop.
 2. Jalankan \`numa start\` untuk mengunci task menjadi status IN_PROGRESS.
@@ -48,17 +45,7 @@ Untuk setiap task yang dikerjakan:
 5. Verifikasi bahwa kode berjalan dengan baik dan bebas error.
 6. PENTING: Tampilkan hasil pekerjaan dan MINTA PERSETUJUAN PENGGUNA sebelum menandai selesai.
 7. Setelah disetujui pengguna, jalankan \`numa done\` untuk menyelesaikan task.
-8. PENTING (Checkpoint Gate): Jika sistem meminta verifikasi checkpoint setelah \`done\`, berhenti dan minta konfirmasi pengguna sebelum lanjut.`
-      : `## 2. Loop Eksekusi Otonom (Full Sampai Selesai Tanpa Persetujuan)
-Jalankan loop berikut secara otonom tanpa henti hingga seluruh task berstatus DONE:
-1. Jalankan \`numa next\` untuk mengambil task aktif berikutnya. Jika sudah tidak ada task lagi, hentikan loop.
-2. Jalankan \`numa start\` untuk mengunci task menjadi status IN_PROGRESS.
-3. Jalankan \`numa context\` untuk membaca batasan Bounded Context (file yang boleh/dilarang diubah serta kriteria penerimaan).
-4. Implementasikan kode sesuai kriteria penerimaan dan batasan file secara tuntas.
-5. Verifikasi bahwa kode berjalan dengan baik dan bebas error sintaks.
-6. Langsung jalankan \`numa done\` untuk menyelesaikan task.
-7. PENTING (Checkpoint Gate): Jika sistem meminta verifikasi checkpoint setelah \`done\`, berhenti dan minta konfirmasi pengguna sebelum melanjutkan ke task berikutnya.
-8. Otomatis ulangi dari langkah 1.`;
+8. PENTING (Checkpoint Gate): Jika sistem meminta verifikasi checkpoint setelah \`done\`, berhenti dan minta konfirmasi pengguna sebelum lanjut.`;
 
   const masterPromptText = `# Master Prompt — AI Agent Loop untuk Proyek "${projectName || projectId}"
 
@@ -134,50 +121,6 @@ ${executionLoopText}
               </div>
             </div>
           )}
-
-          {/* Toggle Mode Persetujuan */}
-          <div className="rounded-md border border-border/80 bg-muted/20 p-3.5 space-y-2">
-            <span className="text-xs font-semibold text-foreground block">
-              Pilih Mode Eksekusi Agent:
-            </span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => setApprovalMode('approval')}
-                className={`p-2.5 rounded-md border text-left transition-all cursor-pointer ${
-                  approvalMode === 'approval'
-                    ? 'border-primary bg-primary/10 text-foreground font-medium'
-                    : 'border-border/60 bg-background/50 text-muted-foreground hover:bg-muted/40'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold">Perlu Persetujuan Tiap Task</span>
-                  {approvalMode === 'approval' && <Check className="h-3.5 w-3.5 text-primary" />}
-                </div>
-                <p className="text-[11px] mt-1 opacity-80">
-                  Agent meminta konfirmasi Anda sebelum menandai setiap task selesai.
-                </p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setApprovalMode('full_auto')}
-                className={`p-2.5 rounded-md border text-left transition-all cursor-pointer ${
-                  approvalMode === 'full_auto'
-                    ? 'border-primary bg-primary/10 text-foreground font-medium'
-                    : 'border-border/60 bg-background/50 text-muted-foreground hover:bg-muted/40'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold">Full Otomatis Sampai Selesai</span>
-                  {approvalMode === 'full_auto' && <Check className="h-3.5 w-3.5 text-primary" />}
-                </div>
-                <p className="text-[11px] mt-1 opacity-80">
-                  Agent menyelesaikan semua task berurutan secara otonom tanpa henti.
-                </p>
-              </button>
-            </div>
-          </div>
 
           {/* Master Prompt Code Block */}
           <div className="rounded-md border border-border overflow-hidden space-y-0">
