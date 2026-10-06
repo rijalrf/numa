@@ -3,7 +3,7 @@ export function resolveApiUrl() {
   if (typeof window !== 'undefined') {
     return '';
   }
-  return import.meta.env.VITE_API_URL ?? '';
+  return import.meta.env?.VITE_API_URL ?? '';
 }
 
 export const API_URL = resolveApiUrl();
@@ -16,6 +16,22 @@ export class ApiError extends Error {
     this.status = status;
     this.detail = detail;
   }
+}
+
+const PUBLIC_PATHS = ['/', '/login'];
+let redirecting = false;
+
+// Endpoint auth (/api/auth/*) menangani 401 sendiri lewat auth client, jadi tidak ikut redirect.
+function shouldRedirectToLogin(path: string): boolean {
+  if (typeof window === 'undefined') return false;
+  if (path.startsWith('/api/auth')) return false;
+  return !PUBLIC_PATHS.includes(window.location.pathname);
+}
+
+function redirectToLogin() {
+  if (redirecting) return;
+  redirecting = true;
+  window.location.assign('/login');
 }
 
 export async function api<T = unknown>(path: string, init: RequestInit = {}): Promise<T> {
@@ -44,6 +60,10 @@ export async function api<T = unknown>(path: string, init: RequestInit = {}): Pr
         text
       );
     }
+  }
+  if (resp.status === 401 && shouldRedirectToLogin(path)) {
+    // Sesi berakhir: arahkan ke login sekali saja agar banyak request paralel tidak memicu loop.
+    redirectToLogin();
   }
   if (!resp.ok) {
     throw new ApiError(body?.error ?? `HTTP ${resp.status}`, resp.status, body);

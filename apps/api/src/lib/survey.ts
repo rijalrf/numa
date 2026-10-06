@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { generateJson } from './ai/ai-service.js';
+import { PROMPT_VERSIONS } from './ai/prompts.js';
 
 export const SurveyQuestionItemSchema = z.object({
   id: z.string(),
@@ -26,8 +27,9 @@ export type SurveySummary = z.infer<typeof SurveySummarySchema>;
 
 const ROUND_THEMES: Record<number, { theme: string; description: string }> = {
   1: {
-    theme: 'Masalah Utama & Profil Pengguna',
-    description: 'Siapa pengguna utama aplikasi, kebiasaan harian mereka, dan masalah mendesak yang ingin diselesaikan.',
+    theme: 'Proses Saat Ini & Masalah Utama',
+    description:
+      'Bagaimana pekerjaan ini dilakukan SEBELUM ada aplikasi (alat atau cara yang dipakai sekarang, siapa saja yang terlibat, langkah-langkahnya), titik yang paling merepotkan atau sering salah, dan siapa pengguna utamanya. Pertanyaan pertama WAJIB tentang cara kerja saat ini, bukan tentang aplikasi yang akan dibuat.',
   },
   2: {
     theme: 'Fitur Inti MVP & Alur Kerja Harian',
@@ -48,7 +50,7 @@ export async function generateSurveyRound(args: {
   priorAnswers: Array<{ question: string; answer: string }>;
   round: number;
   totalRounds: number;
-  projectId?: string;
+  projectId: string;
 }): Promise<SurveyQuestionItem[]> {
   const roundInfo = ROUND_THEMES[args.round] || {
     theme: `Aspek Kebutuhan Tahap ${args.round}`,
@@ -69,7 +71,11 @@ PRINSIP KONSULTAN PRODUK (INTERVIEW-ME):
    Konteks tema: ${roundInfo.description}
 3. WAJIB adaptif terhadap jawaban putaran sebelumnya. Jangan tanyakan hal yang sudah dijawab tuntas.
 4. Hasilkan tepat 2-3 pertanyaan terstruktur.
-5. Format setiap pertanyaan:
+5. BAHASA SEHARI-HARI (WAJIB): pembaca adalah orang awam, bukan ahli bidang tersebut.
+   - Jangan memakai istilah khusus bidang secara mentah, termasuk bila istilah itu ada di ide pengguna (contoh: "sirkulasi", "inventori", "rekonsiliasi", "onboarding"). Ganti dengan kata sehari-hari (misal "peminjaman dan pengembalian buku", "pencatatan stok barang"), atau bila istilah itu memang perlu, beri arti singkat dalam tanda kurung saat pertama kali muncul.
+   - Satu pertanyaan membahas SATU hal. Jangan menggabungkan dua topik dalam satu kalimat tanya (contoh buruk: "mencatat sirkulasi dan stok"). Pecah menjadi pertanyaan terpisah.
+   - Untuk pertanyaan tentang cara kerja saat ini, beri pilihan yang konkret dan mudah dikenali (misal buku catatan, spreadsheet, aplikasi lain, atau belum dicatat sama sekali), bukan deskripsi proses yang abstrak.
+6. Format setiap pertanyaan:
    - "id": identifier pendek dan unik (misal "target_device", "role_access")
    - "label": kalimat tanya lengkap yang ramah (misal: "Siapa saja yang akan mengoperasikan aplikasi ini sehari-hari?")
    - "kind": "radio" (pilih satu) atau "checkbox" (pilih lebih dari satu)
@@ -106,6 +112,7 @@ Buat 2-3 pertanyaan untuk Putaran ${args.round} (${roundInfo.theme}).`;
     user,
     schema: SurveyRoundOutputSchema,
     agentName: 'SurveyRoundConsultant',
+    promptVersion: PROMPT_VERSIONS.surveyRound,
     projectId: args.projectId,
     tier: 'reasoning',
   });
@@ -116,7 +123,7 @@ Buat 2-3 pertanyaan untuk Putaran ${args.round} (${roundInfo.theme}).`;
 export async function generateSurveySummary(args: {
   idea: string;
   answers: Array<{ question: string; answer: string }>;
-  projectId?: string;
+  projectId: string;
 }): Promise<SurveySummary> {
   const qaText = args.answers.map((a, i) => `${i + 1}. ${a.question}\n   Jawaban: ${a.answer}`).join('\n\n');
 
@@ -126,6 +133,7 @@ Tugas Anda: merangkum seluruh hasil wawancara kebutuhan (ide awal + seluruh jawa
 PRINSIP RESTATE INTENT (INTERVIEW-ME):
 1. Hasilkan nama proyek ("name") yang menarik, modern, ringkas, dan relevan (maksimal 3-4 kata).
 2. Buat dokumen ringkasan ("summary") terstruktur dalam format teks/markdown yang padat, mencakup:
+   - Proses Saat Ini (As-Is) (cara pekerjaan dilakukan sebelum ada aplikasi: alat atau cara yang dipakai, pihak yang terlibat, langkah utama, dan titik yang paling merepotkan; tulis apa adanya dari jawaban pengguna, jangan mengarang)
    - Target Pengguna & Persona (siapa yang memakai dan latar belakangnya)
    - Goals vs Non-Goals MVP (tujuan utama yang ingin dicapai vs hal yang sengaja ditunda)
    - Fitur Inti MVP (3-5 alur kerja nyata yang harus ada di versi awal)
@@ -156,6 +164,7 @@ Buat nama proyek dan ringkasan terstruktur lengkap dalam format JSON.`;
     user,
     schema: SurveySummarySchema,
     agentName: 'SurveySummaryConsultant',
+    promptVersion: PROMPT_VERSIONS.surveySummary,
     projectId: args.projectId,
     tier: 'reasoning',
   });

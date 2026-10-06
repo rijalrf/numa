@@ -1,10 +1,14 @@
 // Step 2: generate PRD dari ide + tech stack + chat history (SSE streaming).
 import { Router } from 'express';
+import { snapshotArtifact } from '../lib/artifact-version.js';
+import { projectWhere } from '../lib/access.js';
 import { prisma } from '../lib/prisma.js';
 import { requireUser, type AuthedRequest } from '../middleware/require-user.js';
 import { getUserPlan } from '../lib/billing.js';
 import { isStageLocked } from '../lib/stage.js';
 import { generatePrdMarkdownStream } from '../lib/ai/prd.js';
+import { extractProductSpec } from '../lib/ai/product-spec.js';
+import { ensureProductSpec } from '../lib/prd-spec.js';
 
 export const prdRouter = Router();
 
@@ -20,7 +24,7 @@ prdRouter.post(['/api/projects/:id/prd/generate', '/api/projects/:id/brd/generat
 
   try {
     const project = await prisma.project.findFirst({
-      where: { id: req.params.id, userId: req.userId },
+      where: projectWhere(req.userId, req.params.id),
       include: {
         stacks: true,
       },
@@ -88,14 +92,26 @@ prdRouter.post(['/api/projects/:id/prd/generate', '/api/projects/:id/brd/generat
         }
       );
 
+      // Ekstraksi spec terstruktur. Gagal tidak membatalkan PRD; dicoba ulang otomatis saat generate task.
+      res.write(`data: ${JSON.stringify({ phase: 'spec' })}\n\n`);
+      let specWarning: string | undefined;
+      let content = prd;
+      try {
+        const spec = await extractProductSpec({ markdown: prd.markdown, projectId: project.id });
+        content = { ...prd, spec, dataModels: undefined, apiEndpoints: undefined };
+      } catch (err) {
+        specWarning = `Spec terstruktur belum terbentuk: ${(err as Error).message}`;
+      }
+
+      await snapshotArtifact(project.id, 'prd', 'prd_regenerate');
       const savedPrd = await prisma.prd.upsert({
         where: { projectId: project.id },
-        create: { projectId: project.id, content: prd, version: 1 },
-        update: { content: prd, version: { increment: 1 } },
+        create: { projectId: project.id, content: JSON.parse(JSON.stringify(content)), version: 1 },
+        update: { content: JSON.parse(JSON.stringify(content)), version: { increment: 1 } },
       });
       await prisma.project.update({ where: { id: project.id }, data: { wizardStep: 'tree' } });
 
-      res.write(`data: ${JSON.stringify({ done: true, prd: savedPrd, brd: savedPrd })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, prd: savedPrd, brd: savedPrd, specWarning })}\n\n`);
       res.end();
     } catch (err) {
       res.write(`data: ${JSON.stringify({ error: 'AI gagal menghasilkan PRD.', detail: (err as Error).message })}\n\n`);
@@ -109,8 +125,19 @@ prdRouter.post(['/api/projects/:id/prd/generate', '/api/projects/:id/brd/generat
 });
 
 prdRouter.get(['/api/projects/:id/prd', '/api/projects/:id/brd'], requireUser, async (req: AuthedRequest, res) => {
-  const project = await prisma.project.findFirst({ where: { id: req.params.id, userId: req.userId } });
+  const project = await prisma.project.findFirst({ where: projectWhere(req.userId, req.params.id) });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
   const prd = await prisma.prd.findUnique({ where: { projectId: project.id } });
   res.json({ prd, brd: prd });
+});
+
+// Ekstraksi ulang spec terstruktur (mis. setelah ekstraksi otomatis gagal, atau untuk PRD lama).
+prdRouter.post('/api/projects/:id/prd/spec/extract', requireUser, async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findFirst({ where: projectWhere(req.userId, req.params.id), select: { id: true } });
+  if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
+
+  const result = await ensureProductSpec(project.id);
+  if (!result) return res.status(404).json({ error: 'PRD belum dibuat.' });
+  if (result.error) return res.status(502).json({ error: 'AI gagal mengekstrak spec dari PRD.', detail: result.error });
+  res.json({ ok: true, extracted: result.extracted, spec: result.prd.spec });
 });

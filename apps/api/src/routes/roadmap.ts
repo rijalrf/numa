@@ -1,16 +1,58 @@
 // Step 3: roadmap dari PRD (asinkron / fire-and-forget dengan polling status).
 import { Router } from 'express';
+import { projectWhere } from '../lib/access.js';
 import { prisma } from '../lib/prisma.js';
 import { requireUser, type AuthedRequest } from '../middleware/require-user.js';
 import { PrdSchema } from '../lib/ai/prd.js';
 import { generateRoadmapFromPRD } from '../lib/ai/roadmap.js';
-import { startAiJob, hasActiveJob } from '../lib/ai/job.js';
+import { enqueueAiJob, hasActiveJob, registerJobHandler, NonRetryableJobError, rejectJobLimit } from '../lib/ai/job.js';
 
 export const roadmapRouter = Router();
 
+registerJobHandler('roadmap_generate', async ({ projectId }) => {
+  const prd = await prisma.prd.findUnique({ where: { projectId } });
+  if (!prd) throw new NonRetryableJobError('PRD belum ada. Generate PRD dulu.');
+  const prdContent = PrdSchema.parse(prd.content);
+  const data = await generateRoadmapFromPRD(prdContent, { projectId });
+
+  // Tulis ulang roadmap secara atomik (cascade hapus features + deps).
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.roadmapPhase.deleteMany({ where: { projectId } });
+
+      const phaseMap = new Map<string, string>(); // tmpId -> realId
+      for (const p of data.phases) {
+        const created = await tx.roadmapPhase.create({
+          data: { projectId, order: p.order, title: p.title, description: p.description, layer: p.layer },
+        });
+        for (const f of p.features) {
+          const fcreated = await tx.roadmapFeature.create({
+            data: { phaseId: created.id, title: f.title, description: f.description },
+          });
+          phaseMap.set(f.id, fcreated.id);
+        }
+      }
+      for (const p of data.phases) {
+        for (const f of p.features) {
+          if (f.dependsOn.length === 0) continue;
+          const fromId = phaseMap.get(f.id);
+          if (!fromId) continue;
+          for (const dep of f.dependsOn) {
+            const toId = phaseMap.get(dep);
+            if (!toId) continue;
+            await tx.roadmapDependency.create({ data: { featureId: fromId, dependsOnId: toId } });
+          }
+        }
+      }
+    },
+    { timeout: 60000 }
+  );
+  return { ok: true };
+});
+
 roadmapRouter.post('/api/projects/:id/roadmap/generate', requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({
-    where: { id: req.params.id, userId: req.userId },
+    where: projectWhere(req.userId, req.params.id),
     include: { prd: true },
   });
   if (!project?.prd) return res.status(400).json({ error: 'PRD belum ada. Generate PRD dulu.' });
@@ -21,53 +63,18 @@ roadmapRouter.post('/api/projects/:id/roadmap/generate', requireUser, async (req
 
   const projectId = project.id;
   try {
-    const prdContent = PrdSchema.parse(project.prd.content);
-    await startAiJob(projectId, 'roadmap_generate', async () => {
-      const data = await generateRoadmapFromPRD(prdContent, { projectId });
-
-      // Tulis ulang roadmap secara atomik (cascade hapus features + deps).
-      await prisma.$transaction(
-        async (tx) => {
-          await tx.roadmapPhase.deleteMany({ where: { projectId } });
-
-          const phaseMap = new Map<string, string>(); // tmpId -> realId
-          for (const p of data.phases) {
-            const created = await tx.roadmapPhase.create({
-              data: { projectId, order: p.order, title: p.title, description: p.description, layer: p.layer },
-            });
-            for (const f of p.features) {
-              const fcreated = await tx.roadmapFeature.create({
-                data: { phaseId: created.id, title: f.title, description: f.description },
-              });
-              phaseMap.set(f.id, fcreated.id);
-            }
-          }
-          for (const p of data.phases) {
-            for (const f of p.features) {
-              if (f.dependsOn.length === 0) continue;
-              const fromId = phaseMap.get(f.id);
-              if (!fromId) continue;
-              for (const dep of f.dependsOn) {
-                const toId = phaseMap.get(dep);
-                if (!toId) continue;
-                await tx.roadmapDependency.create({ data: { featureId: fromId, dependsOnId: toId } });
-              }
-            }
-          }
-        },
-        { timeout: 60000 }
-      );
-      return { ok: true };
-    });
+    PrdSchema.parse(project.prd.content); // validasi cepat sebelum masuk antrean
+    await enqueueAiJob({ projectId, type: 'roadmap_generate', userId: req.userId });
     res.json({ ok: true, status: 'generating' });
   } catch (err) {
+    if (rejectJobLimit(res, err)) return;
     res.status(502).json({ error: 'AI gagal menghasilkan roadmap.', detail: (err as Error).message });
   }
 });
 
 roadmapRouter.get('/api/projects/:id/roadmap', requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({
-    where: { id: req.params.id, userId: req.userId },
+    where: projectWhere(req.userId, req.params.id),
     include: {
       roadmap: {
         orderBy: { order: 'asc' },

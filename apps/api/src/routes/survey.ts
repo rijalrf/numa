@@ -1,13 +1,84 @@
 // Survey wizard: pertanyaan adaptif per putaran, generate async, submit jawaban.
+import { logger, serializeError } from '../lib/logger.js';
 import { Router } from 'express';
+import { projectWhere } from '../lib/access.js';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireUser, type AuthedRequest } from '../middleware/require-user.js';
 import { getUserPlan, PLANS } from '../lib/billing.js';
 import { generateSurveyRound, generateSurveySummary } from '../lib/survey.js';
-import { startAiJob, getLatestJob, hasActiveJob } from '../lib/ai/job.js';
+import { enqueueAiJob, getLatestJob, hasActiveJob, registerJobHandler, toClientStatus, NonRetryableJobError, rejectJobLimit } from '../lib/ai/job.js';
 
 export const surveyRouter = Router();
+
+type SurveyRoundPayload = { round: number; totalRounds: number };
+
+// Jawaban terbaru per pertanyaan, dipakai sebagai konteks adaptif dan ringkasan.
+async function collectAnswers(projectId: string, roundBelow?: number) {
+  const questions = await prisma.discoveryQuestion.findMany({
+    where: { projectId, ...(roundBelow ? { round: { lt: roundBelow } } : {}) },
+    include: { answers: { orderBy: { createdAt: 'desc' }, take: 1 } },
+    orderBy: [{ round: 'asc' }, { order: 'asc' }],
+  });
+  return questions
+    .filter((q) => q.answers.length > 0 && q.answers[0].answer)
+    .map((q) => ({ question: q.question, answer: q.answers[0].answer }));
+}
+
+registerJobHandler<SurveyRoundPayload>('survey_round', async ({ projectId, payload }) => {
+  const round = payload?.round ?? 1;
+  const totalRounds = payload?.totalRounds ?? 1;
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { idea: true } });
+  if (!project) throw new NonRetryableJobError('Project tidak ditemukan.');
+
+  // Idempoten: percobaan ulang tidak menggandakan pertanyaan yang sudah tersimpan.
+  if ((await prisma.discoveryQuestion.count({ where: { projectId, round } })) > 0) return { round };
+
+  const generated = await generateSurveyRound({
+    idea: project.idea,
+    priorAnswers: round > 1 ? await collectAnswers(projectId, round) : [],
+    round,
+    totalRounds,
+    projectId,
+  });
+
+  await prisma.$transaction(
+    generated.map((q, i) =>
+      prisma.discoveryQuestion.create({
+        data: {
+          projectId,
+          round,
+          order: i + 1,
+          question: q.label,
+          context: q.id,
+          kind: q.kind,
+          options: q.options,
+          required: q.required,
+          suggestion: q.suggestion,
+          suggestionReason: q.suggestionReason,
+        },
+      })
+    )
+  );
+  return { round };
+});
+
+registerJobHandler('survey_summary', async ({ projectId }) => {
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { idea: true } });
+  if (!project) throw new NonRetryableJobError('Project tidak ditemukan.');
+
+  const summary = await generateSurveySummary({
+    idea: project.idea,
+    answers: await collectAnswers(projectId),
+    projectId,
+  });
+  await prisma.project.update({
+    where: { id: projectId },
+    data: { name: summary.name, description: summary.summary },
+  });
+  return summary;
+});
+
 
 const SurveySubmitSchema = z.object({
   round: z.number().int().min(1),
@@ -21,14 +92,14 @@ const SurveySubmitSchema = z.object({
 
 surveyRouter.get('/api/projects/:id/survey', requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({
-    where: { id: req.params.id, userId: req.userId },
+    where: projectWhere(req.userId, req.params.id),
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
 
   const { plan } = await getUserPlan(req.userId);
   const totalRounds = PLANS[plan]?.surveyRounds ?? 1;
 
-  let existingQuestions = await prisma.discoveryQuestion.findMany({
+  const existingQuestions = await prisma.discoveryQuestion.findMany({
     where: { projectId: project.id },
     include: { answers: { orderBy: { createdAt: 'desc' }, take: 1 } },
     orderBy: [{ round: 'asc' }, { order: 'asc' }],
@@ -40,7 +111,7 @@ surveyRouter.get('/api/projects/:id/survey', requireUser, async (req: AuthedRequ
   let generationError = null;
   if (existingQuestions.length === 0) {
     const job = await getLatestJob(project.id, 'survey_round');
-    generationStatus = job?.status === 'running' ? 'generating' : (job?.status ?? 'idle');
+    generationStatus = toClientStatus(job?.status);
     generationError = job?.error ?? null;
   }
 
@@ -95,7 +166,7 @@ surveyRouter.get('/api/projects/:id/survey', requireUser, async (req: AuthedRequ
 
 surveyRouter.post('/api/projects/:id/survey/generate', requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({
-    where: { id: req.params.id, userId: req.userId },
+    where: projectWhere(req.userId, req.params.id),
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
 
@@ -111,42 +182,14 @@ surveyRouter.post('/api/projects/:id/survey/generate', requireUser, async (req: 
   const { plan } = await getUserPlan(req.userId);
   const totalRounds = PLANS[plan]?.surveyRounds ?? 1;
   const projectId = project.id;
-  const idea = project.idea;
 
   try {
-    await startAiJob(projectId, 'survey_round', async () => {
-      const generated = await generateSurveyRound({
-        idea,
-        priorAnswers: [],
-        round: 1,
-        totalRounds,
-        projectId,
-      });
-
-      await prisma.$transaction(
-        generated.map((q, i) =>
-          prisma.discoveryQuestion.create({
-            data: {
-              projectId,
-              round: 1,
-              order: i + 1,
-              question: q.label,
-              context: q.id,
-              kind: q.kind,
-              options: q.options,
-              required: q.required,
-              suggestion: q.suggestion,
-              suggestionReason: q.suggestionReason,
-            },
-          })
-        )
-      );
-      return { round: 1 };
-    });
+    await enqueueAiJob({ projectId, type: 'survey_round', userId: req.userId, payload: { round: 1, totalRounds } });
 
     res.json({ ok: true, status: 'generating' });
   } catch (err) {
-    console.error('[survey] Gagal memulai generate round 1:', err);
+    logger.error('Gagal memulai generate survey round 1', { scope: 'survey', error: serializeError(err) });
+    if (rejectJobLimit(res, err)) return;
     res.status(502).json({ error: 'Gagal menyusun pertanyaan survey tahap 1.' });
   }
 });
@@ -156,7 +199,7 @@ surveyRouter.post('/api/projects/:id/survey/submit', requireUser, async (req: Au
   if (!parsed.success) return res.status(400).json({ error: 'Data jawaban survey tidak valid.' });
 
   const project = await prisma.project.findFirst({
-    where: { id: req.params.id, userId: req.userId },
+    where: projectWhere(req.userId, req.params.id),
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
 
@@ -201,104 +244,42 @@ surveyRouter.post('/api/projects/:id/survey/submit', requireUser, async (req: Au
       await prisma.discoveryQuestion.deleteMany({ where: { id: { in: qIds } } });
     }
 
-    // Ambil seluruh jawaban hingga round saat ini untuk konteks adaptif
-    const allAnsweredQuestions = await prisma.discoveryQuestion.findMany({
-      where: { projectId: project.id, round: { lte: currentRound } },
-      include: { answers: { orderBy: { createdAt: 'desc' }, take: 1 } },
-      orderBy: [{ round: 'asc' }, { order: 'asc' }],
-    });
-    const priorAnswers = allAnsweredQuestions
-      .filter((q) => q.answers.length > 0 && q.answers[0].answer)
-      .map((q) => ({ question: q.question, answer: q.answers[0].answer }));
-
     if (await hasActiveJob(project.id, 'survey_round')) {
       return res.json({ done: false, nextRound, totalRounds, status: 'generating' });
     }
 
     const projectId = project.id;
-    const idea = project.idea;
     try {
-      await startAiJob(projectId, 'survey_round', async () => {
-        const nextGenerated = await generateSurveyRound({
-          idea,
-          priorAnswers,
-          round: nextRound,
-          totalRounds,
-          projectId,
-        });
-
-        await prisma.$transaction(
-          nextGenerated.map((nq, i) =>
-            prisma.discoveryQuestion.create({
-              data: {
-                projectId,
-                round: nextRound,
-                order: i + 1,
-                question: nq.label,
-                context: nq.id,
-                kind: nq.kind,
-                options: nq.options,
-                required: nq.required,
-                suggestion: nq.suggestion,
-                suggestionReason: nq.suggestionReason,
-              },
-            })
-          )
-        );
-        return { nextRound };
-      });
+      await enqueueAiJob({ projectId, type: 'survey_round', userId: req.userId, payload: { round: nextRound, totalRounds } });
 
       return res.json({ done: false, nextRound, totalRounds, status: 'generating' });
     } catch (err) {
-      console.error(`[survey] Gagal memulai generate pertanyaan round ${nextRound}:`, err);
+      logger.error('Gagal memulai generate pertanyaan survey', { scope: 'survey', round: nextRound, error: serializeError(err) });
+      if (rejectJobLimit(res, err)) return;
       return res.status(502).json({ error: `Gagal menyusun pertanyaan tahap ${nextRound}.` });
     }
   }
 
   // 3. Putaran terakhir telah selesai -> Susun Ringkasan Produk Terstruktur (async)
-  const allFinalQuestions = await prisma.discoveryQuestion.findMany({
-    where: { projectId: project.id },
-    include: { answers: { orderBy: { createdAt: 'desc' }, take: 1 } },
-    orderBy: [{ round: 'asc' }, { order: 'asc' }],
-  });
-  const allAnswers = allFinalQuestions
-    .filter((q) => q.answers.length > 0 && q.answers[0].answer)
-    .map((q) => ({ question: q.question, answer: q.answers[0].answer }));
-
   if (await hasActiveJob(project.id, 'survey_summary')) {
     return res.json({ done: true, totalRounds, status: 'generating' });
   }
 
   const projectId = project.id;
-  const idea = project.idea;
   try {
-    await startAiJob(projectId, 'survey_summary', async () => {
-      const summary = await generateSurveySummary({
-        idea,
-        answers: allAnswers,
-        projectId,
-      });
-
-      await prisma.project.update({
-        where: { id: projectId },
-        data: {
-          name: summary.name,
-          description: summary.summary,
-        },
-      });
-      return summary;
-    });
+    await enqueueAiJob({ projectId, type: 'survey_summary', userId: req.userId });
 
     return res.json({ done: true, totalRounds, status: 'generating' });
   } catch (err) {
-    console.error('[survey] Gagal memulai generate survey summary:', err);
+    logger.error('Gagal memulai generate survey summary', { scope: 'survey', error: serializeError(err) });
+    if (rejectJobLimit(res, err)) return;
     return res.status(502).json({ error: 'Gagal menyusun ringkasan produk.', detail: (err as Error).message });
   }
 });
 
 surveyRouter.post('/api/projects/:id/survey/complete', requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({
-    where: { id: req.params.id, userId: req.userId },
+    where: projectWhere(req.userId, req.params.id),
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
 

@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { PricingDialog } from '@/components/billing/pricing-dialog';
 import {
-  Sparkles,
   ArrowRight,
   Loader2,
 } from 'lucide-react';

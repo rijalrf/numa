@@ -1,39 +1,37 @@
 // Logic command `done` — tandai task selesai + runtime scope guard + optional auto-commit.
 import fs from 'node:fs';
 import path from 'node:path';
-import { loadConfig } from '../config.js';
-import { api, ensureActiveProject } from '../api-client.js';
+import { api, type GuardReportPayload } from '../api-client.js';
 import { runGuard, GuardError, generateConventionalCommit, gitCommit } from '../guard.js';
+import { requireSession, resolveTaskId } from '../session.js';
+import { loadTaskState } from '../task-state.js';
+import { CLI_VERSION } from '../version.js';
 
 export type DoneOptions = {
   force?: boolean;
   dir?: string;
   summary?: string;
   commit?: boolean;
+  allowUnlisted?: boolean;
 };
 
 export async function runDone(id?: string, opts?: DoneOptions): Promise<void> {
-  const cfg = loadConfig();
-  if (!cfg.token) {
-    console.error('Belum login. Jalankan: numa login <token>');
-    process.exit(1);
-  }
-  if (!(await ensureActiveProject(cfg))) {
-    process.exit(1);
-  }
-  const taskId = id ?? cfg.activeTaskId;
-  if (!taskId) {
-    console.error('Tidak ada task aktif. Jalankan: numa next');
-    process.exit(1);
-  }
+  const cfg = await requireSession();
+  const taskId = resolveTaskId(cfg, id);
+  const cwd = opts?.dir ?? process.cwd();
 
-  if (!opts?.force) {
+  let guardReport: GuardReportPayload | undefined;
+  const forced = opts?.force === true;
+
+  if (!forced) {
     // Ambil guard spec dari context endpoint
     const ctx = await api.context(cfg, taskId);
     if (ctx.guard) {
-      const cwd = opts?.dir ?? process.cwd();
       try {
-        await runGuard(ctx.guard, cwd, taskId);
+        guardReport = await runGuard(ctx.guard, cwd, taskId, {
+          state: loadTaskState(cwd, taskId),
+          allowUnlisted: opts?.allowUnlisted,
+        });
       } catch (e) {
         if (e instanceof GuardError) {
           console.error(e.message);
@@ -62,11 +60,11 @@ export async function runDone(id?: string, opts?: DoneOptions): Promise<void> {
       console.log('Task ini tidak memiliki guard spec. Lewati validasi lokal.');
     }
   } else {
-    console.log('--force: lewati runtime scope guard.');
+    console.log('--force: runtime scope guard dilewati. Penggunaan --force akan tercatat di server.');
+    guardReport = { baseline: null, changedFiles: [], outOfScopeFiles: [], commands: [], cliVersion: CLI_VERSION };
   }
 
   if (opts?.commit) {
-    const cwd = opts?.dir ?? process.cwd();
     try {
       const taskCtx = await api.context(cfg, taskId);
       const match = taskCtx.markdown.match(/^###\s*\[TASK\s*(\d+)\]\s*(.+)$/m);
@@ -86,7 +84,7 @@ export async function runDone(id?: string, opts?: DoneOptions): Promise<void> {
     }
   }
 
-  const r = await api.done(cfg, taskId, { outputSummary: opts?.summary });
+  const r = await api.done(cfg, taskId, { outputSummary: opts?.summary, forced, guardReport });
   console.log(`Task ${r.taskId} -> ${r.status}`);
   if (r.checkpointPending) {
     console.log(`\n!!! CHECKPOINT PENDING !!!`);

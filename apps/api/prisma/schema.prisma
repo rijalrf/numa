@@ -34,6 +34,7 @@ model User {
   chatSessions   ChatSession[]
   subscription   Subscription?
   payments       Payment[]
+  memberships    Membership[]
 }
 
 model Session {
@@ -85,8 +86,10 @@ model Verification {
 // ============================================================
 
 model Project {
+  artifactVersions ArtifactVersion[]
   id          String   @id @default(cuid())
   userId      String
+  orgId       String?                    // null = project pribadi milik userId
   name        String
   idea        String   // ide mentah dari onboarding
   description String?
@@ -99,9 +102,11 @@ model Project {
   updatedAt   DateTime @updatedAt
 
   user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org              Organization?        @relation(fields: [orgId], references: [id], onDelete: SetNull)
   stacks           Stack[]
   questions        DiscoveryQuestion[]
   prd              Prd?
+  businessFlow     BusinessFlow?
   roadmap          RoadmapPhase[]
   tasks            Task[]
   cycles           ProjectCycle[]
@@ -110,9 +115,11 @@ model Project {
   chatSession      ChatSession?
   treeNodes        TreeNode[]
   aiCallLogs       AiCallLog[]
+  validationReports ValidationReport[]
   aiJobs           AiJob[]
 
   @@index([userId])
+  @@index([orgId])
 }
 
 model Stack {
@@ -166,6 +173,18 @@ model Prd {
   version     Int      @default(1)
   generatedAt DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model BusinessFlow {
+  id        String   @id @default(cuid())
+  projectId String   @unique
+  // Diagram alur bisnis swimlane: { processName, lanes, steps, edges }
+  content   Json
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
@@ -289,6 +308,10 @@ model AgentToken {
   tokenHash   String            @unique // sha256(token)
   lastUsedAt  DateTime?
   isRevoked   Boolean           @default(false)
+  // Null = tidak kedaluwarsa (token lama). Token baru selalu memiliki masa berlaku.
+  expiresAt   DateTime?
+  // true = token universal (semua project milik user). false = hanya project di AgentTokenScope.
+  allProjects Boolean           @default(false)
   createdAt   DateTime          @default(now())
 
   user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -397,18 +420,42 @@ model TreeNode {
 
 // Status job AI async (fire-and-forget + polling frontend).
 model AiJob {
-  id         String    @id @default(cuid())
-  projectId  String
-  type       String    // tasks_generate | cycle_generate | roadmap_generate | survey_round | survey_summary | tree_generate | techstack_recommend | chat_finalize
-  status     String    @default("running") // running | done | failed
-  error      String?
-  result     Json?
-  createdAt  DateTime  @default(now())
-  finishedAt DateTime?
+  id          String    @id @default(cuid())
+  projectId   String
+  userId      String?   // pemicu job (untuk audit dan budget per tenant)
+  type        String    // lihat AI_JOB_TYPES di lib/ai/job.ts
+  status      String    @default("queued") // queued | running | done | failed | cancelled
+  payload     Json?     // input handler; handler membaca state lain langsung dari DB
+  error       String?
+  result      Json?
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(2)
+  runAfter    DateTime  @default(now())     // jadwal eksekusi (backoff retry)
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+  heartbeatAt DateTime?
+  finishedAt  DateTime?
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId, type, status])
+  @@index([status, runAfter])
+}
+
+// Laporan quality gate hasil generate artefak (mis. tasks). Sumber data banner kualitas di web.
+model ValidationReport {
+  id        String   @id @default(cuid())
+  projectId String
+  kind      String   // tasks_generate | cycle_generate
+  // Ringkasan: { errors: n, warnings: n, infos: n }
+  summary   Json
+  // Daftar temuan: [{ code, severity, message, refs? }]
+  findings  Json
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, kind, createdAt])
 }
 
 model AiCallLog {
@@ -423,13 +470,20 @@ model AiCallLog {
   retryCount    Int      @default(0)
   success       Boolean  @default(true)
   failureReason String?
+  tier          String?  // reasoning | cheap
+  promptVersion String?  // versi prompt, untuk membandingkan sebelum dan sesudah optimasi
+  estimated     Boolean  @default(false) // true bila token ditaksir karena provider tidak mengirim usage
+  userId        String?  // pemilik tagihan (Project.userId) saat panggilan terjadi; dasar budget token
+  orgId         String?  // organisasi project saat panggilan terjadi (atribusi laporan)
   createdAt     DateTime @default(now())
 
-  project       Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  // SetNull: log tetap ada setelah project dihapus agar budget bulanan tidak bisa dihindari dengan menghapus project.
+  project       Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
   @@index([agentName])
   @@index([createdAt])
+  @@index([userId, createdAt])
 }
 
 // ============================================================
@@ -466,3 +520,65 @@ model Payment {
   @@index([midtransId])
 }
 
+
+// Organisasi (tenant) tempat beberapa user berbagi project.
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members  Membership[]
+  projects Project[]
+}
+
+// Peran: owner | admin | member | viewer
+model Membership {
+  id        String   @id @default(cuid())
+  orgId     String
+  userId    String
+  role      String   @default("member")
+  createdAt DateTime @default(now())
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+  @@index([userId])
+}
+
+// Jejak audit aksi sensitif. Tanpa FK agar tetap ada setelah entitas terkait dihapus.
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorType   String   // user | agent | system
+  actorUserId String?
+  orgId       String?
+  projectId   String?
+  action      String   // mis. org.member.add, token.revoke, task.force_complete
+  targetType  String?
+  targetId    String?
+  metadata    Json?
+  ip          String?
+  createdAt   DateTime @default(now())
+
+  @@index([orgId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([action])
+}
+
+// Snapshot versi lama artefak (PRD, business flow) sebelum ditimpa generate ulang atau perubahan siklus.
+model ArtifactVersion {
+  id        String   @id @default(cuid())
+  projectId String
+  kind      String   // prd | business_flow
+  version   Int      // nomor versi konten yang disimpan di snapshot ini
+  content   Json
+  reason    String?  // mis. prd_regenerate, cycle_merge, flow_regenerate
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, kind, version])
+}

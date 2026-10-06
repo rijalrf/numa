@@ -6,7 +6,7 @@ import { api } from '@/lib/http';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, Code, Compass, User, Loader2 } from 'lucide-react';
+import { AlertCircle, Code, Compass, User } from 'lucide-react';
 import { useWizardNav } from '@/components/layout/wizard-nav';
 
 const EXPERIENCE_OPTIONS = [

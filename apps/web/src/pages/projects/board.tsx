@@ -2,7 +2,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api, downloadFile } from '@/lib/http';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { NumaLoader } from '@/components/ui/numa-loader';
@@ -25,6 +24,7 @@ import {
   type TaskDetail,
 } from '@/components/kanban/task-detail-dialog';
 import { KanbanColumn } from '@/components/kanban/kanban-column';
+import { CheckpointBanner } from '@/components/kanban/checkpoint-banner';
 import { CycleBar } from '@/components/cycle/cycle-bar';
 import { CycleDetailDialog } from '@/components/cycle/cycle-detail-dialog';
 import { ChangeRequestPanel } from '@/components/cycle/change-request-panel';
@@ -196,6 +196,14 @@ export function BoardPage() {
 
   return (
     <div className="space-y-4">
+      {/* Checkpoint menunggu persetujuan; dimuat ulang setiap jumlah task DONE berubah */}
+      {projectId && (
+        <CheckpointBanner
+          projectId={projectId}
+          refreshKey={tasks.filter((t) => t.status === 'DONE').length}
+        />
+      )}
+
       {/* Banner Error jika terjadi kesalahan */}
       {error && (
         <AlertBanner variant="destructive" className="gap-3 p-3">

@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - main
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, Test, Validasi Prisma
+    runs-on: ubuntu-latest
+    env:
+      # Placeholder untuk prisma validate/generate; tidak pernah terhubung ke database.
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependensi
+        run: npm ci
+
+      - name: Audit dependensi produksi
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Deteksi dead code dan dependensi tak terpakai
+        run: npm run deadcode
+
+      - name: Validasi dan generate Prisma
+        working-directory: apps/api
+        run: |
+          npx prisma validate
+          npx prisma generate
+
+      - name: Typecheck API
+        working-directory: apps/api
+        run: npx tsc --noEmit -p .
+
+      - name: Build API
+        working-directory: apps/api
+        run: npx tsc -p . --outDir "${{ runner.temp }}/api-dist"
+
+      - name: Typecheck Web
+        working-directory: apps/web
+        run: npx tsc --noEmit -p .
+
+      - name: Typecheck CLI
+        working-directory: packages/cli
+        run: npx tsc --noEmit -p .
+
+      - name: Test API
+        working-directory: apps/api
+        run: npm test
+
+      - name: Test Web
+        working-directory: apps/web
+        run: npm test
+
+      - name: Test CLI
+        working-directory: packages/cli
+        run: npm test

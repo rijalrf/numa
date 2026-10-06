@@ -1,6 +1,8 @@
 // Generate PRD sebagai real markdown document via streaming. Product Requirements Document canonical spec.
 import { z } from 'zod';
 import { generateTextStream } from './ai-service.js';
+import { PROMPT_VERSIONS } from './prompts.js';
+import { ProductSpecSchema, type ProductSpec } from './product-spec.js';
 
 export type RequirementItem = {
   id: string; // e.g. FR-001, PR-001, BR-001
@@ -15,6 +17,12 @@ export type PrdDoc = {
   productRules?: Array<{ id: string; description: string }>;
   businessRules?: Array<{ id: string; description: string }>;
   nonFunctional?: string[];
+  /** Spec terstruktur hasil ekstraksi; tidak ada pada PRD lama sebelum diekstrak. */
+  spec?: ProductSpec;
+  /** Turunan dari spec.entities (atau JSON legacy), dipakai generator task dan numa context. */
+  dataModels?: ProductSpec['entities'];
+  /** Turunan dari spec.endpoints (atau JSON legacy). */
+  apiEndpoints?: ProductSpec['endpoints'];
 };
 
 export type PrdData = PrdDoc;
@@ -25,7 +33,8 @@ export function parseRequirementIndex(markdown: string): RequirementItem[] {
   const seen = new Set<string>();
   const lines = markdown.split('\n');
 
-  const regex = /\b((?:FR|PR|BR)-\d{3})\b(?:\s*[:\-–]\s*(.*?))?$/;
+  // Toleran terhadap penebalan markdown: '- **FR-001**: Judul' dan '- FR-001: Judul'
+  const regex = /\b((?:FR|PR|BR)-\d{3})\b\*{0,2}(?:\s*[:\-–]\s*(.*?))?$/;
   for (const rawLine of lines) {
     const line = rawLine.trim();
     if (!line) continue;
@@ -65,14 +74,20 @@ export function readPrdContent(content: unknown): PrdDoc {
           ? (obj.requirementIndex as RequirementItem[])
           : parseRequirementIndex(obj.markdown);
 
+      const parsedSpec = obj.spec ? ProductSpecSchema.safeParse(obj.spec) : null;
+      const spec = parsedSpec?.success ? parsedSpec.data : undefined;
+
       return {
         markdown: obj.markdown,
         requirementIndex,
         overview: typeof obj.overview === 'string' ? obj.overview : undefined,
         goals: Array.isArray(obj.goals) ? obj.goals : undefined,
-        productRules: Array.isArray(obj.productRules) ? obj.productRules : undefined,
+        productRules: Array.isArray(obj.productRules) ? obj.productRules : spec?.rules,
         businessRules: Array.isArray(obj.businessRules) ? obj.businessRules : undefined,
         nonFunctional: Array.isArray(obj.nonFunctional) ? obj.nonFunctional : undefined,
+        spec,
+        dataModels: spec?.entities,
+        apiEndpoints: spec?.endpoints,
       };
     }
 
@@ -114,6 +129,8 @@ export function readPrdContent(content: unknown): PrdDoc {
       productRules: Array.isArray(rules) ? rules : undefined,
       businessRules: Array.isArray(rules) ? rules : undefined,
       nonFunctional: Array.isArray(obj.nonFunctional) ? obj.nonFunctional : undefined,
+      dataModels: Array.isArray(obj.dataModels) ? obj.dataModels : undefined,
+      apiEndpoints: Array.isArray(obj.apiEndpoints) ? obj.apiEndpoints : undefined,
     };
   }
 
@@ -122,14 +139,12 @@ export function readPrdContent(content: unknown): PrdDoc {
 
 // Zod schema untuk validasi & transformasi seragam
 export const PrdSchema = z.custom<any>().transform((data) => readPrdContent(data));
-export const BrdSchema = PrdSchema;
-export type BrdData = PrdData;
 
 export async function generatePrdMarkdownStream(
   args: {
     idea: string;
     questions?: { question: string; answer: string }[];
-    projectId?: string;
+    projectId: string;
     techStack?: string[];
     chatHistory?: string;
   },
@@ -156,7 +171,7 @@ export async function generatePrdMarkdownStream(
     : '';
   const ideaText = fence('IDE PENGGUNA', args.idea);
 
-  const system = `Anda adalah Arsitek Software berpengalaman.
+  const system = `Anda adalah Product Manager senior dengan kemampuan analisis sistem (data model dan kontrak API).
 Hasilkan dokumen PRD (Product Requirements Document) formal, komprehensif, dan nyata dalam format MARKDOWN MURNI.
 PRD ini adalah kontrak arsitektur dan fungsional mutlak bagi tim rekayasa perangkat lunak dan AI coding agent downstream.
 
@@ -190,6 +205,7 @@ Hasilkan dokumen PRD Markdown lengkap sekarang.`;
 
   const markdown = await generateTextStream(system, user, {
     agentName: 'CanonicalPrdMarkdownStream',
+    promptVersion: PROMPT_VERSIONS.prd,
     projectId: args.projectId,
     onChunk,
   });
@@ -200,16 +216,3 @@ Hasilkan dokumen PRD Markdown lengkap sekarang.`;
     requirementIndex,
   };
 }
-
-// Backward compatibility: generatePRDFromDiscovery memanggil streaming wrapper
-export async function generatePRDFromDiscovery(args: {
-  idea: string;
-  questions?: { question: string; answer: string }[];
-  projectId?: string;
-  techStack?: string[];
-  chatHistory?: string;
-}): Promise<PrdDoc> {
-  return generatePrdMarkdownStream(args);
-}
-
-export const generateBRDFromDiscovery = generatePRDFromDiscovery;

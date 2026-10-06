@@ -1,6 +1,5 @@
 // ZIP generator in-memory (store-only, tanpa dependensi pihak ketiga).
 // ponytail: store-only (tanpa kompresi), dokumen teks kecil (<1MB). Upgrade ke zlib deflateRaw jika ukuran membesar.
-import assert from 'node:assert';
 
 export interface ZipFileEntry {
   name: string;
@@ -92,14 +91,4 @@ export function buildZip(files: ZipFileEntry[]): Buffer {
   eocd.writeUInt16LE(0, 20); // comment length
 
   return Buffer.concat([...localChunks, ...cdChunks, eocd]);
-}
-
-// Self-check assert runnable
-export function _selfCheckZip() {
-  const zip = buildZip([
-    { name: 'hello.txt', content: 'Halo Dunia' },
-    { name: 'sub/doc.md', content: '# Judul' },
-  ]);
-  assert(zip.length > 50, 'Ukuran zip minimal harus valid');
-  assert(zip.readUInt32LE(0) === 0x04034b50, 'Magic number header harus valid');
 }

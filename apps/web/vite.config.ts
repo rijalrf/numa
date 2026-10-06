@@ -12,7 +12,7 @@ export default defineConfig({
     strictPort: true,
     host: true,
     // Izinkan akses lewat domain tunnel Cloudflare / reverse proxy (selain localhost).
-    allowedHosts: ['numa.mrijal.my.id', 'numa.opendv.xyz'],
+    allowedHosts: (process.env.VITE_ALLOWED_HOSTS ?? '').split(',').map((h) => h.trim()).filter(Boolean),
     fs: {
       deny: [
         '.env',

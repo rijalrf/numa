@@ -1,15 +1,22 @@
 // Fungsi AI untuk sesi chat ide awal dan struktur dekomposisi: finalizeChatSession, recommendTechStack, generateTreeFromPrd
-import { generateJson } from './ai-service';
-import { TreeDataSchema, type TreeData, RecommendTechStackSchema } from './schemas';
-import { normalizeToGoldenPack } from './golden-stack';
+import { logger, serializeError } from '../logger.js';
+import { HttpError } from '../http-error.js';
+import { generateJson } from './ai-service.js';
+import { snapshotArtifact } from '../artifact-version.js';
+import { TreeDataSchema, type TreeData, BusinessFlowSchema, RecommendTechStackSchema } from './schemas.js';
+import { normalizeToGoldenPack } from './golden-stack.js';
+import { readPrdContent } from './prd.js';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 import {
   RECOMMEND_TECH_STACK_PROMPT,
   GENERATE_TREE_PROMPT,
-} from './prompts';
-import { prisma } from '../prisma';
-import { checkProjectLimit } from '../billing';
+  APP_NAME_PROMPT,
+  PROMPT_VERSIONS,
+  GENERATE_FLOW_PROMPT,
+} from './prompts.js';
+import { prisma } from '../prisma.js';
+import { checkProjectLimit } from '../billing.js';
 
 // ===============================================
 // FINALIZE PROJECT DARI CHAT SESSION
@@ -19,10 +26,11 @@ export async function finalizeChatSession(sessionId: string, userId: string, ini
   // 1. Cek batasan kuota project
   const limitCheck = await checkProjectLimit(userId);
   if (!limitCheck.allowed) {
-    const err: any = new Error(`Kuota proyek tercapai (maksimal ${limitCheck.quotaMax} proyek aktif untuk paket ${limitCheck.plan}).`);
-    err.status = 403;
-    err.code = 'project_limit_reached';
-    throw err;
+    throw new HttpError(
+      403,
+      `Kuota proyek tercapai (maksimal ${limitCheck.quotaMax} proyek aktif untuk paket ${limitCheck.plan}).`,
+      'project_limit_reached',
+    );
   }
 
   // 2. Ambil ide dari parameter atau chat message
@@ -75,11 +83,13 @@ export async function postFinalizeProject(projectId: string, rawIdea: string, _u
   // Generate nama aplikasi ringkas secara cepat
   try {
     const resName = await generateJson({
-      system: 'Anda adalah penamaan produk profesional. Hasilkan nama aplikasi yang ringkas, modern, dan relevan (maksimal 2-4 kata) berdasarkan ide pengguna. Bahasa Indonesia atau istilah umum industri software, TANPA EMOJI.',
+      system: APP_NAME_PROMPT,
       user: `Ide aplikasi pengguna:\n${rawIdea}`,
       schema: z.object({ name: z.string() }),
       tier: 'cheap',
       agentName: 'generateAppName',
+      promptVersion: PROMPT_VERSIONS.appName,
+      projectId,
     });
     if (resName.name && resName.name.trim().length > 0) {
       appName = resName.name.trim();
@@ -89,10 +99,20 @@ export async function postFinalizeProject(projectId: string, rawIdea: string, _u
       });
     }
   } catch (err) {
-    console.warn('[chat] Gagal generate nama app cepat, pakai nama sementara:', err);
+    logger.warn('Gagal generate nama app cepat, pakai nama sementara', { scope: 'chat', error: serializeError(err) });
   }
 
   return { projectId };
+}
+
+/**
+ * Teks PRD untuk prompt tree dan flow: cukup markdown, tanpa spec (entitas dan endpoint) dan indeks requirement
+ * yang tidak dipakai kedua generator itu. PRD tanpa markdown (format lama) dikirim utuh seperti sebelumnya.
+ */
+function prdTextForPrompt(content: unknown): string {
+  const markdown = readPrdContent(content).markdown;
+  if (markdown) return markdown;
+  return typeof content === 'string' ? content : JSON.stringify(content);
 }
 
 // ===============================================
@@ -114,6 +134,9 @@ export async function recommendTechStack(projectId: string): Promise<{ techStack
     user: `Nama aplikasi: ${project.name}\nIde & fitur: ${prdContent}`,
     schema: RecommendTechStackSchema,
     maxRetries: 2,
+    agentName: 'TechStackArchitect',
+    promptVersion: PROMPT_VERSIONS.techStack,
+    projectId,
   });
 
   return {
@@ -134,7 +157,7 @@ export async function generateTreeFromPrd(projectId: string): Promise<{ id: stri
 
   if (!project || !prd) throw new Error('Project atau PRD tidak ditemukan');
 
-  const prdContent = typeof prd.content === 'string' ? prd.content : JSON.stringify(prd.content);
+  const prdContent = prdTextForPrompt(prd.content);
 
   const treeData = await generateJson({
     system: GENERATE_TREE_PROMPT,
@@ -142,6 +165,8 @@ export async function generateTreeFromPrd(projectId: string): Promise<{ id: stri
     schema: TreeDataSchema,
     maxRetries: 2,
     agentName: 'generateTreeFromPrd',
+    promptVersion: PROMPT_VERSIONS.tree,
+    projectId,
   });
 
   // Flatten ke TreeNode dalam satu transaksi
@@ -158,8 +183,43 @@ export async function generateTreeFromPrd(projectId: string): Promise<{ id: stri
   return flatNodes;
 }
 
-// Backward compatibility alias
-export const generateTreeFromBrd = generateTreeFromPrd;
+// ===============================================
+// GENERATE BUSINESS FLOW DIAGRAM DARI PRD
+// ===============================================
+
+/**
+ * Menghasilkan diagram alur bisnis swimlane (lane per persona) dari PRD project
+ * dan menyimpannya di tabel BusinessFlow (satu baris per project, versi naik tiap generate ulang).
+ */
+export async function generateFlowFromPrd(projectId: string): Promise<{ stepCount: number; laneCount: number }> {
+  const [project, prd] = await Promise.all([
+    prisma.project.findUnique({ where: { id: projectId } }),
+    prisma.prd.findUnique({ where: { projectId } }),
+  ]);
+
+  if (!project || !prd) throw new Error('Project atau PRD tidak ditemukan');
+
+  const prdContent = prdTextForPrompt(prd.content);
+
+  const flow = await generateJson({
+    system: GENERATE_FLOW_PROMPT,
+    user: `Nama aplikasi: ${project.name}\nPRD / deskripsi lengkap: ${prdContent}`,
+    schema: BusinessFlowSchema,
+    maxRetries: 2,
+    agentName: 'generateFlowFromPrd',
+    promptVersion: PROMPT_VERSIONS.flow,
+    projectId,
+  });
+
+  await snapshotArtifact(projectId, 'business_flow', 'flow_regenerate');
+  await prisma.businessFlow.upsert({
+    where: { projectId },
+    create: { projectId, content: flow },
+    update: { content: flow, version: { increment: 1 } },
+  });
+
+  return { stepCount: flow.steps.length, laneCount: flow.lanes.length };
+}
 
 // Helper: recursive flatten dari TreeDataSchema
 function flattenTree(data: TreeData, projectId: string) {

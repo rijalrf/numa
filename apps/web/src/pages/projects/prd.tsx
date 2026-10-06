@@ -22,7 +22,7 @@ export function PrdPage() {
   const [userPlan, setUserPlan] = useState<{ plan: string; planName: string } | null>(null);
   const [pricingOpen, setPricingOpen] = useState(false);
 
-  const { markdown, setMarkdown, generating, error, setError, streamPrd } = usePrdStream(projectId, isLocked);
+  const { markdown, setMarkdown, generating, error, streamPrd } = usePrdStream(projectId, isLocked);
 
   // Load status project & PRD saat mount
   useEffect(() => {

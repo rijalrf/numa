@@ -1,0 +1,34 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        "scripts/*.ts"
+      ],
+      "ignoreDependencies": [
+        "@prisma/client"
+      ]
+    },
+    "apps/api": {
+      "entry": [
+        "src/**/__tests__/*.test.ts"
+      ]
+    },
+    "apps/web": {
+      "entry": [
+        "tests/*.test.ts"
+      ]
+    },
+    "packages/cli": {
+      "entry": [
+        "src/__tests__/*.test.ts"
+      ]
+    }
+  },
+  "rules": {
+    "exports": "off",
+    "types": "off",
+    "enumMembers": "off",
+    "duplicates": "off"
+  }
+}

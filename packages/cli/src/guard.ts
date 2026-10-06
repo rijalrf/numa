@@ -3,17 +3,39 @@
 // sebelum numa done mengirim status ke API. Server tidak bisa akses filesystem laptop user,
 // jadi guard ini wajib berjalan di CLI.
 import { spawn } from 'node:child_process';
+import { checkCommand } from './command-policy.js';
+import { confirm } from './prompt.js';
+import { changedSinceStart, type TaskState } from './task-state.js';
+import { CLI_VERSION } from './version.js';
 
 export type GuardSpec = {
   layer?: string;
   forbidden?: string[];
   files_readonly?: string[];
   files_to_create?: string[];
+  files_to_modify?: string[];
   validation_commands?: string[];
   advisory_commands?: string[];
 };
 
 export type FailureType = 'FORBIDDEN_FILES' | 'TEST_FAILURE' | 'COMMAND_FAILURE' | 'RUNTIME_ERROR';
+
+export type GuardCommandResult = { command: string; ok: boolean; skipped?: boolean };
+
+/** Laporan guard yang dikirim ke server saat `done` untuk jejak audit. */
+export type GuardReport = {
+  baseline: string | null;
+  changedFiles: string[];
+  outOfScopeFiles: string[];
+  commands: GuardCommandResult[];
+  cliVersion: string;
+};
+
+export type GuardOptions = {
+  state?: TaskState | null;
+  /** Izinkan program di luar allowlist tanpa konfirmasi (non-interaktif). */
+  allowUnlisted?: boolean;
+};
 
 export type FailureContext = {
   task_id: string;
@@ -69,74 +91,77 @@ export function matchesGlob(pattern: string, path: string): boolean {
   return false;
 }
 
-// === Utils git ===
-export function gitStatusPorcelain(cwd: string): Promise<string[]> {
-  return new Promise((resolve, reject) => {
-    const p = spawn('git', ['status', '--porcelain'], { cwd, shell: false });
-    let out = '';
-    let err = '';
-    p.stdout.on('data', (d) => (out += d.toString()));
-    p.stderr.on('data', (d) => (err += d.toString()));
-    p.on('close', (code) => {
-      if (code !== 0) {
-        reject(new GuardError(`git status gagal (exit ${code}): ${err.trim()}`));
-        return;
-      }
-      resolve(out.split('\n').map(parsePorcelainLine).filter((x): x is string => x !== null));
-    });
-    p.on('error', (e) => reject(new GuardError(`Tidak dapat menjalankan git: ${e.message}`)));
-  });
-}
-
-function parsePorcelainLine(line: string): string | null {
-  if (!line) return null;
-  // Format: XY <path>. Rename: "R  old -> new" -> ambil target.
-  const path = line.slice(3);
-  const arrow = path.indexOf(' -> ');
-  const target = arrow >= 0 ? path.slice(arrow + 4) : path;
-  // Strip quoting core.quotepath (non-ASCII)
-  if (target.startsWith('"') && target.endsWith('"') && target.length >= 2) {
-    return target.slice(1, -1);
-  }
-  return target;
-}
-
 // === Eksekusi validation commands ===
-export function runValidationCommands(commands: string[], cwd: string): Promise<{ ok: boolean; output: string }> {
+type ExecResult = { ok: boolean; output: string; results: GuardCommandResult[] };
+
+function execShell(cmd: string, cwd: string): Promise<{ code: number | null; output: string }> {
   return new Promise((resolve, reject) => {
-    if (commands.length === 0) {
-      resolve({ ok: true, output: '' });
-      return;
-    }
-    const run = (i: number, logs: string[]): void => {
-      const cmd = commands[i];
-      const p = spawn('sh', ['-c', cmd], { cwd, shell: false });
-      let out = '';
-      let err = '';
-      p.stdout.on('data', (d) => (out += d.toString()));
-      p.stderr.on('data', (d) => (err += d.toString()));
-      p.on('error', (e) => {
-        reject(new GuardError(`Gagal menjalankan "${cmd}": ${e.message}`));
-      });
-      p.on('close', (code) => {
-        logs.push(`$ ${cmd}\n${out}${err}`.trim());
-        if (code !== 0) {
-          resolve({ ok: false, output: logs.join('\n\n') });
-          return;
-        }
-        if (i + 1 < commands.length) run(i + 1, logs);
-        else resolve({ ok: true, output: logs.join('\n\n') });
-      });
-    };
-    run(0, []);
+    const p = spawn('sh', ['-c', cmd], { cwd, shell: false });
+    let out = '';
+    p.stdout.on('data', (d) => (out += d.toString()));
+    p.stderr.on('data', (d) => (out += d.toString()));
+    p.on('error', (e) => reject(new GuardError(`Gagal menjalankan "${cmd}": ${e.message}`)));
+    p.on('close', (code) => resolve({ code, output: out }));
   });
+}
+
+/** Putuskan apakah perintah boleh jalan. Melempar GuardError bila ditolak. */
+async function authorizeCommand(cmd: string, allowUnlisted: boolean): Promise<void> {
+  const verdict = checkCommand(cmd);
+  if (verdict.kind === 'allowed') return;
+  if (verdict.kind === 'rejected') {
+    throw new GuardError(
+      `Perintah ditolak oleh kebijakan keamanan: "${cmd}"\nAlasan: ${verdict.reason}.\n` +
+        'Jalankan verifikasi tersebut secara manual lalu gunakan: numa done --force'
+    );
+  }
+  const list = verdict.unlisted.join(', ');
+  if (allowUnlisted) return;
+  const ok = await confirm(`Perintah "${cmd}" memakai program di luar allowlist (${list}). Izinkan menjalankan?`);
+  if (!ok) {
+    throw new GuardError(
+      `Perintah dengan program di luar allowlist (${list}) tidak dijalankan: "${cmd}"\n` +
+        'Gunakan --allow-unlisted bila Anda memercayainya, atau verifikasi manual lalu numa done --force.'
+    );
+  }
+}
+
+export async function runValidationCommands(commands: string[], cwd: string, allowUnlisted = false): Promise<ExecResult> {
+  const logs: string[] = [];
+  const results: GuardCommandResult[] = [];
+  for (const cmd of commands) {
+    await authorizeCommand(cmd, allowUnlisted);
+    const { code, output } = await execShell(cmd, cwd);
+    logs.push(`$ ${cmd}\n${output}`.trim());
+    results.push({ command: cmd, ok: code === 0 });
+    if (code !== 0) return { ok: false, output: logs.join('\n\n'), results };
+  }
+  return { ok: true, output: logs.join('\n\n'), results };
 }
 
 // === Orchestrasi guard utama ===
-export async function runGuard(spec: GuardSpec, cwd: string, taskId?: string): Promise<void> {
-  const forbidden = spec.forbidden ?? [];
+/** File yang dikelola Numa sendiri (state lokal dan skill pack) tidak dinilai sebagai perubahan task. */
+export function isInternalFile(file: string): boolean {
+  if (file === '.numa' || file.startsWith('.numa/')) return true;
+  return /^\.(agents|claude)\/skills\/numa-[^/]+\//.test(file);
+}
 
-  const changed = await gitStatusPorcelain(cwd);
+export async function runGuard(spec: GuardSpec, cwd: string, taskId?: string, opts: GuardOptions = {}): Promise<GuardReport> {
+  const forbidden = spec.forbidden ?? [];
+  const allowed = [...(spec.files_to_create ?? []), ...(spec.files_to_modify ?? [])];
+
+  const changed = changedSinceStart(cwd, opts.state ?? null).filter((f) => !isInternalFile(f));
+  const report: GuardReport = {
+    baseline: opts.state?.baselineSha ?? null,
+    changedFiles: changed,
+    outOfScopeFiles: [],
+    commands: [],
+    cliVersion: CLI_VERSION,
+  };
+  if (!opts.state) {
+    console.log('Peringatan: baseline task tidak ditemukan (numa start belum dijalankan di workspace ini). Guard menilai seluruh worktree.');
+  }
+
   const violations: Array<{ file: string; pattern: string }> = [];
   for (const file of changed) {
     for (const pattern of forbidden) {
@@ -161,6 +186,16 @@ export async function runGuard(spec: GuardSpec, cwd: string, taskId?: string): P
     );
   }
 
+  // File di luar allowlist hanya diperingatkan: daftar file dari AI bisa kurang lengkap.
+  if (allowed.length > 0) {
+    report.outOfScopeFiles = changed.filter((f) => !allowed.some((p) => matchesGlob(p, f)));
+    if (report.outOfScopeFiles.length > 0) {
+      const shown = report.outOfScopeFiles.slice(0, 20).map((f) => `- ${f}`).join('\n');
+      const more = report.outOfScopeFiles.length > 20 ? `\n... dan ${report.outOfScopeFiles.length - 20} file lain` : '';
+      console.log(`Peringatan (tidak memblokir): ${report.outOfScopeFiles.length} file berubah di luar lingkup task:\n${shown}${more}\n`);
+    }
+  }
+
   if (changed.length > 0 && !spec.validation_commands?.length) {
     console.log(`Catatan: ${changed.length} file berubah, tanpa validation_commands pada task ini.`);
   }
@@ -168,7 +203,8 @@ export async function runGuard(spec: GuardSpec, cwd: string, taskId?: string): P
   const commands = spec.validation_commands ?? [];
   if (commands.length > 0) {
     console.log('Menjalankan validation_commands...\n');
-    const { ok, output } = await runValidationCommands(commands, cwd);
+    const { ok, output, results } = await runValidationCommands(commands, cwd, opts.allowUnlisted);
+    report.commands.push(...results);
     console.log(output);
     if (!ok) {
       const failure: FailureContext = {
@@ -191,14 +227,20 @@ export async function runGuard(spec: GuardSpec, cwd: string, taskId?: string): P
   const advisory = spec.advisory_commands ?? [];
   if (advisory.length > 0) {
     console.log('\nMenjalankan pemeriksaan penasihat keamanan (advisory)...\n');
-    const { ok, output } = await runValidationCommands(advisory, cwd);
-    if (output) console.log(output);
-    if (!ok) {
-      console.log('\nPeringatan (tidak memblokir): Ditemukan anjuran audit keamanan di atas.');
-    } else {
-      console.log('\nPemeriksaan penasihat keamanan lolos.');
+    try {
+      const { ok, output, results } = await runValidationCommands(advisory, cwd, opts.allowUnlisted);
+      report.commands.push(...results.map((r) => ({ ...r })));
+      if (output) console.log(output);
+      console.log(ok ? '\nPemeriksaan penasihat keamanan lolos.' : '\nPeringatan (tidak memblokir): Ditemukan anjuran audit keamanan di atas.');
+    } catch (e) {
+      // Advisory tidak boleh menggagalkan task; perintah yang ditolak kebijakan dilewati.
+      if (!(e instanceof GuardError)) throw e;
+      report.commands.push({ command: advisory.join(' && '), ok: false, skipped: true });
+      console.log(`Peringatan (tidak memblokir): pemeriksaan advisory dilewati.\n${e.message}`);
     }
   }
+
+  return report;
 }
 
 // === Git Conventional Commit Automation (Framework Vibe Coding Tahap 7) ===

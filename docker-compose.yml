@@ -17,9 +17,9 @@ services:
       - PORT=6655
       - NODE_ENV=development
       # Database PostgreSQL selalu mengarah ke host komputer lokal
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-admin123}@host.docker.internal:5432/${POSTGRES_DB:-project_ai_planner}?schema=public
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD wajib diisi di .env}@host.docker.internal:5432/${POSTGRES_DB:-project_ai_planner}?schema=public
       - OPENAI_BASE_URL=${DOCKER_OPENAI_BASE_URL:-http://host.docker.internal:20128/v1}
-      - FE_URL=${FE_URL:-http://localhost:3455,https://numa.mrijal.my.id}
+      - FE_URL=${FE_URL:-http://localhost:3455}
       - ENABLE_EMAIL_AUTH=${ENABLE_EMAIL_AUTH:-true}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -40,6 +40,7 @@ services:
       - "3455:3455"
     environment:
       - VITE_PROXY_API_URL=http://api:6655
+      - VITE_ALLOWED_HOSTS=${VITE_ALLOWED_HOSTS:-}
     volumes:
       - ./apps/web/src:/app/apps/web/src
       - ./apps/web/public:/app/apps/web/public

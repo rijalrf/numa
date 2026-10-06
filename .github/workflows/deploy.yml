@@ -11,8 +11,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    name: Verifikasi (typecheck, test, Prisma)
+    uses: ./.github/workflows/ci.yml
+
   build-and-push:
     name: Build & Push Image ke Docker Hub
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -34,7 +39,9 @@ jobs:
           file: .docker/api/Dockerfile
           target: runner
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/numa-api:latest
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/numa-api:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/numa-api:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -45,7 +52,9 @@ jobs:
           file: .docker/web/Dockerfile
           target: runner
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/numa-web:latest
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/numa-web:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/numa-web:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -106,15 +115,35 @@ jobs:
 
             echo "=== 4. Mengambil (Pull) Image Terbaru dari Docker Hub ==="
             export DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
+            # Image dipin ke commit yang sedang dideploy; rollback cukup menjalankan ulang dengan SHA lama.
+            export NUMA_IMAGE_TAG="${{ github.sha }}"
             docker compose -f docker-compose.prod.yml pull
 
-            echo "=== 5. Menjalankan Container Produksi ==="
+            echo "=== 5. Backup Database Sebelum Migrasi ==="
+            env_value() { grep -E "^$1=" .env | tail -n 1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'; }
+            if command -v pg_dump >/dev/null 2>&1; then
+              mkdir -p backups
+              BACKUP_SQL="backups/numa-$(date +%Y%m%d-%H%M%S)-${{ github.sha }}.sql"
+              BACKUP_FILE="$BACKUP_SQL.gz"
+              # Dump ke berkas dulu (bukan pipe) agar kegagalan pg_dump menghentikan deploy lewat set -e.
+              PGPASSWORD="$(env_value POSTGRES_PASSWORD)" pg_dump -h 127.0.0.1 \
+                -U "$(env_value POSTGRES_USER)" -f "$BACKUP_SQL" "$(env_value POSTGRES_DB)"
+              test -s "$BACKUP_SQL"
+              gzip -f "$BACKUP_SQL"
+              echo "Backup tersimpan: $BACKUP_FILE"
+              ls -1t backups/numa-*.sql.gz | tail -n +8 | xargs -r rm -f
+            else
+              echo "Peringatan: pg_dump tidak terpasang di VPS, backup dilewati. Pasang postgresql-client agar backup otomatis aktif."
+            fi
+
+            echo "=== 6. Menjalankan Migrasi Database Prisma (sebelum container baru aktif) ==="
+            # Container sementara dari image baru; bila migrasi gagal, script berhenti dan container lama tetap berjalan.
+            docker compose -f docker-compose.prod.yml run --rm --no-deps api npx prisma migrate deploy --schema=./prisma/schema.prisma
+
+            echo "=== 7. Menjalankan Container Produksi ==="
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
 
-            echo "=== 6. Menjalankan Migrasi Database Prisma ==="
-            docker compose -f docker-compose.prod.yml exec -T api npx prisma migrate deploy --schema=./prisma/schema.prisma
-
-            echo "=== 7. Membersihkan Image Docker Lama ==="
+            echo "=== 7b. Membersihkan Image Docker Lama ==="
             docker image prune -f
 
             echo "=== 8. Verifikasi Kesehatan Backend ==="

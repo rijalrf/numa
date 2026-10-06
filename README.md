@@ -44,7 +44,7 @@ Pipeline: **Numa Brief** (Chat & Survey) -> **Numa Blueprint** (Tech Stack & PRD
 ### 5. Numa Agent — Eksekusi via CLI
 
 - **Master Prompt** (`/api/projects/:id/master-prompt`) — template prompt + instruksi setup yang disalin ke AI coding agent user.
-- **Skill pack** — `numa init` memasang 5 skill bundled (`numa-tdd`, `numa-incremental`, `numa-api-design`, `numa-security`, `numa-frontend`) ke `.claude/skills/` plus kontrak arsitektur project.
+- **Skill pack** — `numa init` memasang 7 skill bundled (`numa-workflow`, `numa-incremental`, `numa-tdd`, `numa-api-design`, `numa-security`, `numa-production`, `numa-frontend`) ke `.agents/skills/` (salinan di `.claude/skills/`) plus kontrak arsitektur project (`numa-architecture`).
 - **CLI `numa`** — loop eksekusi task di terminal: `login`, `switch`, `whoami`, `next`, `start`, `context`, `done` (dengan guard verifikasi file + `validation_commands`, flag `--force`/`--dir`), `prd`, `status`, `init`, `sync`, `logout`. Tanpa mock fallback — error AI selalu eksplisit.
 - **Checkpoint gate** — saat layer selesai, agent berhenti dan meminta approval user (`LAYER_TRANSITION`, `PRD_APPROVAL`, `ROADMAP_APPROVAL`, `APPS_READY_FOR_USE`).
 - **Repo summary** — `numa sync` mengirim file tree + manifest workspace ke server agar konteks agent selalu relevan.
@@ -142,7 +142,7 @@ Tahap yang sudah dilewati terkunci read-only (HTTP 403 via `isStageLocked`). Tah
 Alur eksekusi agent:
 
 ```
-npx numa login <token>
+npx numa login            # token diminta lewat prompt tersembunyi
 npx numa init            # pasang skill pack + kontrak arsitektur
 npx numa next
 npx numa start
@@ -170,7 +170,7 @@ npx numa sync            # (opsional) kirim ringkasan workspace
 ## Env (apps/api/.env)
 
 ```
-DATABASE_URL=postgresql://postgres:admin123@localhost:5432/project_ai_planner
+DATABASE_URL=postgresql://postgres:GANTI_PASSWORD@localhost:5432/project_ai_planner
 PORT=6655
 # Daftar origin yang diizinkan, dipisah koma (lokal untuk dev + domain publik untuk akses luar)
 FE_URL=http://localhost:3455,https://numa.mrijal.my.id

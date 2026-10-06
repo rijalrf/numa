@@ -19,22 +19,26 @@ interface ExecutionDialogProps {
 
 export function ExecutionDialog({ projectId, projectName, isOpen, onClose }: ExecutionDialogProps) {
   const [copiedPrompt, setCopiedPrompt] = useState(false);
-  const [inputToken, setInputToken] = useState('');
+  const [copiedToken, setCopiedToken] = useState(false);
+  const [storedToken, setStoredToken] = useState('');
 
   useEffect(() => {
     if (isOpen) {
-      const stored = localStorage.getItem('numa_active_pat') || '';
-      setInputToken(stored);
+      // PAT hanya hidup selama tab terbuka (sessionStorage) dan tidak pernah masuk ke teks prompt.
+      try {
+        setStoredToken(sessionStorage.getItem('numa_active_pat') || '');
+      } catch {
+        setStoredToken('');
+      }
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const activeToken = inputToken.trim() || '<TOKEN_PAT_ANDA>';
   const apiUrl = resolveApiUrl();
 
   const installCommand = 'npm install -g numa-cli@latest';
-  const loginCommand = `numa login ${activeToken} --api-url ${apiUrl}`;
+  const loginCommand = `numa login --api-url ${apiUrl}`;
 
   const executionLoopText = `## 2. Loop Eksekusi (Wajib Persetujuan Pengguna Tiap Task)
 Untuk setiap task yang dikerjakan:
@@ -57,7 +61,8 @@ Pastikan CLI \`numa\` terpasang versi terbaru (jalankan 1x di awal):
 
 ## 1. Identitas & Autentikasi
 - Project ID: ${projectId}
-- Login CLI: \`${loginCommand}\`
+- Login CLI: dilakukan USER sendiri di terminal (\`${loginCommand}\`). Cek dengan \`numa whoami\`.
+- Dilarang meminta, menyalin, atau menampilkan token PAT di percakapan ini.
 - Switch Project (jika diperlukan): \`numa switch ${projectId}\`
 - Baca Spesifikasi PRD: \`numa prd\`
 
@@ -75,6 +80,16 @@ ${executionLoopText}
       setTimeout(() => setCopiedPrompt(false), 2500);
     } catch (err) {
       console.error('Gagal salin prompt:', err);
+    }
+  };
+
+  const handleCopyToken = async () => {
+    try {
+      await navigator.clipboard.writeText(storedToken);
+      setCopiedToken(true);
+      setTimeout(() => setCopiedToken(false), 2500);
+    } catch (err) {
+      console.error('Gagal salin token:', err);
     }
   };
 
@@ -99,28 +114,29 @@ ${executionLoopText}
         </div>
 
         <div className="space-y-4">
-          {/* Peringatan Keamanan Token */}
-          {inputToken ? (
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3.5 flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
+          {/* Langkah login: dijalankan user sendiri, token tidak ikut ke prompt */}
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3.5 space-y-2.5 text-xs text-amber-900 dark:text-amber-200">
+            <div className="flex items-start gap-2.5">
               <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
               <div>
-                <span className="font-semibold block">Peringatan Keamanan Token PAT:</span>
+                <span className="font-semibold block">Login CLI dilakukan sendiri di terminal</span>
                 <span className="opacity-90">
-                  Jangan bagikan prompt ini ke publik atau commit ke repositori terbuka karena mengandung token otentikasi pribadi Anda.
+                  Master Prompt tidak memuat token. Jalankan perintah di bawah, lalu tempel token saat diminta.
                 </span>
               </div>
             </div>
-          ) : (
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3.5 flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
-              <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-semibold block">Token PAT Belum Ditemukan:</span>
-                <span className="opacity-90">
-                  Token PAT belum tersimpan di browser. Silakan buat Token PAT default pada pengaturan profil, lalu ganti placeholder &lt;TOKEN_PAT_ANDA&gt; pada prompt di bawah.
-                </span>
-              </div>
-            </div>
-          )}
+            <pre className="p-2 bg-background/60 rounded text-[11px] font-mono whitespace-pre-wrap break-all text-foreground">{loginCommand}</pre>
+            {storedToken ? (
+              <Button type="button" size="sm" variant="outline" onClick={handleCopyToken} className="h-7 px-2.5 text-xs gap-1.5">
+                {copiedToken ? <Check className="h-3.5 w-3.5" /> : <Clipboard className="h-3.5 w-3.5" />}
+                <span>{copiedToken ? 'Token tersalin' : 'Salin token PAT'}</span>
+              </Button>
+            ) : (
+              <span className="opacity-90 block">
+                Token tidak tersimpan di browser ini. Buat atau lihat token di halaman profil.
+              </span>
+            )}
+          </div>
 
           {/* Master Prompt Code Block */}
           <div className="rounded-md border border-border overflow-hidden space-y-0">

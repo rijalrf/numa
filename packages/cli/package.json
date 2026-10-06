@@ -1,6 +1,6 @@
 {
   "name": "numa-cli",
-  "version": "0.3.1",
+  "version": "0.5.0",
   "description": "CLI agent loop untuk AI coding agent - autonomous task execution via bounded context isolation",
   "keywords": [
     "cli",
@@ -34,7 +34,8 @@
     "prepublishOnly": "npm run build",
     "start": "node dist/index.js",
     "publish:latest": "npm run build && npm publish --access public",
-    "publish:beta": "npm run build && npm publish --tag beta --access public"
+    "publish:beta": "npm run build && npm publish --tag beta --access public",
+    "test": "node --import tsx --test src/__tests__/*.test.ts"
   },
   "dependencies": {
     "commander": "^12.1.0"

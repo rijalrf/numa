@@ -15,10 +15,15 @@
     "db:migrate": "npm run prisma:migrate --workspace=apps/api",
     "db:seed": "npm run prisma:seed --workspace=apps/api",
     "db:reset": "npm run prisma:reset --workspace=apps/api",
-    "cli": "npm run dev --workspace=packages/cli"
+    "cli": "npm run dev --workspace=packages/cli",
+    "lint": "eslint apps packages --max-warnings=0",
+    "deadcode": "knip --no-progress"
   },
   "devDependencies": {
+    "eslint": "^10.12.0",
+    "knip": "^6.39.0",
     "npm-run-all": "^4.1.5",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.71.0"
   }
 }

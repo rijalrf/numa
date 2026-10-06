@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import { generateJson } from './ai-service.js';
 import type { PrdData } from './prd.js';
+import { PROMPT_VERSIONS } from './prompts.js';
 
 const RoadmapSchema = z.object({
   phases: z
@@ -28,7 +29,7 @@ const RoadmapSchema = z.object({
 
 export type RoadmapData = z.infer<typeof RoadmapSchema>;
 
-export async function generateRoadmapFromPRD(prd: PrdData, opts?: { projectId?: string }): Promise<RoadmapData> {
+export async function generateRoadmapFromPRD(prd: PrdData, opts: { projectId: string }): Promise<RoadmapData> {
   const system = `Anda adalah Desainer Sistem teknis. Pecah PRD menjadi Feature Execution Graph terstruktur.
 Setiap fase mengelompokkan layer delivery secara ketat: BOOTSTRAP -> DATABASE -> BACKEND -> FRONTEND -> INTEGRATION.
 Setiap fitur dalam fase wajib memodelkan dependensi logis (dependsOn) ke fitur prasyarat agar eksekusi task otonom berjalan berurutan tanpa race conditions atau circular dependency.
@@ -79,9 +80,7 @@ PRINSIP EXECUTION GRAPH:
     user,
     schema: RoadmapSchema,
     agentName: 'FeatureExecutionGraph',
-    projectId: opts?.projectId,
+    promptVersion: PROMPT_VERSIONS.roadmap,
+    projectId: opts.projectId,
   });
 }
-
-// Backward compatibility alias
-export const generateRoadmapFromBRD = generateRoadmapFromPRD;

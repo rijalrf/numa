@@ -16,8 +16,8 @@ export async function ensureDefaultToken(): Promise<string | null> {
         body: JSON.stringify({ name: 'Token Default' }),
       });
       if (created.token) {
-        localStorage.setItem('numa_active_pat', created.token);
-        localStorage.setItem('numa_new_default_pat', created.token);
+        sessionStorage.setItem('numa_active_pat', created.token);
+        sessionStorage.setItem('numa_new_default_pat', created.token);
         return created.token;
       }
     }

@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@/lib/http';
 import { pollAiJob } from '@/lib/ai-job';
-import { Button } from '@/components/ui/button';
 import { PricingDialog } from '@/components/billing/pricing-dialog';
 import { MarkdownView } from '@/components/ui/markdown-view';
 import { NumaLoader } from '@/components/ui/numa-loader';

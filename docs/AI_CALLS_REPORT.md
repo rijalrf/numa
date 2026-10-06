@@ -5,6 +5,8 @@
 **Status:** Optimized Final Report  
 **Scope:** Backend AI orchestration, product discovery, requirements engineering, UX specification, architecture planning, task generation, coding-agent execution, and validation
 
+> **Catatan status implementasi (diperbarui 2026-10-05):** dokumen ini adalah spesifikasi desain. Fungsi `generateTreeFromBrd`, `generateBRDFromDiscovery`, `generatePRDFromDiscovery`, dan `generateRoadmapFromBRD` sudah dihapus dari kode karena tidak lagi dipanggil; alur aktual memakai PRD (`prd.ts`), roadmap (`roadmap.ts`), tree dan tasks lewat antrean `AiJob`. Rujukan ke nama-nama tersebut di bawah bersifat historis. Pemakaian token dan biaya aktual dapat dilihat di dashboard admin `/admin/usage`.
+
 ---
 
 ## 1. Executive Summary

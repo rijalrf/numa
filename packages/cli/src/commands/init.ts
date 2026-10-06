@@ -1,101 +1,84 @@
 // Logic command `init` — pasang skill pack numa + kontrak arsitektur ke workspace.
 import fs from 'node:fs';
 import path from 'node:path';
-import { loadConfig } from '../config.js';
+import { loadConfig, findWorkspaceRoot, saveWorkspace } from '../config.js';
 import { api, ApiError } from '../api-client.js';
+import { CLI_VERSION } from '../version.js';
+import { installSkillPack, isSkillTarget, type SkillTarget } from '../skill-pack.js';
 
 export type InitOptions = {
   dir?: string;
   force?: boolean;
+  /** Pasang ulang skill pack walau versinya sama dengan CLI. */
+  update?: boolean;
+  /** Lokasi pasang skill: agents (.agents/skills), claude (.claude/skills), atau all (default). */
+  target?: string;
   // Path folder bundled skills (dist/../skills). Dihitung dari index.ts agar
   // path tetap sama walau file ini dipindah ke subfolder commands/.
   bundledSkillsDir: string;
 };
 
+const SKILLS_VERSION_FILE = '.numa/skills.version';
+
+/** Versi skill pack yang terpasang di workspace, atau null bila belum ada. */
+export function readSkillsVersion(dir: string): string | null {
+  const root = findWorkspaceRoot(dir) ?? path.resolve(dir);
+  try {
+    return fs.readFileSync(path.join(root, SKILLS_VERSION_FILE), 'utf-8').trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function runInit(opts: InitOptions): Promise<void> {
   try {
     const cfg = loadConfig();
     const targetDir = path.resolve(opts.dir || process.cwd());
+    const targetRaw = opts.target ?? 'all';
+    if (!isSkillTarget(targetRaw)) {
+      console.error(`Nilai --target tidak valid: "${targetRaw}". Pilih: agents, claude, atau all.`);
+      process.exit(1);
+    }
+    const target: SkillTarget = targetRaw;
 
-    console.log(`Memasang skill pack numa di: ${targetDir}`);
+    if (!cfg.token) {
+      console.error('Belum login. Jalankan: numa login');
+      process.exit(1);
+    }
+
+    const installed = readSkillsVersion(targetDir);
+    if (installed === CLI_VERSION && !opts.update && !opts.force) {
+      console.log(`Skill pack sudah versi ${CLI_VERSION} di ${targetDir}. Gunakan --update untuk memasang ulang.`);
+      return;
+    }
+    console.log(
+      installed
+        ? `Memperbarui skill pack numa ${installed} -> ${CLI_VERSION} di: ${targetDir}`
+        : `Memasang skill pack numa ${CLI_VERSION} di: ${targetDir}`
+    );
 
     // 1. Fetch kontrak arsitektur dari API
     console.log('Mengambil kontrak arsitektur dari server...');
     const contract = await api.architectureContract(cfg);
 
-    // 2. Siapkan folder .claude/skills/
-    const skillsTargetDir = path.join(targetDir, '.claude', 'skills');
-    fs.mkdirSync(skillsTargetDir, { recursive: true });
-
-    // Salin 5 bundled skills
-    const staticSkills = [
-      { file: 'test-driven-development.md', name: 'numa-tdd' },
-      { file: 'incremental-implementation.md', name: 'numa-incremental' },
-      { file: 'api-and-interface-design.md', name: 'numa-api-design' },
-      { file: 'security-and-hardening.md', name: 'numa-security' },
-      { file: 'frontend-ui-engineering.md', name: 'numa-frontend' },
-    ];
-
-    for (const s of staticSkills) {
-      const srcPath = path.join(opts.bundledSkillsDir, s.file);
-      const destSkillDir = path.join(skillsTargetDir, s.name);
-      fs.mkdirSync(destSkillDir, { recursive: true });
-      const destPath = path.join(destSkillDir, 'SKILL.md');
-      if (fs.existsSync(srcPath)) {
-        fs.copyFileSync(srcPath, destPath);
-      }
+    // 2. Pasang skill, kontrak arsitektur, AGENTS.md, dan CLAUDE.md
+    const result = installSkillPack({
+      targetDir,
+      bundledSkillsDir: opts.bundledSkillsDir,
+      contract,
+      target,
+      force: opts.force,
+    });
+    if (result.missingSources.length > 0) {
+      throw new Error(`Berkas skill bundled tidak ditemukan: ${result.missingSources.join(', ')}. Pasang ulang numa-cli.`);
     }
+    console.log(`Skill terpasang (${result.installedSkills.length}) di: ${result.roots.join(', ')}`);
+    console.log(`AGENTS.md ${result.agentsMd}.${result.claudeMd === 'dilewati' ? '' : ` CLAUDE.md ${result.claudeMd}.`}`);
 
-    // Tulis dynamic architecture contract skill
-    const archSkillDir = path.join(skillsTargetDir, 'numa-architecture');
-    fs.mkdirSync(archSkillDir, { recursive: true });
-    const archSkillContent = `---
-name: numa-architecture
-description: Kontrak arsitektur wajib untuk framework ${contract.framework}.
----
-
-${contract.markdown}
-`;
-    fs.writeFileSync(path.join(archSkillDir, 'SKILL.md'), archSkillContent, 'utf-8');
-
-    // 3. Tambahkan ke AGENTS.md
-    const agentsPath = path.join(targetDir, 'AGENTS.md');
-    const markerBegin = '<!-- numa:begin -->';
-    const markerEnd = '<!-- numa:end -->';
-    const agentsBlock = `\n${markerBegin}
-# Pedoman Rekayasa & Kontrak Arsitektur Numa
-
-Proyek ini menggunakan standar arsitektur dan skill pack Numa:
-- Kontrak Arsitektur: .claude/skills/numa-architecture/SKILL.md (${contract.title})
-- Test-Driven Development: .claude/skills/numa-tdd/SKILL.md
-- Implementasi Bertahap: .claude/skills/numa-incremental/SKILL.md
-- Desain API: .claude/skills/numa-api-design/SKILL.md
-- Pengerasan Keamanan: .claude/skills/numa-security/SKILL.md
-- Desain Frontend: .claude/skills/numa-frontend/SKILL.md
-
-Patuhi seluruh Acceptance Criteria dan aturan layering sebelum menjalankan \`numa done\`.
-${markerEnd}\n`;
-
-    if (fs.existsSync(agentsPath)) {
-      const content = fs.readFileSync(agentsPath, 'utf-8');
-      if (content.includes(markerBegin)) {
-        if (opts.force) {
-          const regex = new RegExp(`${markerBegin}[\\s\\S]*?${markerEnd}`, 'g');
-          const updated = content.replace(regex, agentsBlock.trim());
-          fs.writeFileSync(agentsPath, updated, 'utf-8');
-          console.log('AGENTS.md diperbarui dengan blok Numa terbaru.');
-        } else {
-          console.log('AGENTS.md sudah memuat konfigurasi Numa (gunakan --force untuk menimpa).');
-        }
-      } else {
-        fs.appendFileSync(agentsPath, agentsBlock, 'utf-8');
-        console.log('Blok Numa ditambahkan ke AGENTS.md.');
-      }
-    } else {
-      fs.writeFileSync(agentsPath, `# AGENTS.md\n${agentsBlock}`, 'utf-8');
-      console.log('File AGENTS.md dibuat dengan konfigurasi Numa.');
-    }
-
+    // 3. Catat versi skill pack dan project untuk workspace ini (saveWorkspace juga menulis .numa/.gitignore)
+    const wsFile = saveWorkspace(targetDir, { ...(cfg.projectId ? { projectId: cfg.projectId } : {}) });
+    fs.writeFileSync(path.join(targetDir, SKILLS_VERSION_FILE), CLI_VERSION + '\n', 'utf-8');
+    console.log(`Workspace dikonfigurasi: ${path.relative(targetDir, wsFile) || wsFile}`);
     console.log('Berhasil memasang skill pack Numa dan kontrak arsitektur.');
   } catch (e) {
     if (e instanceof ApiError) {

@@ -1,72 +1,28 @@
 // Agent endpoints (CLI) — dilindungi PAT, terisolasi per project.
+import type { Prisma } from '@prisma/client';
+import { CompleteTaskBodySchema, FailTaskBodySchema, BlockTaskBodySchema, RepoSummaryBodySchema } from '../lib/request-schemas.js';
 import { Router, type Request } from 'express';
-import crypto from 'node:crypto';
+import { recordAudit } from '../lib/audit.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAgent, type AgentRequest } from '../middleware/require-agent.js';
 import { resolveStackContract } from '../lib/ai/stack-contract.js';
 import { resolveArchitectureContract, renderArchitectureContract } from '../lib/ai/architecture-contract.js';
+import { listAccessibleProjects } from '../lib/agent-auth.js';
 import { requireAgentSimple } from '../middleware/require-agent-simple.js';
 import { readPrdContent } from '../lib/ai/prd.js';
+import { findBlockingCheckpoint, checkpointBlockedBody } from '../lib/checkpoint-gate.js';
+import { PREVIEW_PORT } from '../lib/config.js';
 
 export const agentRouter = Router();
-
-// Hash token utility (mirrors requireAgent.middleware)
-function hashToken(token: string): string {
-  return crypto.createHash('sha256').update(token).digest('hex');
-}
 
 // ============================================================
 // Agent endpoints (CLI) — dilindungi PAT, terisolasi per project
 // ============================================================
 
 agentRouter.get('/api/agent/scopes', requireAgentSimple, async (req: Request, res) => {
-  // Get all projects accessible by this token
-  const authHeader = req.header('authorization') ?? '';
-  const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  if (!match) {
-    return res.status(401).json({ error: 'Missing Authorization header' });
-  }
-
-  const token = match[1].trim();
-  const tokenHash = hashToken(token);
-
-  const record = await prisma.agentToken.findUnique({
-    where: { tokenHash },
-    include: {
-      agentTokenScopes: {
-        include: {
-          project: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-        },
-      },
-    },
-  });
-
-  if (!record || record.isRevoked) {
-    return res.status(401).json({ error: 'Token tidak valid atau sudah dicabut.' });
-  }
-
-  // Ambil semua project milik pemilik token
-  const ownedProjects = await prisma.project.findMany({
-    where: { userId: record.userId },
-    select: { id: true, name: true },
-    orderBy: { updatedAt: 'desc' },
-  });
-
-  const explicitProjects = record.agentTokenScopes?.map((s) => ({
-    id: s.projectId,
-    name: s.project.name,
-  })) || [];
-
-  const map = new Map<string, { id: string; name: string }>();
-  for (const p of ownedProjects) map.set(p.id, p);
-  for (const p of explicitProjects) map.set(p.id, p);
-
-  res.json({ scopes: Array.from(map.values()) });
+  // Hanya project yang boleh diakses token ini (scope eksplisit atau semua project milik pemilik untuk token universal).
+  const scopes = await listAccessibleProjects(req.agentToken!);
+  res.json({ scopes });
 });
 
 agentRouter.get('/api/agent/whoami', requireAgent, (req: AgentRequest, res) => {
@@ -75,6 +31,9 @@ agentRouter.get('/api/agent/whoami', requireAgent, (req: AgentRequest, res) => {
 
 agentRouter.get('/api/agent/tasks/next', requireAgent, async (req: AgentRequest, res) => {
   const projectId = req.agent.projectId;
+
+  const blocking = await findBlockingCheckpoint(projectId);
+  if (blocking) return res.status(409).json(checkpointBlockedBody(blocking));
 
   // Prioritas 1: Lanjutkan task yang sedang IN_PROGRESS bila ada
   const inProgress = await prisma.task.findFirst({
@@ -138,6 +97,9 @@ agentRouter.get('/api/agent/tasks/next', requireAgent, async (req: AgentRequest,
 });
 
 agentRouter.post('/api/agent/tasks/:id/start', requireAgent, async (req: AgentRequest, res) => {
+  const blocking = await findBlockingCheckpoint(req.agent.projectId);
+  if (blocking) return res.status(409).json(checkpointBlockedBody(blocking));
+
   const task = await prisma.task.findFirst({
     where: { id: req.params.id, projectId: req.agent.projectId },
     include: {
@@ -167,6 +129,30 @@ agentRouter.post('/api/agent/tasks/:id/start', requireAgent, async (req: AgentRe
   res.json({ ok: true, taskId: updated.id, status: updated.status });
 });
 
+/** Batasi bentuk dan ukuran laporan guard dari CLI sebelum disimpan. */
+function sanitizeGuardReport(raw: unknown) {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const strList = (v: unknown, max: number) =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').slice(0, max).map((x) => x.slice(0, 300)) : [];
+  return {
+    baseline: typeof r.baseline === 'string' ? r.baseline.slice(0, 64) : null,
+    changedFiles: strList(r.changedFiles, 200),
+    outOfScopeFiles: strList(r.outOfScopeFiles, 100),
+    commands: Array.isArray(r.commands)
+      ? r.commands.slice(0, 20).map((c) => {
+          const o = (c ?? {}) as Record<string, unknown>;
+          return {
+            command: String(o.command ?? '').slice(0, 300),
+            ok: o.ok === true,
+            skipped: o.skipped === true,
+          };
+        })
+      : [],
+    cliVersion: typeof r.cliVersion === 'string' ? r.cliVersion.slice(0, 20) : null,
+  };
+}
+
 agentRouter.post('/api/agent/tasks/:id/complete', requireAgent, async (req: AgentRequest, res) => {
   const task = await prisma.task.findFirst({
     where: { id: req.params.id, projectId: req.agent.projectId },
@@ -177,7 +163,7 @@ agentRouter.post('/api/agent/tasks/:id/complete', requireAgent, async (req: Agen
   const project = await prisma.project.findUnique({ where: { id: req.agent.projectId } });
   const nextStatus = project?.reviewFlow ? 'REVIEW' : 'DONE';
 
-  const body = req.body ?? {};
+  const body = CompleteTaskBodySchema.parse(req.body ?? {});
   const updateData: any = {
     status: nextStatus,
     completedAt: nextStatus === 'DONE' ? new Date() : null,
@@ -189,10 +175,35 @@ agentRouter.post('/api/agent/tasks/:id/complete', requireAgent, async (req: Agen
     updateData.apiContracts = body.apiContracts;
   }
 
+  // Jejak audit penyelesaian: --force harus tercatat, laporan guard disimpan apa adanya (dibatasi ukurannya).
+  const completion = {
+    forced: body.forced === true,
+    guardReport: sanitizeGuardReport(body.guardReport),
+    tokenId: req.agent.tokenId,
+    completedAt: new Date().toISOString(),
+  };
+  updateData.aiContext = { ...((task.aiContext ?? {}) as Record<string, unknown>), completion };
+  // Selesai berhasil menghapus catatan kegagalan lama
+  delete (updateData.aiContext as Record<string, unknown>).lastFailure;
+  updateData.blockedReason = null;
+
   const updated = await prisma.task.update({
     where: { id: task.id },
     data: updateData,
   });
+  if (completion.forced) {
+    await recordAudit({
+      action: 'task.force_complete',
+      actorType: 'agent',
+      actorUserId: req.agent.userId,
+      projectId: req.agent.projectId,
+      orgId: project?.orgId,
+      targetType: 'Task',
+      targetId: task.id,
+      metadata: { tokenId: req.agent.tokenId, outOfScopeCount: completion.guardReport?.outOfScopeFiles.length ?? null },
+      req,
+    });
+  }
 
   // Cek apakah layer sudah habis -> buat checkpoint PENDING bila perlu.
   const remainingInLayer = await prisma.task.count({
@@ -206,7 +217,13 @@ agentRouter.post('/api/agent/tasks/:id/complete', requireAgent, async (req: Agen
   let appsReadyCheckpointCreated = false;
 
   let checkpointCreated = false;
-  if (remainingInLayer === 0) {
+  const existingLayerCheckpoint =
+    remainingInLayer === 0
+      ? await prisma.checkpoint.findFirst({
+          where: { projectId: req.agent.projectId, type: 'LAYER_TRANSITION', layer: updated.layer, status: 'PENDING' },
+        })
+      : null;
+  if (remainingInLayer === 0 && !existingLayerCheckpoint) {
     await prisma.checkpoint.create({
       data: {
         projectId: req.agent.projectId,
@@ -235,7 +252,7 @@ agentRouter.post('/api/agent/tasks/:id/complete', requireAgent, async (req: Agen
           type: 'APPS_READY_FOR_USE',
           layer: 'INTEGRATION',
           status: 'PENDING',
-          message: 'Semua fitur selesai dibuat! User perlu verifikasi aplikasi jalan di http://localhost:9999 sebelum finalisasi.',
+          message: `Semua fitur selesai dibuat! User perlu verifikasi aplikasi jalan di http://localhost:${PREVIEW_PORT} sebelum finalisasi.`,
         },
       });
       appsReadyCheckpointCreated = true;
@@ -275,7 +292,7 @@ agentRouter.post('/api/agent/tasks/:id/fail', requireAgent, async (req: AgentReq
   });
   if (!task) return res.status(404).json({ error: 'Task tidak ditemukan di project ini.' });
 
-  const body = req.body ?? {};
+  const body = FailTaskBodySchema.parse(req.body ?? {});
   const failureType = body.failure_type ?? 'COMMAND_FAILURE';
   const errorMsg = String(body.error ?? 'Unknown error').slice(0, 1000);
   const nextAction = body.next_action ?? 'Periksa error dan ulangi eksekusi task.';
@@ -309,6 +326,70 @@ agentRouter.post('/api/agent/tasks/:id/fail', requireAgent, async (req: AgentReq
     status: updated.status,
     blockedReason: updated.blockedReason,
   });
+});
+
+// Reset task BLOCKED / IN_PROGRESS ke TODO agar bisa diulang. Task DONE tidak boleh diulang dari agent.
+agentRouter.post('/api/agent/tasks/:id/retry', requireAgent, async (req: AgentRequest, res) => {
+  const task = await prisma.task.findFirst({
+    where: { id: req.params.id, projectId: req.agent.projectId },
+  });
+  if (!task) return res.status(404).json({ error: 'Task tidak ditemukan di project ini.' });
+  if (task.status === 'DONE' || task.status === 'REVIEW') {
+    return res.status(400).json({ error: `Task berstatus ${task.status} dan tidak dapat diulang dari CLI.` });
+  }
+  const updated = await prisma.task.update({
+    where: { id: task.id },
+    data: { status: 'TODO', blockedReason: null, startedAt: null },
+  });
+  await recordAudit({
+    action: 'task.retry',
+    actorType: 'agent',
+    actorUserId: req.agent.userId,
+    projectId: req.agent.projectId,
+    targetType: 'Task',
+    targetId: task.id,
+    metadata: { tokenId: req.agent.tokenId, from: task.status },
+    req,
+  });
+  res.json({ ok: true, taskId: updated.id, status: updated.status });
+});
+
+// Tandai task BLOCKED dengan alasan eksplisit dari agent (mis. spesifikasi ambigu).
+agentRouter.post('/api/agent/tasks/:id/block', requireAgent, async (req: AgentRequest, res) => {
+  const { reason } = BlockTaskBodySchema.parse(req.body ?? {});
+
+  const task = await prisma.task.findFirst({
+    where: { id: req.params.id, projectId: req.agent.projectId },
+  });
+  if (!task) return res.status(404).json({ error: 'Task tidak ditemukan di project ini.' });
+  if (task.status === 'DONE') return res.status(400).json({ error: 'Task sudah selesai.' });
+
+  const updated = await prisma.task.update({
+    where: { id: task.id },
+    data: { status: 'BLOCKED', blockedReason: `[AGENT_BLOCKED] ${reason}`.slice(0, 500) },
+  });
+  await recordAudit({
+    action: 'task.block',
+    actorType: 'agent',
+    actorUserId: req.agent.userId,
+    projectId: req.agent.projectId,
+    targetType: 'Task',
+    targetId: task.id,
+    metadata: { tokenId: req.agent.tokenId, reason: reason.slice(0, 200) },
+    req,
+  });
+  res.json({ ok: true, taskId: updated.id, status: updated.status, blockedReason: updated.blockedReason });
+});
+
+// Daftar checkpoint yang menunggu approval. Approval sendiri hanya bisa dilakukan user lewat web.
+agentRouter.get('/api/agent/checkpoints', requireAgent, async (req: AgentRequest, res) => {
+  const checkpoints = await prisma.checkpoint.findMany({
+    where: { projectId: req.agent.projectId, status: 'PENDING' },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, type: true, layer: true, message: true, createdAt: true },
+  });
+  const blocking = await findBlockingCheckpoint(req.agent.projectId);
+  res.json({ checkpoints, blockingId: blocking?.id ?? null });
 });
 
 agentRouter.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentRequest, res) => {
@@ -460,46 +541,11 @@ agentRouter.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentR
     mdParts.push(``);
   }
 
-  // Context Budgeting: Ekstrak spesifikasi UI yang relevan saja untuk layer FRONTEND (Bab 14, 26, 27)
-  if (task.layer === 'FRONTEND' && task.project.uiSpec) {
-    const ui = task.project.uiSpec as {
-      pages?: Array<{
-        name: string;
-        path?: string;
-        purpose?: string;
-        layout?: { mobile: string; desktop: string };
-        components?: string[];
-        states?: string[];
-      }>;
-      designTokens?: { spacing?: string; borderRadius?: string; colorPalette?: string[]; typography?: string };
-    };
-
-    const taskText = `${task.title} ${task.description ?? ''} ${(ctx.files_to_create ?? []).join(' ')} ${(ctx.files_to_modify ?? []).join(' ')}`.toLowerCase();
-    const matchingPages = (ui.pages ?? []).filter((p) =>
-      taskText.includes(p.name.toLowerCase()) || (p.path && taskText.includes(p.path.toLowerCase()))
-    );
-
-    const pagesToRender = matchingPages.length > 0 ? matchingPages : (ui.pages ?? []).slice(0, 2);
-    if (pagesToRender.length > 0) {
-      mdParts.push(`#### Spesifikasi Halaman UI Relevan`);
-      for (const p of pagesToRender) {
-        mdParts.push(`- **Halaman**: ${p.name}${p.path ? ` (\`${p.path}\`)` : ''} — ${p.purpose ?? ''}`);
-        if (p.layout) mdParts.push(`  - Layout: Mobile: ${p.layout.mobile} | Desktop: ${p.layout.desktop}`);
-        if (p.components?.length) mdParts.push(`  - Komponen: ${p.components.join(', ')}`);
-        if (p.states?.length) mdParts.push(`  - State Wajib: ${p.states.join(', ')}`);
-      }
-      if (ui.designTokens) {
-        mdParts.push(`- **Design Tokens**: Spacing: ${ui.designTokens.spacing || '4px'}, Radius: ${ui.designTokens.borderRadius || 'rounded-md'}`);
-      }
-      mdParts.push(``);
-    }
-  }
-
   // Failure Context jika task pernah gagal sebelumnya (Bab 38)
   const lastFailure = (ctx as any).lastFailure;
   if (lastFailure) {
     mdParts.push(
-      `#### ⚠️ Catatan Kegagalan Sebelumnya`,
+      `#### Catatan Kegagalan Sebelumnya`,
       `- Jenis Kegagalan: ${lastFailure.failure_type}`,
       lastFailure.command ? `- Perintah: \`${lastFailure.command}\`` : '',
       `- Detail Error: ${lastFailure.error}`,
@@ -575,7 +621,8 @@ agentRouter.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentR
       layer: task.layer,
       forbidden: ctx.forbidden ?? [],
       files_readonly: ctx.files_readonly ?? [],
-      files_to_create: [], // Tidak lagi memaksa disk check fisik di CLI guard
+      files_to_create: ctx.files_to_create ?? [],
+      files_to_modify: ctx.files_to_modify ?? [],
       validation_commands: ctx.validation_commands ?? [],
       advisory_commands: ctx.advisory_commands ?? [],
     },
@@ -618,13 +665,10 @@ agentRouter.get('/api/agent/architecture-contract', requireAgent, async (req: Ag
 // Agent endpoint: simpan ringkasan workspace (numa sync)
 // ===============================================
 agentRouter.post('/api/agent/repo-summary', requireAgent, async (req: AgentRequest, res) => {
-  const summary = req.body?.summary;
-  if (!summary) {
-    return res.status(400).json({ error: 'Ringkasan repo (summary) diperlukan.' });
-  }
+  const { summary } = RepoSummaryBodySchema.parse(req.body ?? {});
   await prisma.project.update({
     where: { id: req.agent.projectId },
-    data: { repoSummary: summary },
+    data: { repoSummary: summary as Prisma.InputJsonValue },
   });
   res.json({ ok: true, savedAt: new Date().toISOString() });
 });

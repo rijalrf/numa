@@ -1,19 +1,176 @@
 // Change Cycle: riwayat siklus, permintaan perubahan, generasi task siklus.
+import { logger, serializeError } from '../lib/logger.js';
 import { Router } from 'express';
+import { snapshotArtifact } from '../lib/artifact-version.js';
+import { projectWhere } from '../lib/access.js';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireUser, type AuthedRequest } from '../middleware/require-user.js';
 import { getUserPlan } from '../lib/billing.js';
 import { readPrdContent } from '../lib/ai/prd.js';
+import { runTaskQualityGate } from '../lib/task-quality.js';
+import { saveValidationReport } from '../lib/ai/validation-report.js';
 import { analyzeChangeRequest, mergePrdDelta } from '../lib/ai/cycle.js';
-import { generateTasksFromRoadmap, type TaskGen } from '../lib/ai/tasks.js';
-import { validateAndNormalizeDAG } from '../lib/ai/dag-validator.js';
+import { generateTasksFromRoadmap } from '../lib/ai/tasks.js';
 import { resolveStackContract } from '../lib/ai/stack-contract.js';
 import { persistGeneratedTasks } from '../lib/task-persist.js';
-import { startAiJob, hasActiveJob } from '../lib/ai/job.js';
+import { enqueueAiJob, hasActiveJob, registerJobHandler, NonRetryableJobError, rejectJobLimit } from '../lib/ai/job.js';
 import type { RoadmapData } from '../lib/ai/roadmap.js';
 
 export const cyclesRouter = Router();
+
+type CycleGeneratePayload = {
+  cycleId: string;
+  splitMode: 'single' | 'a' | 'b';
+  partRequest?: string;
+  overrideTitle?: string;
+};
+
+registerJobHandler<CycleGeneratePayload>('cycle_generate', async ({ projectId, payload }) => {
+  const { cycleId, splitMode, partRequest, overrideTitle } = payload;
+  // Ambil ulang data segar di dalam job
+  const freshProject = await prisma.project.findFirst({
+    where: { id: projectId },
+    include: {
+      prd: true,
+      stacks: true,
+      roadmap: { include: { features: true } },
+    },
+  });
+  if (!freshProject) throw new NonRetryableJobError('Project tidak ditemukan saat proses latar belakang.');
+  const freshCycle = await prisma.projectCycle.findFirst({
+    where: { id: cycleId, projectId, status: 'DRAFT' },
+  });
+  if (!freshCycle) throw new NonRetryableJobError('Draft siklus tidak ditemukan.');
+
+  let effectiveRequest = freshCycle.request;
+  let impact = freshCycle.impact as any;
+
+  if (splitMode !== 'single' && partRequest) {
+    effectiveRequest = partRequest;
+    impact = await analyzeChangeRequest({
+      projectId,
+      request: effectiveRequest,
+      prd: freshProject.prd?.content ? readPrdContent(freshProject.prd.content) : null,
+      repoSummary: freshProject.repoSummary,
+    });
+  }
+
+  let prdDeltaPayload: any = freshCycle.prdDelta ?? {};
+  const hasExistingPrdDelta = prdDeltaPayload && typeof prdDeltaPayload === 'object' && Object.keys(prdDeltaPayload).length > 0;
+
+  if (!hasExistingPrdDelta && impact.needsPrdChange && impact.newRequirements && impact.newRequirements.length > 0 && freshProject.prd) {
+    prdDeltaPayload = {
+      summary: impact.prdChangeSummary ?? impact.summary,
+      newRequirements: impact.newRequirements,
+    };
+    const updatedContent = mergePrdDelta(freshProject.prd.content, prdDeltaPayload);
+    await snapshotArtifact(projectId, 'prd', 'cycle_merge');
+    await prisma.prd.update({
+      where: { projectId },
+      data: {
+        content: updatedContent as any,
+        version: { increment: 1 },
+      },
+    });
+  }
+
+  const featureIdMap = new Map<string, string>();
+  const roadmapData: RoadmapData = {
+    phases: freshProject.roadmap.map((p) => ({
+      order: p.order,
+      title: p.title,
+      description: p.description ?? undefined,
+      layer: p.layer as any,
+      features: p.features.map((f) => {
+        featureIdMap.set(f.id, f.id);
+        return {
+          id: f.id,
+          title: f.title,
+          description: f.description ?? undefined,
+          dependsOn: [],
+        };
+      }),
+    })),
+  };
+
+  if (roadmapData.phases.length === 0 || roadmapData.phases.every((p) => p.features.length === 0)) {
+    const defaultPhase = {
+      order: 1,
+      title: 'Siklus Perubahan',
+      layer: 'BACKEND' as const,
+      features: [{ id: 'CYCLE-FEAT', title: freshCycle.title, dependsOn: [] }],
+    };
+    roadmapData.phases = [defaultPhase];
+    featureIdMap.set('CYCLE-FEAT', 'CYCLE-FEAT');
+  }
+
+  const lastTask = await prisma.task.findFirst({
+    where: { projectId },
+    orderBy: { order: 'desc' },
+    select: { order: true },
+  });
+  const startOrder = (lastTask?.order ?? 0) + 1;
+
+  const stackContract = freshProject.stacks.length > 0 ? resolveStackContract(freshProject.stacks) : undefined;
+  const prdDoc = freshProject.prd?.content ? readPrdContent(freshProject.prd.content) : undefined;
+
+  const generated = await generateTasksFromRoadmap({
+    roadmap: roadmapData,
+    projectName: freshProject.name,
+    prd: prdDoc,
+    projectId,
+    stack: stackContract,
+    cycle: {
+      request: effectiveRequest,
+      impact,
+      repoSummary: freshProject.repoSummary,
+      startOrder,
+    },
+  });
+
+  const gate = await runTaskQualityGate({
+    generated,
+    prd: prdDoc ?? { markdown: '', requirementIndex: [] },
+    projectId,
+  });
+  const validTasks = gate.tasks;
+
+  await prisma.$transaction(
+    async (tx) => {
+      await persistGeneratedTasks(tx, projectId, validTasks, featureIdMap, cycleId, startOrder);
+
+      await tx.projectCycle.update({
+        where: { id: cycleId },
+        data: {
+          title: overrideTitle ?? effectiveRequest.slice(0, 60),
+          request: effectiveRequest,
+          status: 'OPEN',
+          impact: impact as any,
+          prdDelta: prdDeltaPayload,
+          type: impact.type ?? freshCycle.type,
+          size: impact.size ?? freshCycle.size,
+        },
+      });
+
+      await tx.project.update({
+        where: { id: projectId },
+        data: { wizardStep: 'board' },
+      });
+    },
+    { timeout: 60000 }
+  );
+
+  try {
+    await saveValidationReport(projectId, 'cycle_generate', gate.findings);
+  } catch (err) {
+    logger.error('Gagal menyimpan laporan validasi cycle', { scope: 'cycles/generate', error: serializeError(err) });
+  }
+
+  const tasksCount = await prisma.task.count({ where: { cycleId } });
+  return { ok: true, cycleId, tasksCount };
+});
+
 
 const ChangeRequestBody = z.object({
   request: z.string().min(8, 'Permintaan perubahan minimal 8 karakter').max(4000),
@@ -28,7 +185,7 @@ const CycleGenerateBody = z.object({
 
 cyclesRouter.get('/api/projects/:id/cycles', requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({
-    where: { id: req.params.id, userId: req.userId },
+    where: projectWhere(req.userId, req.params.id),
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
 
@@ -80,7 +237,7 @@ cyclesRouter.get('/api/projects/:id/cycles', requireUser, async (req: AuthedRequ
 
 cyclesRouter.get('/api/projects/:id/cycles/:cycleId', requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({
-    where: { id: req.params.id, userId: req.userId },
+    where: projectWhere(req.userId, req.params.id),
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
 
@@ -120,7 +277,7 @@ cyclesRouter.post('/api/projects/:id/change-request', requireUser, async (req: A
 
   try {
     const project = await prisma.project.findFirst({
-      where: { id: req.params.id, userId: req.userId },
+      where: projectWhere(req.userId, req.params.id),
       include: { tasks: { select: { status: true } } },
     });
     if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
@@ -157,7 +314,7 @@ cyclesRouter.post('/api/projects/:id/change-request', requireUser, async (req: A
 
     res.json({ ok: true, wizardStep: 'survey' });
   } catch (err) {
-    console.error(`[change-request] Gagal memproses permintaan perubahan project ${req.params.id}:`, err);
+    logger.error('Gagal memproses permintaan perubahan project', { scope: 'change-request', projectId: req.params.id, error: serializeError(err) });
     return res.status(502).json({
       error: 'Gagal memproses permintaan perubahan.',
       detail: (err as Error).message,
@@ -172,7 +329,7 @@ cyclesRouter.post('/api/projects/:id/cycles/:cycleId/generate', requireUser, asy
   }
 
   const project = await prisma.project.findFirst({
-    where: { id: req.params.id, userId: req.userId },
+    where: projectWhere(req.userId, req.params.id),
     include: {
       prd: true,
       stacks: true,
@@ -216,145 +373,19 @@ cyclesRouter.post('/api/projects/:id/cycles/:cycleId/generate', requireUser, asy
   const overrideTitle = parsed.data.title;
 
   try {
-    await startAiJob(projectId, 'cycle_generate', async () => {
-      // Ambil ulang data segar di dalam job
-      const freshProject = await prisma.project.findFirst({
-        where: { id: projectId, userId },
-        include: {
-          prd: true,
-          stacks: true,
-          roadmap: { include: { features: true } },
-        },
-      });
-      if (!freshProject) throw new Error('Project tidak ditemukan saat proses latar belakang.');
-      const freshCycle = await prisma.projectCycle.findFirst({
-        where: { id: cycleId, projectId, status: 'DRAFT' },
-      });
-      if (!freshCycle) throw new Error('Draft siklus tidak ditemukan.');
-
-      let effectiveRequest = freshCycle.request;
-      let impact = freshCycle.impact as any;
-
-      if (splitMode !== 'single' && partRequest) {
-        effectiveRequest = partRequest;
-        impact = await analyzeChangeRequest({
-          projectId,
-          request: effectiveRequest,
-          prd: freshProject.prd?.content ? readPrdContent(freshProject.prd.content) : null,
-          repoSummary: freshProject.repoSummary,
-        });
-      }
-
-      let prdDeltaPayload: any = freshCycle.prdDelta ?? {};
-      const hasExistingPrdDelta = prdDeltaPayload && typeof prdDeltaPayload === 'object' && Object.keys(prdDeltaPayload).length > 0;
-
-      if (!hasExistingPrdDelta && impact.needsPrdChange && impact.newRequirements && impact.newRequirements.length > 0 && freshProject.prd) {
-        prdDeltaPayload = {
-          summary: impact.prdChangeSummary ?? impact.summary,
-          newRequirements: impact.newRequirements,
-        };
-        const updatedContent = mergePrdDelta(freshProject.prd.content, prdDeltaPayload);
-        await prisma.prd.update({
-          where: { projectId },
-          data: {
-            content: updatedContent as any,
-            version: { increment: 1 },
-          },
-        });
-      }
-
-      const featureIdMap = new Map<string, string>();
-      const roadmapData: RoadmapData = {
-        phases: freshProject.roadmap.map((p) => ({
-          order: p.order,
-          title: p.title,
-          description: p.description ?? undefined,
-          layer: p.layer as any,
-          features: p.features.map((f) => {
-            featureIdMap.set(f.id, f.id);
-            return {
-              id: f.id,
-              title: f.title,
-              description: f.description ?? undefined,
-              dependsOn: [],
-            };
-          }),
-        })),
-      };
-
-      if (roadmapData.phases.length === 0 || roadmapData.phases.every((p) => p.features.length === 0)) {
-        const defaultPhase = {
-          order: 1,
-          title: 'Siklus Perubahan',
-          layer: 'BACKEND' as const,
-          features: [{ id: 'CYCLE-FEAT', title: freshCycle.title, dependsOn: [] }],
-        };
-        roadmapData.phases = [defaultPhase];
-        featureIdMap.set('CYCLE-FEAT', 'CYCLE-FEAT');
-      }
-
-      const lastTask = await prisma.task.findFirst({
-        where: { projectId },
-        orderBy: { order: 'desc' },
-        select: { order: true },
-      });
-      const startOrder = (lastTask?.order ?? 0) + 1;
-
-      const stackContract = freshProject.stacks.length > 0 ? resolveStackContract(freshProject.stacks) : undefined;
-      const prdDoc = freshProject.prd?.content ? readPrdContent(freshProject.prd.content) : undefined;
-
-      const generated = await generateTasksFromRoadmap({
-        roadmap: roadmapData,
-        projectName: freshProject.name,
-        prd: prdDoc,
-        uiSpec: freshProject.uiSpec,
-        projectId,
-        stack: stackContract,
-        cycle: {
-          request: effectiveRequest,
-          impact,
-          repoSummary: freshProject.repoSummary,
-          startOrder,
-        },
-      });
-
-      const { tasks: validTasks, warnings } = validateAndNormalizeDAG(generated);
-      if (warnings.length > 0) {
-        console.log(`[CYCLE-DAG-VALIDATOR] warnings:\n${warnings.join('\n')}`);
-      }
-
-      await prisma.$transaction(
-        async (tx) => {
-          await persistGeneratedTasks(tx, projectId, validTasks, featureIdMap, cycleId, startOrder);
-
-          await tx.projectCycle.update({
-            where: { id: cycleId },
-            data: {
-              title: overrideTitle ?? effectiveRequest.slice(0, 60),
-              request: effectiveRequest,
-              status: 'OPEN',
-              impact: impact as any,
-              prdDelta: prdDeltaPayload,
-              type: impact.type ?? freshCycle.type,
-              size: impact.size ?? freshCycle.size,
-            },
-          });
-
-          await tx.project.update({
-            where: { id: projectId },
-            data: { wizardStep: 'board' },
-          });
-        },
-        { timeout: 60000 }
-      );
-
-      const tasksCount = await prisma.task.count({ where: { cycleId } });
-      return { ok: true, cycleId, tasksCount };
+    await enqueueAiJob({
+      projectId,
+      type: 'cycle_generate',
+      userId,
+      payload: { cycleId, splitMode, partRequest, overrideTitle },
+      // Merge delta PRD tidak idempoten, jadi tidak diulang otomatis.
+      maxAttempts: 1,
     });
 
     res.json({ ok: true, status: 'generating', cycleId });
   } catch (err) {
-    console.error(`[cycles/generate] Gagal memulai perancangan task untuk cycle ${cycleId}:`, err);
+    logger.error('Gagal memulai perancangan task untuk cycle', { scope: 'cycles/generate', cycleId, error: serializeError(err) });
+    if (rejectJobLimit(res, err)) return;
     return res.status(502).json({
       error: 'AI gagal merancang task untuk siklus perubahan.',
       detail: (err as Error).message,

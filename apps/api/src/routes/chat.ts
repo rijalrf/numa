@@ -1,13 +1,18 @@
 // Chat brainstorm sebelum project dibuat.
+import { logger, serializeError } from '../lib/logger.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireUser, type AuthedRequest } from '../middleware/require-user.js';
 import { checkProjectLimit, getUserPlan } from '../lib/billing.js';
 import { finalizeChatSession, postFinalizeProject } from '../lib/ai/chat.js';
-import { startAiJob } from '../lib/ai/job.js';
+import { enqueueAiJob, registerJobHandler } from '../lib/ai/job.js';
 
 export const chatRouter = Router();
+
+registerJobHandler<{ rawIdea: string }>('chat_finalize', async ({ projectId, userId, payload }) =>
+  postFinalizeProject(projectId, payload?.rawIdea ?? '', userId ?? '')
+);
 
 const ChatMessageBodySchema = z.object({
   content: z.string().min(1),
@@ -39,7 +44,7 @@ chatRouter.post('/api/chat/sessions/:id/messages', requireUser, async (req: Auth
   });
   if (!session) return res.status(404).json({ error: 'Sesi chat tidak ditemukan.' });
 
-  const { plan, config } = await getUserPlan(req.userId);
+  const { config } = await getUserPlan(req.userId);
 
   if (parsed.data.content.length > config.charLimit) {
     return res.status(400).json({
@@ -55,7 +60,7 @@ chatRouter.post('/api/chat/sessions/:id/messages', requireUser, async (req: Auth
   res.json({ ok: true, id: msg.id, content: msg.content });
 });
 
-chatRouter.post('/api/chat/sessions/:id/retry', requireUser, async (req: AuthedRequest, res) => {
+chatRouter.post('/api/chat/sessions/:id/retry', requireUser, async (_req: AuthedRequest, res) => {
   res.json({ ok: true });
 });
 
@@ -89,9 +94,13 @@ chatRouter.post('/api/chat/sessions/:id/finalize', requireUser, async (req: Auth
     const result = await finalizeChatSession(session.id, req.userId, rawIdea);
 
     // Job async: rename project dengan nama hasil AI (survey round di-kickstart halaman survey).
-    void startAiJob(result.projectId, 'chat_finalize', async () => {
-      return postFinalizeProject(result.projectId, rawIdea ?? session.messages.find((m) => m.role === 'user')?.content ?? '', req.userId);
-    }).catch((err) => console.error('[chat/finalize] Gagal memulai job rename:', err));
+    const ideaForName = rawIdea ?? session.messages.find((m) => m.role === 'user')?.content ?? '';
+    void enqueueAiJob({
+      projectId: result.projectId,
+      type: 'chat_finalize',
+      userId: req.userId,
+      payload: { rawIdea: ideaForName },
+    }).catch((err) => logger.error('Gagal memasukkan job rename ke antrean', { scope: 'chat/finalize', error: serializeError(err) }));
 
     res.json(result);
   } catch (err) {

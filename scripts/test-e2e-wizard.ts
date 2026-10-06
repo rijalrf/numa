@@ -2,11 +2,11 @@
 import assert from 'node:assert';
 import { prisma } from '../apps/api/src/lib/prisma.js';
 
-const API_BASE = 'http://localhost:6655';
+const API_BASE = process.env.E2E_API_BASE ?? 'http://localhost:6655';
 
-// Helper: poll AI job sampai selesai (max 120 detik)
+// Helper: poll AI job sampai selesai (max 300 detik)
 async function pollJob(authedFetch: (path: string, opts?: RequestInit) => Promise<Response>, projectId: string, jobType: string, label: string) {
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 100; i++) {
     await new Promise(r => setTimeout(r, 3000));
     const res = await authedFetch(`/api/projects/${projectId}/ai-jobs?type=${jobType}`);
     if (res.status === 200) {
@@ -16,7 +16,7 @@ async function pollJob(authedFetch: (path: string, opts?: RequestInit) => Promis
     }
     process.stdout.write('.');
   }
-  throw new Error(`${label} timeout setelah 120 detik`);
+  throw new Error(`${label} timeout setelah 300 detik`);
 }
 
 async function runTest() {
@@ -263,6 +263,26 @@ async function runTest() {
   const treeGetJson = await treeGetRes.json();
   assert(treeGetJson.nodes.length > 0, 'Tree nodes harus ada');
   console.log(`Tree check OK: ${treeGetJson.nodes.length} nodes ditemukan.`);
+
+  // Diagram alur bisnis swimlane tersimpan terpisah dari node tree
+  const flowRes = await authedFetch(`/api/projects/${projectId}/flow`);
+  assert(flowRes.ok, 'GET flow harus berhasil');
+  const flowJson = await flowRes.json();
+  assert(flowJson.flow, 'Diagram alur bisnis harus ada');
+  const { lanes, steps, edges } = flowJson.flow;
+  assert(lanes.length >= 2, 'Alur bisnis minimal punya 2 lane');
+  assert(lanes.some((l: { kind: string }) => l.kind === 'system'), 'Alur bisnis harus punya lane system');
+  const laneIds = new Set(lanes.map((l: { id: string }) => l.id));
+  assert(
+    steps.every((st: { laneId: string }) => laneIds.has(st.laneId)),
+    'Setiap step harus punya lane yang valid'
+  );
+  const FLOW_KINDS = ['start', 'process', 'decision', 'end'];
+  assert(
+    !treeGetJson.nodes.some((n: { kind: string }) => FLOW_KINDS.includes(n.kind)),
+    'Node tree tidak boleh berisi kind alur bisnis'
+  );
+  console.log(`Flow check OK: ${lanes.length} lane, ${steps.length} step, ${edges.length} edge.`);
 
   console.log('\n--- 10. TEST BOARD TASKS (TECH LEAD) ---');
   // Generate Tasks (async job)

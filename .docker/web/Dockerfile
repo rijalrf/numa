@@ -31,8 +31,8 @@ ENV VITE_API_URL=$VITE_API_URL
 
 RUN npm run build --workspace=@numa/web
 
-# Production stage menggunakan Nginx Alpine
-FROM nginx:alpine AS runner
+# Production stage: Nginx tanpa hak root (uid 101). Port 3455 > 1024 sehingga tidak butuh privilese.
+FROM nginxinc/nginx-unprivileged:alpine AS runner
 
 COPY .docker/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/apps/web/dist /usr/share/nginx/html

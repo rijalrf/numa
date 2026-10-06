@@ -1,5 +1,6 @@
 // Download PRD/BRD sebagai .md dan export.zip paket dokumen proyek.
 import { Router } from 'express';
+import { projectWhere } from '../lib/access.js';
 import { prisma } from '../lib/prisma.js';
 import { requireUser, type AuthedRequest } from '../middleware/require-user.js';
 import { getUserPlan } from '../lib/billing.js';
@@ -15,7 +16,7 @@ exportRouter.get(['/api/projects/:id/prd/download', '/api/projects/:id/brd/downl
   }
 
   const project = await prisma.project.findFirst({
-    where: { id: req.params.id, userId: req.userId },
+    where: projectWhere(req.userId, req.params.id),
     include: { prd: true },
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
@@ -41,7 +42,7 @@ exportRouter.get('/api/projects/:id/export.zip', requireUser, async (req: Authed
   }
 
   const project = await prisma.project.findFirst({
-    where: { id: req.params.id, userId: req.userId },
+    where: projectWhere(req.userId, req.params.id),
     include: {
       prd: true,
       tasks: {

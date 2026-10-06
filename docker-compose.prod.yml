@@ -1,6 +1,6 @@
 services:
   api:
-    image: ${DOCKERHUB_USERNAME}/numa-api:latest
+    image: ${DOCKERHUB_USERNAME}/numa-api:${NUMA_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: .docker/api/Dockerfile
@@ -14,10 +14,10 @@ services:
       - NODE_ENV=production
       - PORT=6655
       # Database PostgreSQL berjalan langsung di host VPS
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-admin123}@host.docker.internal:5432/${POSTGRES_DB:-project_ai_planner}?schema=public
-      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
-      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-https://numa.opendv.xyz}
-      - FE_URL=${FE_URL:-https://numa.opendv.xyz,https://numa.mrijal.my.id}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD wajib diisi}@host.docker.internal:5432/${POSTGRES_DB:-project_ai_planner}?schema=public
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET wajib diisi}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL:?BETTER_AUTH_URL wajib diisi}
+      - FE_URL=${FE_URL:?FE_URL wajib diisi}
       - AI_PROVIDER=${AI_PROVIDER:-openai}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-http://host.docker.internal:20128/v1}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
@@ -27,10 +27,30 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - CLI_DIR=/app/packages/cli
+      - ADMIN_PLAN_OVERRIDES=${ADMIN_PLAN_OVERRIDES:-}
+      # Antrean job, budget token, logging, dan SSO OIDC (kosong = default/nonaktif)
+      - AI_JOB_CONCURRENCY=${AI_JOB_CONCURRENCY:-4}
+      - AI_MAX_ACTIVE_JOBS_PER_USER=${AI_MAX_ACTIVE_JOBS_PER_USER:-5}
+      - AI_TOKEN_BUDGET_FREE=${AI_TOKEN_BUDGET_FREE:-}
+      - AI_TOKEN_BUDGET_STARTER=${AI_TOKEN_BUDGET_STARTER:-}
+      - AI_TOKEN_BUDGET_PRO=${AI_TOKEN_BUDGET_PRO:-}
+      - TRUST_PROXY_HOPS=${TRUST_PROXY_HOPS:-1}
+      - PLATFORM_ADMIN_EMAILS=${PLATFORM_ADMIN_EMAILS:-}
+      - AI_PRICE_INPUT_PER_MTOK_REASONING=${AI_PRICE_INPUT_PER_MTOK_REASONING:-}
+      - AI_PRICE_OUTPUT_PER_MTOK_REASONING=${AI_PRICE_OUTPUT_PER_MTOK_REASONING:-}
+      - AI_PRICE_INPUT_PER_MTOK_CHEAP=${AI_PRICE_INPUT_PER_MTOK_CHEAP:-}
+      - AI_PRICE_OUTPUT_PER_MTOK_CHEAP=${AI_PRICE_OUTPUT_PER_MTOK_CHEAP:-}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+      - OIDC_ISSUER=${OIDC_ISSUER:-}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
+      - OIDC_SCOPES=${OIDC_SCOPES:-}
+      - OIDC_TRUST_EMAIL=${OIDC_TRUST_EMAIL:-false}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:6655/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:6655/ready').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -39,13 +59,13 @@ services:
       - numa-net
 
   web:
-    image: ${DOCKERHUB_USERNAME}/numa-web:latest
+    image: ${DOCKERHUB_USERNAME}/numa-web:${NUMA_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: .docker/web/Dockerfile
       target: runner
       args:
-        VITE_API_URL: ${VITE_API_URL:-https://numa.opendv.xyz}
+        VITE_API_URL: ${VITE_API_URL:?VITE_API_URL wajib diisi}
     container_name: numa-web
     restart: unless-stopped
     ports:

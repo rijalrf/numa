@@ -16,6 +16,7 @@ function walkFiles(targetDir: string): string[] {
     'coverage',
     '.numa',
     '.claude',
+    '.agents',
   ]);
   const files: string[] = [];
 

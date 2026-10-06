@@ -1,5 +1,6 @@
 // Unlock tahap sebelumnya (mundur step wizard).
 import { Router } from 'express';
+import { projectWhere } from '../lib/access.js';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireUser, type AuthedRequest } from '../middleware/require-user.js';
@@ -18,7 +19,7 @@ wizardStepRouter.post('/api/projects/:id/wizard-step', requireUser, async (req: 
   }
 
   const project = await prisma.project.findFirst({
-    where: { id: req.params.id, userId: req.userId },
+    where: projectWhere(req.userId, req.params.id),
     include: { chatSession: { select: { id: true } } },
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });

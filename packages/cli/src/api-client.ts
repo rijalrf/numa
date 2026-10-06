@@ -13,7 +13,7 @@ export class ApiError extends Error {
 
 async function request<T>(cfg: Config, path: string, init: RequestInit = {}): Promise<T> {
   if (!cfg.token) {
-    throw new ApiError('Belum login. Jalankan: numa login <token>', 401);
+    throw new ApiError('Belum login. Jalankan: numa login', 401);
   }
   const url = `${cfg.apiUrl.replace(/\/$/, '')}${path}`;
 
@@ -76,6 +76,24 @@ export type ContextResp = {
     advisory_commands?: string[];
   };
 };
+export type GuardReportPayload = {
+  baseline: string | null;
+  changedFiles: string[];
+  outOfScopeFiles: string[];
+  commands: Array<{ command: string; ok: boolean; skipped?: boolean }>;
+  cliVersion: string;
+};
+export type CompleteMeta = {
+  outputSummary?: string;
+  apiContracts?: unknown[];
+  /** true bila user memakai --force (guard dilewati); dicatat di server. */
+  forced?: boolean;
+  guardReport?: GuardReportPayload;
+};
+export type CheckpointsResp = {
+  checkpoints: Array<{ id: string; type: string; layer: string | null; message: string | null; createdAt: string }>;
+  blockingId: string | null;
+};
 export type StatusResp = { ok: true; taskId: string; status: string; checkpointPending?: boolean; layer?: string };
 export type PrdResponse = {
   prd?: { id: string; content: unknown; version: number; generatedAt: string };
@@ -113,7 +131,7 @@ export const api = {
   context(cfg: Config, id: string) {
     return request<ContextResp>(cfg, `/api/agent/tasks/${id}/context`);
   },
-  done(cfg: Config, id: string, meta?: { outputSummary?: string; apiContracts?: unknown[] }) {
+  done(cfg: Config, id: string, meta?: CompleteMeta) {
     return request<StatusResp>(cfg, `/api/agent/tasks/${id}/complete`, {
       method: 'POST',
       body: meta ? JSON.stringify(meta) : undefined,
@@ -124,6 +142,18 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(failure),
     });
+  },
+  retry(cfg: Config, id: string) {
+    return request<{ ok: true; taskId: string; status: string }>(cfg, `/api/agent/tasks/${id}/retry`, { method: 'POST' });
+  },
+  block(cfg: Config, id: string, reason: string) {
+    return request<{ ok: true; taskId: string; status: string; blockedReason: string }>(cfg, `/api/agent/tasks/${id}/block`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  },
+  checkpoints(cfg: Config) {
+    return request<CheckpointsResp>(cfg, '/api/agent/checkpoints');
   },
   prd(cfg: Config) {
     return request<PrdResponse>(cfg, '/api/agent/prd');

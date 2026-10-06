@@ -2,7 +2,7 @@
 // Interval 3 detik, berhenti saat status done/failed/idle lebih dari maxAttempts.
 import { api } from './http';
 
-export type AiJobStatus = 'idle' | 'running' | 'done' | 'failed';
+export type AiJobStatus = 'idle' | 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
 
 export type AiJobResponse = {
   status: AiJobStatus | 'generating';
@@ -17,6 +17,7 @@ export type AiJobType =
   | 'survey_round'
   | 'survey_summary'
   | 'tree_generate'
+  | 'flow_generate'
   | 'techstack_recommend'
   | 'chat_finalize';
 
@@ -34,7 +35,7 @@ export function pollAiJob(
   opts: PollAiJobOptions = {}
 ): () => void {
   const intervalMs = opts.intervalMs ?? 3000;
-  const maxAttempts = opts.maxAttempts ?? 60; // 3 menit
+  const maxAttempts = opts.maxAttempts ?? 120; // 6 menit (job tree menjalankan tree lalu flow berurutan)
   let attempts = 0;
 
   const timer = setInterval(async () => {
@@ -47,7 +48,7 @@ export function pollAiJob(
         opts.onDone?.(json.result);
         return;
       }
-      if (json.status === 'failed') {
+      if (json.status === 'failed' || json.status === 'cancelled') {
         clearInterval(timer);
         opts.onFailed?.(json.error || 'AI gagal memproses permintaan.');
         return;

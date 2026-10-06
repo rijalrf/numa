@@ -4,6 +4,7 @@ import { generateJson } from './ai-service.js';
 import { SurveyQuestionItemSchema } from '../survey.js';
 import { readPrdContent } from './prd.js';
 import type { PrdTaskContext } from './tasks.js';
+import { PROMPT_VERSIONS } from './prompts.js';
 
 export const ImpactSchema = z.object({
   clarity: z
@@ -144,6 +145,7 @@ Lakukan analisis mendalam dan kembalikan JSON sesuai schema.`;
     schema: ImpactSchema,
     tier: 'reasoning',
     agentName: 'ChangeCycleAnalyzer',
+    promptVersion: PROMPT_VERSIONS.cycle,
     projectId: args.projectId,
   });
 

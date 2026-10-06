@@ -1,5 +1,8 @@
 // Kanban tasks: generasi AI (fire-and-forget), list, update status.
+import { logger, serializeError } from '../lib/logger.js';
 import { Router } from 'express';
+import { recordAudit } from '../lib/audit.js';
+import { projectWhere, getProjectRole, hasRole } from '../lib/access.js';
 import { prisma } from '../lib/prisma.js';
 import { requireUser, type AuthedRequest } from '../middleware/require-user.js';
 import { getUserPlan, checkQuota, incrementQuota } from '../lib/billing.js';
@@ -7,14 +10,189 @@ import { isStageLocked } from '../lib/stage.js';
 import { PrdSchema, readPrdContent } from '../lib/ai/prd.js';
 import { generateRoadmapFromPRD } from '../lib/ai/roadmap.js';
 import { generateTasksFromRoadmap } from '../lib/ai/tasks.js';
-import { validateAndNormalizeDAG } from '../lib/ai/dag-validator.js';
-import { validateApiCoverage } from '../lib/ai/api-coverage-validator.js';
-import { validateCleanup } from '../lib/ai/cleanup-validator.js';
+import { BusinessFlowSchema } from '../lib/ai/schemas.js';
+import { checkSpecConsistency } from '../lib/ai/product-spec.js';
+import { enumerateFlowPaths, renderFlowScenarios } from '../lib/ai/flow-contract.js';
+import { saveValidationReport, type Finding } from '../lib/ai/validation-report.js';
+import { ensureProductSpec } from '../lib/prd-spec.js';
+import { runTaskQualityGate } from '../lib/task-quality.js';
 import { resolveStackContract } from '../lib/ai/stack-contract.js';
 import { persistGeneratedTasks } from '../lib/task-persist.js';
-import { startAiJob, getLatestJob, hasActiveJob, type AiJobType } from '../lib/ai/job.js';
+import { enqueueAiJob, getLatestJob, hasActiveJob, isAiJobType, registerJobHandler, toClientStatus, cancelAiJob, NonRetryableJobError, rejectJobLimit } from '../lib/ai/job.js';
 
 export const tasksRouter = Router();
+
+registerJobHandler<{ isFirstGeneration?: boolean }>('tasks_generate', async ({ projectId, userId, payload }) => {
+  const isFirstGeneration = payload?.isFirstGeneration === true;
+  let currentProject = await prisma.project.findFirst({
+    where: { id: projectId },
+    include: {
+      prd: true,
+      stacks: true,
+      roadmap: { include: { features: { include: { dependencies: true } } } },
+    },
+  });
+  if (!currentProject) throw new NonRetryableJobError('Project tidak ditemukan saat proses latar belakang.');
+
+  // Auto-generate roadmap jika belum ada tapi PRD ada
+  if (currentProject.roadmap.length === 0) {
+    if (!currentProject.prd) throw new NonRetryableJobError('PRD belum ada. Generate PRD dulu.');
+    const parsedPrd = PrdSchema.parse(currentProject.prd.content);
+    const roadmapData = await generateRoadmapFromPRD(parsedPrd, { projectId: currentProject.id });
+    await prisma.roadmapPhase.deleteMany({ where: { projectId: currentProject.id } });
+
+    const phaseMap = new Map<string, string>();
+    for (const p of roadmapData.phases) {
+      const created = await prisma.roadmapPhase.create({
+        data: { projectId: currentProject.id, order: p.order, title: p.title, description: p.description, layer: p.layer },
+      });
+      for (const f of p.features) {
+        const fcreated = await prisma.roadmapFeature.create({
+          data: { phaseId: created.id, title: f.title, description: f.description },
+        });
+        phaseMap.set(f.id, fcreated.id);
+      }
+    }
+    for (const p of roadmapData.phases) {
+      for (const f of p.features) {
+        if (f.dependsOn.length === 0) continue;
+        const fromId = phaseMap.get(f.id);
+        if (!fromId) continue;
+        for (const dep of f.dependsOn) {
+          const toId = phaseMap.get(dep);
+          if (!toId) continue;
+          await prisma.roadmapDependency.create({ data: { featureId: fromId, dependsOnId: toId } });
+        }
+      }
+    }
+
+    const refetched = await prisma.project.findFirst({
+      where: { id: projectId },
+      include: {
+        prd: true,
+        stacks: true,
+        roadmap: { include: { features: { include: { dependencies: true } } } },
+      },
+    });
+    if (refetched) currentProject = refetched;
+  }
+
+  if (currentProject.roadmap.length === 0) throw new NonRetryableJobError('Roadmap belum ada.');
+
+  // Konversi Prisma ke shape yang dipahami AI generator.
+  const featureIdMap = new Map<string, string>(); // dbId -> tmpId
+  const featuresForAI: { id: string; title: string; description?: string; layer: string; dependsOn: string[] }[] = [];
+  let tmpCounter = 1;
+  for (const phase of currentProject.roadmap) {
+    for (const f of phase.features) {
+      const tmpId = `f${tmpCounter++}`;
+      featureIdMap.set(f.id, tmpId);
+      featuresForAI.push({
+        id: tmpId,
+        title: f.title,
+        description: f.description ?? undefined,
+        layer: phase.layer,
+        dependsOn: f.dependencies.map((d) => featureIdMap.get(d.dependsOnId) ?? '').filter(Boolean),
+      });
+    }
+  }
+  const phasesForAI = currentProject.roadmap.map((p) => ({
+    order: p.order,
+    title: p.title,
+    description: p.description ?? undefined,
+    layer: p.layer as 'BOOTSTRAP' | 'DATABASE' | 'BACKEND' | 'FRONTEND' | 'INTEGRATION',
+    features: featuresForAI
+      .filter((f) => currentProject!.roadmap.find((rp) => rp.features.find((rf) => featureIdMap.get(rf.id) === f.id))?.id === p.id)
+      .map((f) => ({ id: f.id, title: f.title, description: f.description, dependsOn: f.dependsOn })),
+  }));
+
+  // Spec terstruktur PRD (diekstrak otomatis untuk PRD lama) dan kontrak flow bisnis.
+  const preFindings: Finding[] = [];
+  const specResult = await ensureProductSpec(currentProject.id);
+  const prdDoc = specResult?.prd ?? readPrdContent(currentProject.prd?.content);
+  if (!prdDoc.spec) {
+    preFindings.push({
+      code: 'SPEC_MISSING',
+      severity: 'warning',
+      message: `Spec terstruktur PRD tidak tersedia (${specResult?.error ?? 'PRD lama'}). Model data dan endpoint tidak dipakai generator task.`,
+    });
+  } else {
+    for (const w of checkSpecConsistency(prdDoc.spec)) {
+      preFindings.push({ code: 'SPEC_INCONSISTENT', severity: 'info', message: w });
+    }
+  }
+
+  const flowRow = await prisma.businessFlow.findUnique({ where: { projectId: currentProject.id } });
+  const parsedFlow = flowRow ? BusinessFlowSchema.safeParse(flowRow.content) : null;
+  const flow = parsedFlow?.success ? parsedFlow.data : null;
+  if (!flow) {
+    preFindings.push({
+      code: 'FLOW_MISSING',
+      severity: 'info',
+      message: 'Business flow belum tersedia atau tidak valid, skenario E2E diturunkan dari PRD saja.',
+    });
+  }
+  const flowScenarios = flow ? renderFlowScenarios(flow, enumerateFlowPaths(flow)) : undefined;
+
+  const stackContract = resolveStackContract(currentProject.stacks || []);
+
+  const generated = await generateTasksFromRoadmap({
+    roadmap: { phases: phasesForAI },
+    projectName: currentProject.name,
+    prd: prdDoc as any,
+    projectId: currentProject.id,
+    stack: stackContract,
+    flowScenarios,
+  });
+
+  const gate = await runTaskQualityGate({ generated, prd: prdDoc, flow, projectId: currentProject.id });
+  const validTasks = gate.tasks;
+  const findings = [...preFindings, ...gate.findings];
+
+  // Tulis ulang task secara atomik. Task yang sudah DONE adalah pekerjaan nyata di repo user,
+  // jadi dipertahankan; task hasil generate yang kembar dengan task DONE dilewati.
+  await prisma.$transaction(
+    async (tx) => {
+      const preserved = await tx.task.findMany({
+        where: { projectId: currentProject!.id, status: 'DONE' },
+        select: { title: true, order: true, aiContext: true },
+      });
+      const norm = (v: string) => v.trim().toLowerCase();
+      const doneTitles = new Set(preserved.map((t) => norm(t.title)));
+      const doneTaskIds = new Set(
+        preserved
+          .map((t) => (t.aiContext as { taskId?: string } | null)?.taskId)
+          .filter((v): v is string => typeof v === 'string')
+          .map(norm)
+      );
+      const fresh = validTasks.filter(
+        (t) => !doneTitles.has(norm(t.title)) && !(t.taskId && doneTaskIds.has(norm(t.taskId)))
+      );
+      const startOrder = preserved.reduce((max, t) => Math.max(max, t.order), 0) + 1;
+
+      await tx.task.deleteMany({ where: { projectId: currentProject!.id, status: { not: 'DONE' } } });
+      await persistGeneratedTasks(tx, currentProject!.id, fresh, featureIdMap, null, startOrder);
+      await tx.project.update({
+        where: { id: currentProject!.id },
+        data: {
+          wizardStep: 'board',
+        },
+      });
+    },
+    { timeout: 60000 }
+  );
+
+  try {
+    await saveValidationReport(currentProject.id, 'tasks_generate', findings);
+  } catch (err) {
+    logger.error('Gagal menyimpan laporan validasi tasks', { scope: 'tasks/generate', error: serializeError(err) });
+  }
+
+  if (isFirstGeneration && userId) {
+    await incrementQuota(userId);
+  }
+});
+
 
 tasksRouter.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequest, res) => {
   const projectId = req.params.id;
@@ -32,7 +210,7 @@ tasksRouter.post('/api/projects/:id/tasks/generate', requireUser, async (req: Au
     }
 
     const project = await prisma.project.findFirst({
-      where: { id: projectId, userId },
+      where: projectWhere(userId, projectId),
       select: { id: true, wizardStep: true },
     });
     if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
@@ -60,147 +238,7 @@ tasksRouter.post('/api/projects/:id/tasks/generate', requireUser, async (req: Au
       return res.status(409).json({ error: 'Perancangan task sedang berlangsung. Mohon tunggu sejenak.' });
     }
 
-    // Respons langsung ke client (fire-and-forget)
-    await startAiJob(projectId, 'tasks_generate', async () => {
-        let currentProject = await prisma.project.findFirst({
-          where: { id: projectId, userId },
-          include: {
-            prd: true,
-            stacks: true,
-            roadmap: { include: { features: { include: { dependencies: true } } } },
-          },
-        });
-        if (!currentProject) throw new Error('Project tidak ditemukan saat proses latar belakang.');
-
-        // Auto-generate roadmap jika belum ada tapi PRD ada
-        if (currentProject.roadmap.length === 0) {
-          if (!currentProject.prd) throw new Error('PRD belum ada. Generate PRD dulu.');
-          const parsedPrd = PrdSchema.parse(currentProject.prd.content);
-          const roadmapData = await generateRoadmapFromPRD(parsedPrd, { projectId: currentProject.id });
-          await prisma.roadmapPhase.deleteMany({ where: { projectId: currentProject.id } });
-
-          const phaseMap = new Map<string, string>();
-          for (const p of roadmapData.phases) {
-            const created = await prisma.roadmapPhase.create({
-              data: { projectId: currentProject.id, order: p.order, title: p.title, description: p.description, layer: p.layer },
-            });
-            for (const f of p.features) {
-              const fcreated = await prisma.roadmapFeature.create({
-                data: { phaseId: created.id, title: f.title, description: f.description },
-              });
-              phaseMap.set(f.id, fcreated.id);
-            }
-          }
-          for (const p of roadmapData.phases) {
-            for (const f of p.features) {
-              if (f.dependsOn.length === 0) continue;
-              const fromId = phaseMap.get(f.id);
-              if (!fromId) continue;
-              for (const dep of f.dependsOn) {
-                const toId = phaseMap.get(dep);
-                if (!toId) continue;
-                await prisma.roadmapDependency.create({ data: { featureId: fromId, dependsOnId: toId } });
-              }
-            }
-          }
-
-          const refetched = await prisma.project.findFirst({
-            where: { id: projectId, userId },
-            include: {
-              prd: true,
-              stacks: true,
-              roadmap: { include: { features: { include: { dependencies: true } } } },
-            },
-          });
-          if (refetched) currentProject = refetched;
-        }
-
-        if (currentProject.roadmap.length === 0) throw new Error('Roadmap belum ada.');
-
-        // Konversi Prisma ke shape yang dipahami AI generator.
-        const featureIdMap = new Map<string, string>(); // dbId -> tmpId
-        const featuresForAI: { id: string; title: string; description?: string; layer: string; dependsOn: string[] }[] = [];
-        let tmpCounter = 1;
-        for (const phase of currentProject.roadmap) {
-          for (const f of phase.features) {
-            const tmpId = `f${tmpCounter++}`;
-            featureIdMap.set(f.id, tmpId);
-            featuresForAI.push({
-              id: tmpId,
-              title: f.title,
-              description: f.description ?? undefined,
-              layer: phase.layer,
-              dependsOn: f.dependencies.map((d) => featureIdMap.get(d.dependsOnId) ?? '').filter(Boolean),
-            });
-          }
-        }
-        const phasesForAI = currentProject.roadmap.map((p) => ({
-          order: p.order,
-          title: p.title,
-          description: p.description ?? undefined,
-          layer: p.layer as 'BOOTSTRAP' | 'DATABASE' | 'BACKEND' | 'FRONTEND' | 'INTEGRATION',
-          features: featuresForAI
-            .filter((f) => currentProject!.roadmap.find((rp) => rp.features.find((rf) => featureIdMap.get(rf.id) === f.id))?.id === p.id)
-            .map((f) => ({ id: f.id, title: f.title, description: f.description, dependsOn: f.dependsOn })),
-        }));
-
-        const prdDoc = readPrdContent(currentProject.prd?.content);
-        const stackContract = resolveStackContract(currentProject.stacks || []);
-
-        let generated = await generateTasksFromRoadmap({
-          roadmap: { phases: phasesForAI },
-          projectName: currentProject.name,
-          prd: prdDoc as any,
-          projectId: currentProject.id,
-          stack: stackContract,
-        });
-
-        // Coverage check ringan: tiap requirement FR di index muncul di requirement_ids minimal satu task
-        if (prdDoc.requirementIndex.length > 0) {
-          const allTaskReqIds = new Set(generated.flatMap((t) => t.requirement_ids || []));
-          const uncoveredReqs = prdDoc.requirementIndex.filter((r) => r.id.startsWith('FR-') && !allTaskReqIds.has(r.id));
-          if (uncoveredReqs.length > 0) {
-            console.warn(`[REQ-COVERAGE] Catatan: ${uncoveredReqs.length} FR belum terpetakan ke task: ${uncoveredReqs.map((r) => r.id).join(', ')}`);
-          }
-        }
-
-        // Validasi coverage API ke UI: catat jika ada endpoint mutasi tanpa pemanggil di frontend
-        const coverage = validateApiCoverage(generated, (prdDoc as any)?.apiEndpoints ?? []);
-        if (coverage.uncovered.length > 0) {
-          console.warn(`[API-COVERAGE] Catatan: Ditemukan ${coverage.uncovered.length} endpoint mutasi tanpa UI pemanggil.`);
-        }
-
-        // Validasi DAG Deterministik (Bab 35 & 36): deteksi siklus, buang self-dep, dan urutkan topologis
-        const { tasks: validTasks, warnings, healed } = validateAndNormalizeDAG(generated);
-        if (warnings.length > 0) {
-          console.log(`[DAG-VALIDATOR] Memproses ${validTasks.length} tasks (healed=${healed}):\n${warnings.map((w) => '  - ' + w).join('\n')}`);
-        }
-
-        // Cleanup & Heuristic Validation (Tahap 6: Cleanup/Refactoring)
-        const cleanupResult = validateCleanup(validTasks);
-        if (cleanupResult.warnings.length > 0) {
-          console.log(`[CLEANUP-VALIDATOR] Peringatan kebersihan task (${cleanupResult.warnings.length}):\n${cleanupResult.warnings.map((w) => '  - ' + w).join('\n')}`);
-        }
-
-        // Hapus tasks lama dan tulis ulang secara atomik dalam satu transaksi
-        await prisma.$transaction(
-          async (tx) => {
-            await tx.task.deleteMany({ where: { projectId: currentProject!.id } });
-            await persistGeneratedTasks(tx, currentProject!.id, validTasks, featureIdMap, null, 1);
-            await tx.project.update({
-              where: { id: currentProject!.id },
-              data: {
-                wizardStep: 'board',
-              },
-            });
-          },
-          { timeout: 60000 }
-        );
-
-        if (isFirstGeneration) {
-          await incrementQuota(userId);
-        }
-    });
+    await enqueueAiJob({ projectId, type: 'tasks_generate', userId, payload: { isFirstGeneration } });
 
     res.json({
       ok: true,
@@ -208,13 +246,14 @@ tasksRouter.post('/api/projects/:id/tasks/generate', requireUser, async (req: Au
       message: 'Perancangan task sedang diproses di latar belakang.',
     });
   } catch (err: any) {
+    if (rejectJobLimit(res, err)) return;
     res.status(500).json({ error: 'Gagal memulai perancangan task.', detail: err?.message });
   }
 });
 
 tasksRouter.get('/api/projects/:id/tasks', requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({
-    where: { id: req.params.id, userId: req.userId },
+    where: projectWhere(req.userId, req.params.id),
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
 
@@ -245,7 +284,7 @@ tasksRouter.get('/api/projects/:id/tasks', requireUser, async (req: AuthedReques
   res.json({
     tasks,
     // Map status AiJob ke label yang dipakai frontend polling
-    generationStatus: genJob?.status === 'running' ? 'generating' : (genJob?.status ?? 'idle'),
+    generationStatus: toClientStatus(genJob?.status),
     generationError: genJob?.error ?? null,
   });
 });
@@ -253,32 +292,38 @@ tasksRouter.get('/api/projects/:id/tasks', requireUser, async (req: AuthedReques
 // Status job AI async (polling generic untuk semua job).
 tasksRouter.get('/api/projects/:id/ai-jobs', requireUser, async (req: AuthedRequest, res) => {
   const project = await prisma.project.findFirst({
-    where: { id: req.params.id, userId: req.userId },
+    where: projectWhere(req.userId, req.params.id),
     select: { id: true },
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
 
   const type = String(req.query.type ?? '');
-  const validTypes: AiJobType[] = [
-    'tasks_generate',
-    'cycle_generate',
-    'roadmap_generate',
-    'survey_round',
-    'survey_summary',
-    'tree_generate',
-    'techstack_recommend',
-    'chat_finalize',
-  ];
-  if (!validTypes.includes(type as AiJobType)) {
+  if (!isAiJobType(type)) {
     return res.status(400).json({ error: 'Tipe job AI tidak valid.' });
   }
 
-  const job = await getLatestJob(project.id, type as AiJobType);
+  const job = await getLatestJob(project.id, type);
   res.json({
     status: job?.status ?? 'idle',
     error: job?.error ?? null,
     result: job?.result ?? null,
+    attempts: job?.attempts ?? 0,
   });
+});
+
+// Batalkan job AI yang sedang antre atau berjalan (hasil job berjalan dibuang).
+tasksRouter.post('/api/projects/:id/ai-jobs/cancel', requireUser, async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findFirst({
+    where: projectWhere(req.userId, req.params.id),
+    select: { id: true },
+  });
+  if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
+
+  const type = String(req.body?.type ?? '');
+  if (!isAiJobType(type)) return res.status(400).json({ error: 'Tipe job AI tidak valid.' });
+
+  const cancelled = await cancelAiJob(project.id, type);
+  res.json({ ok: true, cancelled });
 });
 
 tasksRouter.patch('/api/tasks/:taskId', requireUser, async (req: AuthedRequest, res) => {
@@ -290,7 +335,9 @@ tasksRouter.patch('/api/tasks/:taskId', requireUser, async (req: AuthedRequest, 
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Data tidak valid.' });
   const task = await prisma.task.findUnique({ where: { id: req.params.taskId }, include: { project: true } });
-  if (!task || task.project.userId !== req.userId) return res.status(404).json({ error: 'Task tidak ditemukan.' });
+  const role = task ? await getProjectRole(req.userId, task.projectId) : null;
+  if (!task || role === null) return res.status(404).json({ error: 'Task tidak ditemukan.' });
+  if (!hasRole(role, 'member')) return res.status(403).json({ error: 'Peran Anda tidak memiliki izin untuk aksi ini.', code: 'insufficient_role' });
   const updated = await prisma.task.update({
     where: { id: task.id },
     data: {
@@ -311,5 +358,34 @@ tasksRouter.patch('/api/tasks/:taskId', requireUser, async (req: AuthedRequest, 
     }
   }
 
+  if (parsed.data.status && parsed.data.status !== task.status) {
+    await recordAudit({
+      action: 'task.status_change',
+      actorUserId: req.userId,
+      projectId: task.projectId,
+      orgId: task.project.orgId,
+      targetType: 'Task',
+      targetId: task.id,
+      metadata: { from: task.status, to: parsed.data.status },
+      req,
+    });
+  }
   res.json({ task: updated });
+});
+
+// Laporan quality gate terbaru hasil generate task (cakupan requirement, API, flow, keamanan).
+tasksRouter.get('/api/projects/:id/validation-reports', requireUser, async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findFirst({
+    where: projectWhere(req.userId, req.params.id),
+    select: { id: true },
+  });
+  if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
+
+  const kind = typeof req.query.kind === 'string' ? req.query.kind : undefined;
+  const reports = await prisma.validationReport.findMany({
+    where: { projectId: project.id, ...(kind ? { kind } : {}) },
+    orderBy: { createdAt: 'desc' },
+    take: 5,
+  });
+  res.json({ reports });
 });

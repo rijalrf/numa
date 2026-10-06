@@ -1,20 +1,35 @@
-// AI service: pilih provider via env, generate JSON dengan retry Zod.
-// Mendukung observabilitas token, latensi, retry (Bab 39), dan model routing (Bab 25).
+// AI service: generate JSON dengan retry Zod, streaming teks, dan observabilitas.
+// Setiap panggilan WAJIB menyebut agentName dan projectId (boleh null hanya untuk panggilan
+// yang memang tidak terikat project) agar token tercatat atas nama pemilik tagihan.
 import OpenAI from 'openai';
 import { z } from 'zod';
 import { prisma } from '../prisma.js';
+import { assertAiBudget, resolveTenant } from '../ai-budget.js';
+import { logger } from '../logger.js';
+import { UsageAccumulator } from './usage.js';
 
 export type ModelTier = 'reasoning' | 'cheap';
 
-export type GenerateJsonParams<T> = {
+type CallIdentity = {
+  /** Nama tahap/agent untuk pelaporan. Wajib, tanpa default. */
+  agentName: string;
+  /** Project pemilik tagihan. null hanya untuk panggilan tanpa project. */
+  projectId: string | null;
+  tier?: ModelTier;
+  model?: string;
+  /** Versi prompt yang dipakai, untuk membandingkan hasil sebelum dan sesudah optimasi. */
+  promptVersion?: string;
+};
+
+export type GenerateJsonParams<T> = CallIdentity & {
   system: string;
   user: string;
   schema: z.ZodType<T, any, any>;
   maxRetries?: number;
-  agentName?: string;
-  projectId?: string;
-  tier?: ModelTier;
-  model?: string;
+};
+
+export type StreamOptions = CallIdentity & {
+  onChunk?: (delta: string) => void;
 };
 
 // ponytail: static set covers current system agents, add dynamic tier lookup when agents become plugins
@@ -28,26 +43,30 @@ const REASONING_AGENTS = new Set([
   'generateSurveySummary',
   'finalizeChatSession',
   'generateTreeFromPrd',
-  'generateTreeFromBrd',
+  'generateFlowFromPrd',
   'SecurityAuditor',
   'ChangeCycleAnalyzer',
 ]);
 
-export function resolveModel(opts?: { tier?: ModelTier; agentName?: string; modelOverride?: string }): string {
-  if (opts?.modelOverride) return opts.modelOverride;
+function resolveModel(opts: { tier?: ModelTier; agentName: string; modelOverride?: string }): string {
+  if (opts.modelOverride) return opts.modelOverride;
 
   const defaultModel = process.env.OPENAI_MODEL ?? 'ai-builder';
   const reasoningModel = process.env.OPENAI_MODEL_REASONING ?? defaultModel;
   const cheapModel = process.env.OPENAI_MODEL_CHEAP ?? defaultModel;
 
-  if (opts?.tier === 'reasoning') return reasoningModel;
-  if (opts?.tier === 'cheap') return cheapModel;
-  if (opts?.agentName && REASONING_AGENTS.has(opts.agentName)) return reasoningModel;
+  if (opts.tier === 'reasoning') return reasoningModel;
+  if (opts.tier === 'cheap') return cheapModel;
+  if (REASONING_AGENTS.has(opts.agentName)) return reasoningModel;
 
   return defaultModel;
 }
 
-const provider = process.env.AI_PROVIDER ?? 'openai';
+/** Tier efektif untuk pelaporan: eksplisit, atau diturunkan dari model yang terpilih. */
+function resolveTier(tier: ModelTier | undefined, agentName: string): ModelTier {
+  if (tier) return tier;
+  return REASONING_AGENTS.has(agentName) ? 'reasoning' : 'cheap';
+}
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY ?? 'sk-local',
@@ -67,18 +86,50 @@ function cleanJsonText(raw: string): string {
   return text.trim();
 }
 
+type AiCallLogData = {
+  projectId: string | null;
+  agentName: string;
+  model: string;
+  tier: ModelTier;
+  promptVersion?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  estimated?: boolean;
+  latencyMs?: number;
+  retryCount?: number;
+  success?: boolean;
+  failureReason?: string;
+};
+
+// Catat panggilan AI beserta tenant (pemilik tagihan dan org) untuk budget dan laporan.
+async function logAiCall(data: AiCallLogData): Promise<void> {
+  try {
+    const tenant = await resolveTenant(data.projectId);
+    await prisma.aiCallLog.create({
+      data: { ...data, userId: tenant?.userId ?? null, orgId: tenant?.orgId ?? null },
+    });
+  } catch (err) {
+    logger.error('Gagal mencatat panggilan AI', { agentName: data.agentName, error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
 export async function generateJson<T>({
   system,
   user,
   schema,
   maxRetries = 2,
-  agentName = 'ai-agent',
+  agentName,
   projectId,
   tier,
   model: modelOverride,
+  promptVersion,
 }: GenerateJsonParams<T>): Promise<T> {
+  await assertAiBudget(projectId);
   const startTime = Date.now();
   const model = resolveModel({ tier, agentName, modelOverride });
+  const effectiveTier = resolveTier(tier, agentName);
+  const usage = new UsageAccumulator();
   let lastErr: unknown;
   const conversationMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
     { role: 'system', content: system },
@@ -93,39 +144,32 @@ export async function generateJson<T>({
         response_format: { type: 'json_object' },
         temperature: 0.4,
       });
+      // Token dihitung walau hasil nanti gagal validasi: retry tetap memakai kuota.
+      usage.add(resp.usage);
+      if (!resp.usage) {
+        usage.addEstimate(
+          conversationMessages.reduce((sum, m) => sum + m.content.length, 0),
+          (resp.choices[0]?.message?.content ?? '').length,
+        );
+      }
 
       const rawText = resp.choices[0]?.message?.content ?? '';
-      const text = cleanJsonText(rawText);
-      const parsed = JSON.parse(text);
-      const validated = schema.parse(parsed);
+      const validated = schema.parse(JSON.parse(cleanJsonText(rawText)));
 
       const latencyMs = Date.now() - startTime;
-      const usage = resp.usage;
-      const inputTokens = usage?.prompt_tokens ?? 0;
-      const outputTokens = usage?.completion_tokens ?? 0;
-      const totalTokens = usage?.total_tokens ?? (inputTokens + outputTokens);
-
-      console.log(
-        `[ai-call] agent=${agentName} model=${model} latency=${latencyMs}ms tokens=${totalTokens} (in=${inputTokens}, out=${outputTokens}) retries=${i}`
-      );
-
-      // Async pencatatan observabilitas ke database (non-blocking)
-      prisma.aiCallLog
-        .create({
-          data: {
-            projectId: projectId ?? null,
-            agentName,
-            model,
-            inputTokens,
-            outputTokens,
-            totalTokens,
-            latencyMs,
-            retryCount: i,
-            success: true,
-          },
-        })
-        .catch((err) => console.error('[ai-log-error]', err.message));
-
+      logger.info('Panggilan AI selesai', { agentName, model, latencyMs, ...usage.snapshot(), retries: i });
+      await logAiCall({
+        projectId,
+        agentName,
+        model,
+        tier: effectiveTier,
+        promptVersion,
+        ...usage.snapshot(),
+        estimated: usage.estimated,
+        latencyMs,
+        retryCount: i,
+        success: true,
+      });
       return validated;
     } catch (err) {
       lastErr = err;
@@ -141,110 +185,32 @@ export async function generateJson<T>({
 
   const latencyMs = Date.now() - startTime;
   const msg = lastErr instanceof Error ? lastErr.message : String(lastErr);
-  console.error(`[ai-call-failed] agent=${agentName} model=${model} latency=${latencyMs}ms error=${msg}`);
-
-  // Catat kegagalan ke observabilitas
-  prisma.aiCallLog
-    .create({
-      data: {
-        projectId: projectId ?? null,
-        agentName,
-        model,
-        latencyMs,
-        retryCount: maxRetries,
-        success: false,
-        failureReason: msg,
-      },
-    })
-    .catch((err) => console.error('[ai-log-error]', err.message));
+  logger.error('Panggilan AI gagal', { agentName, model, latencyMs, error: msg });
+  await logAiCall({
+    projectId,
+    agentName,
+    model,
+    tier: effectiveTier,
+    promptVersion,
+    ...usage.snapshot(),
+    estimated: usage.estimated,
+    latencyMs,
+    retryCount: maxRetries,
+    success: false,
+    failureReason: msg.slice(0, 1000),
+  });
 
   throw new Error(`AI generate JSON gagal: ${msg}`);
 }
 
-export async function generateText(
-  system: string,
-  user: string,
-  opts?: { agentName?: string; projectId?: string; tier?: ModelTier; model?: string }
-): Promise<string> {
+export async function generateTextStream(system: string, user: string, opts: StreamOptions): Promise<string> {
   const startTime = Date.now();
-  const agentName = opts?.agentName ?? 'text-agent';
-  const model = resolveModel({ tier: opts?.tier, agentName, modelOverride: opts?.model });
-
-  try {
-    const resp = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-      temperature: 0.5,
-    });
-
-    const content = resp.choices[0]?.message?.content ?? '';
-    const latencyMs = Date.now() - startTime;
-    const usage = resp.usage;
-    const inputTokens = usage?.prompt_tokens ?? 0;
-    const outputTokens = usage?.completion_tokens ?? 0;
-    const totalTokens = usage?.total_tokens ?? (inputTokens + outputTokens);
-
-    console.log(
-      `[ai-call] agent=${agentName} model=${model} latency=${latencyMs}ms tokens=${totalTokens} (in=${inputTokens}, out=${outputTokens})`
-    );
-
-    prisma.aiCallLog
-      .create({
-        data: {
-          projectId: opts?.projectId ?? null,
-          agentName,
-          model,
-          inputTokens,
-          outputTokens,
-          totalTokens,
-          latencyMs,
-          retryCount: 0,
-          success: true,
-        },
-      })
-      .catch((err) => console.error('[ai-log-error]', err.message));
-
-    return content;
-  } catch (err) {
-    const latencyMs = Date.now() - startTime;
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[ai-call-failed] agent=${agentName} model=${model} latency=${latencyMs}ms error=${msg}`);
-
-    prisma.aiCallLog
-      .create({
-        data: {
-          projectId: opts?.projectId ?? null,
-          agentName,
-          model,
-          latencyMs,
-          retryCount: 0,
-          success: false,
-          failureReason: msg,
-        },
-      })
-      .catch((logErr) => console.error('[ai-log-error]', logErr.message));
-
-    throw err;
-  }
-}
-
-export async function generateTextStream(
-  system: string,
-  user: string,
-  opts?: {
-    agentName?: string;
-    projectId?: string;
-    tier?: ModelTier;
-    model?: string;
-    onChunk?: (delta: string) => void;
-  }
-): Promise<string> {
-  const startTime = Date.now();
-  const agentName = opts?.agentName ?? 'stream-agent';
-  const model = resolveModel({ tier: opts?.tier, agentName, modelOverride: opts?.model });
+  await assertAiBudget(opts.projectId);
+  const { agentName, projectId, promptVersion } = opts;
+  const model = resolveModel({ tier: opts.tier, agentName, modelOverride: opts.model });
+  const effectiveTier = resolveTier(opts.tier, agentName);
+  const usage = new UsageAccumulator();
+  let fullText = '';
 
   try {
     const stream = await client.chat.completions.create({
@@ -254,63 +220,58 @@ export async function generateTextStream(
         { role: 'user', content: user },
       ],
       stream: true,
+      stream_options: { include_usage: true },
       temperature: 0.5,
     });
 
-    let fullText = '';
+    let providerUsage: OpenAI.CompletionUsage | null | undefined;
     for await (const chunk of stream) {
+      if (chunk.usage) providerUsage = chunk.usage;
       const delta = chunk.choices[0]?.delta?.content ?? '';
       if (delta) {
         fullText += delta;
-        opts?.onChunk?.(delta);
+        opts.onChunk?.(delta);
       }
     }
 
+    // Taksiran hanya dipakai bila provider tidak mengirim usage di chunk akhir.
+    if (providerUsage) usage.add(providerUsage);
+    else usage.addEstimate(system.length + user.length, fullText.length);
+
     const latencyMs = Date.now() - startTime;
-    // ponytail: Estimasi token streaming ~ 4 karakter per token jika provider tidak mengirim usage di chunk final.
-    const estTokens = Math.ceil(fullText.length / 4);
-
-    console.log(
-      `[ai-call-stream] agent=${agentName} model=${model} latency=${latencyMs}ms estTokens=${estTokens}`
-    );
-
-    prisma.aiCallLog
-      .create({
-        data: {
-          projectId: opts?.projectId ?? null,
-          agentName,
-          model,
-          inputTokens: 0,
-          outputTokens: estTokens,
-          totalTokens: estTokens,
-          latencyMs,
-          retryCount: 0,
-          success: true,
-        },
-      })
-      .catch((err) => console.error('[ai-log-error]', err.message));
-
+    logger.info('Panggilan AI stream selesai', { agentName, model, latencyMs, ...usage.snapshot(), estimated: usage.estimated });
+    await logAiCall({
+      projectId,
+      agentName,
+      model,
+      tier: effectiveTier,
+      promptVersion,
+      ...usage.snapshot(),
+      estimated: usage.estimated,
+      latencyMs,
+      retryCount: 0,
+      success: true,
+    });
     return fullText;
   } catch (err) {
     const latencyMs = Date.now() - startTime;
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[ai-call-stream-failed] agent=${agentName} model=${model} latency=${latencyMs}ms error=${msg}`);
-
-    prisma.aiCallLog
-      .create({
-        data: {
-          projectId: opts?.projectId ?? null,
-          agentName,
-          model,
-          latencyMs,
-          retryCount: 0,
-          success: false,
-          failureReason: msg,
-        },
-      })
-      .catch((err) => console.error('[ai-log-error]', err.message));
-
+    logger.error('Panggilan AI stream gagal', { agentName, model, latencyMs, error: msg });
+    // Stream yang putus di tengah tetap memakai token: taksir dari teks yang sudah diterima.
+    if (fullText) usage.addEstimate(system.length + user.length, fullText.length);
+    await logAiCall({
+      projectId,
+      agentName,
+      model,
+      tier: effectiveTier,
+      promptVersion,
+      ...usage.snapshot(),
+      estimated: usage.estimated,
+      latencyMs,
+      retryCount: 0,
+      success: false,
+      failureReason: msg.slice(0, 1000),
+    });
     throw new Error(`AI generate stream gagal: ${msg}`);
   }
 }
-

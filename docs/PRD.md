@@ -99,7 +99,7 @@ Tahap yang sudah dilewati terkunci read-only (HTTP 403 via `isStageLocked`). Tah
 | ID | Kebutuhan | Prioritas |
 |----|-----------|-----------|
 | FR-5.1 | Master Prompt (`/api/projects/:id/master-prompt`): template prompt + instruksi setup, disalin ke AI coding agent user | Wajib |
-| FR-5.2 | Skill pack: `numa init` memasang 5 skill bundled (`numa-tdd`, `numa-incremental`, `numa-api-design`, `numa-security`, `numa-frontend`) ke `.claude/skills/` plus kontrak arsitektur project | Wajib |
+| FR-5.2 | Skill pack: `numa init` memasang 7 skill bundled (`numa-workflow`, `numa-incremental`, `numa-tdd`, `numa-api-design`, `numa-security`, `numa-production`, `numa-frontend`) ke `.agents/skills/` (salinan di `.claude/skills/`) plus kontrak arsitektur project | Wajib |
 | FR-5.3 | CLI `numa` — loop eksekusi task: `login`, `switch`, `whoami`, `next`, `start`, `context`, `done` (guard verifikasi file + `validation_commands`, flag `--force`/`--dir`), `prd`, `status`, `init`, `sync`, `logout`. **Tanpa mock fallback** — error AI selalu eksplisit (HTTP 502 + pesan) | Wajib |
 | FR-5.4 | Checkpoint gate: saat layer selesai, agent berhenti dan meminta approval user (`LAYER_TRANSITION`, `PRD_APPROVAL`, `ROADMAP_APPROVAL`, `APPS_READY_FOR_USE`) | Wajib |
 | FR-5.5 | Repo summary: `numa sync` mengirim file tree + manifest workspace ke server agar konteks agent selalu relevan | Wajib |
@@ -166,7 +166,7 @@ Tahap yang sudah dilewati terkunci read-only (HTTP 403 via `isStageLocked`). Tah
 | **AI** | Gateway OpenAI-compatible lokal `http://localhost:20128/v1` (model `ai-builder`); multi-provider via env |
 | **Runtime** | Docker Compose (`docker compose up -d --build`) |
 
-Modul AI engine (`apps/api/src/lib/ai/`): `ai-service` (client, auto-retry Zod, logging, model routing reasoning/cheap), `chat`, `discovery`, `prd`, `roadmap`, `tasks`, `cycle`, `ui-spec`, `golden-stack`, `stack-contract`, `architecture-contract`, validator (`dag`, `cleanup`, `api-coverage`, `essential-files`, `security-audit`), `schemas`, `prompts`.
+Modul AI engine (`apps/api/src/lib/ai/`): `ai-service` (client, auto-retry Zod, logging, model routing reasoning/cheap), `chat`, `prd`, `roadmap`, `tasks`, `cycle`, `product-spec`, `flow-contract`, `golden-stack`, `stack-contract`, `architecture-contract`, validator (`dag`, `cleanup`, `api-coverage`, `security-audit`), `schemas`, `prompts`.
 
 ## 11. Batasan & Kontrak
 

@@ -1,77 +1,86 @@
 // Handler command kecil: login, switch, whoami, next, start, context, prd, logout, status.
-import { loadConfig, saveConfig, clearConfig } from '../config.js';
-import { api, ApiError, probeHealth, ensureActiveProject } from '../api-client.js';
+import { loadConfig, loadGlobalConfig, updateGlobalConfig, clearConfig, findWorkspaceRoot, saveWorkspace } from '../config.js';
+import { api, ApiError, probeHealth } from '../api-client.js';
 import { formatPrdMarkdown } from '../format-prd.js';
+import { readSecret } from '../prompt.js';
+import { requireSession, resolveTaskId } from '../session.js';
+import { captureTaskState, saveTaskState } from '../task-state.js';
+import { readSkillsVersion } from './init.js';
+import { CLI_VERSION } from '../version.js';
 
-export async function runLogin(token: string, opts: { apiUrl?: string; url?: string }): Promise<void> {
-  const cfg = loadConfig();
-  const targetUrl = opts.url || opts.apiUrl;
-  if (targetUrl) {
-    cfg.apiUrl = targetUrl;
+/** Token dari argumen (deprecated), env NUMA_TOKEN, atau prompt tersembunyi. */
+async function resolveLoginToken(arg?: string): Promise<string> {
+  if (arg) {
+    console.error(
+      'Peringatan: token lewat argumen tersimpan di riwayat shell dan daftar proses. ' +
+        'Gunakan NUMA_TOKEN atau prompt interaktif (jalankan "numa login" tanpa argumen).'
+    );
+    return arg.trim();
   }
-  cfg.token = token;
-  saveConfig(cfg);
+  if (process.env.NUMA_TOKEN) return process.env.NUMA_TOKEN.trim();
+  return readSecret('Tempel token PAT (tidak ditampilkan): ');
+}
+
+export async function runLogin(tokenArg: string | undefined, opts: { apiUrl?: string; url?: string }): Promise<void> {
+  const token = await resolveLoginToken(tokenArg);
+  if (!token) {
+    console.error('Token kosong. Login dibatalkan.');
+    process.exit(1);
+  }
+
+  const targetUrl = opts.url || opts.apiUrl;
+  const previous = loadGlobalConfig();
+  const cfg = updateGlobalConfig({ apiUrl: targetUrl ?? process.env.NUMA_API_URL ?? previous.apiUrl, token });
+
   const healthy = await probeHealth(cfg);
   if (!healthy) {
     console.error(`Tidak bisa menghubungi server di ${cfg.apiUrl}.`);
-    console.error('Pastikan numa API jalan di port 6655.');
+    console.error('Pastikan numa API jalan dan URL benar (--api-url).');
     process.exit(2);
   }
 
-  console.log(`Mengecek akses token...`);
+  console.log('Mengecek akses token...');
 
-  // Fetch all projects accessible by this token
   let availableProjects: Array<{ id: string; name: string }> = [];
-
   try {
     const result = await api.listScopes(cfg);
-    // Result should be { scopes: [...] }
-    if (result && typeof result === 'object' && 'scopes' in result) {
-      availableProjects = (result as any).scopes || [];
-    } else {
-      // Fallback: direct array
-      availableProjects = Array.isArray(result) ? result : [];
-    }
-    console.log(`Found ${availableProjects.length} project(s)`);
+    availableProjects = (result as any)?.scopes ?? (Array.isArray(result) ? result : []);
   } catch (err) {
+    // Token ditolak: jangan biarkan token tidak valid tersimpan.
+    updateGlobalConfig({ token: undefined });
     if (err instanceof ApiError) {
-      console.error('Error fetching scopes:', err.status, err.message);
-      clearConfig();
+      console.error(`Login gagal [${err.status}]: ${err.message}`);
       process.exit(1);
     }
     console.error('Unexpected error:', err);
     process.exit(1);
   }
 
-  console.log(`Login berhasil!`);
-
-  if (availableProjects.length > 0) {
-    console.log(`Token valid dengan akses ke ${availableProjects.length} project:`);
-    for (const proj of availableProjects) {
-      console.log(`  - ${proj.name} (${proj.id})`);
-    }
-    if (availableProjects.length === 1) {
-      cfg.projectId = availableProjects[0].id;
-      saveConfig(cfg);
-      console.log('');
-      console.log(`Project aktif otomatis: ${availableProjects[0].name} (${availableProjects[0].id})`);
-    } else {
-      console.log('');
-      console.log('Gunakan "numa switch <project-id>" untuk memilih project aktif.');
-    }
-  } else {
-    console.log('Token valid, tetapi belum ada project yang di-scope.');
-    console.log('Buat project baru atau minta admin menambahkan scope.');
-  }
-
+  console.log('Login berhasil!');
   console.log(`Server   : ${cfg.apiUrl}`);
+
+  if (availableProjects.length === 0) {
+    console.log('Token valid, tetapi belum ada project yang dapat diakses.');
+    return;
+  }
+  console.log(`Token valid dengan akses ke ${availableProjects.length} project:`);
+  for (const proj of availableProjects) {
+    console.log(`  - ${proj.name} (${proj.id})`);
+  }
+  if (availableProjects.length === 1) {
+    const only = availableProjects[0];
+    updateGlobalConfig({ projectId: only.id });
+    console.log(`\nProject aktif otomatis: ${only.name} (${only.id})`);
+  } else {
+    console.log('\nGunakan "numa switch <project-id>" untuk memilih project aktif.');
+  }
 }
 
 export async function runSwitch(projectId?: string): Promise<void> {
   const cfg = loadConfig();
 
   if (!cfg.token) {
-    console.error('Belum login. Jalankan: numa login <token>');
+    console.error('Belum login. Jalankan: numa login');
     process.exit(1);
   }
 
@@ -97,14 +106,21 @@ export async function runSwitch(projectId?: string): Promise<void> {
     return;
   }
 
-  cfg.projectId = projectId;
-  saveConfig(cfg);
-
+  // Verifikasi akses dulu; jangan menyimpan project yang tidak boleh diakses.
   try {
-    const me = await api.whoami(cfg);
-    console.log(`Switch berhasil!`);
+    const me = await api.whoami({ ...cfg, projectId });
+    updateGlobalConfig({ projectId });
+    const root = findWorkspaceRoot();
+    if (root) {
+      saveWorkspace(root, { projectId });
+      console.log(`Workspace diperbarui: ${root}/.numa/workspace.json`);
+    }
+    console.log('Switch berhasil!');
     console.log(`Project  : ${me.project.name}`);
     console.log(`ProjectId: ${me.project.id}`);
+    if (process.env.NUMA_PROJECT_ID && process.env.NUMA_PROJECT_ID !== projectId) {
+      console.log('Catatan: NUMA_PROJECT_ID di environment masih menimpa project aktif ini.');
+    }
   } catch (e) {
     if (e instanceof ApiError) {
       console.error(`Gagal switch ke project ${projectId}: ${e.message}`);
@@ -115,14 +131,7 @@ export async function runSwitch(projectId?: string): Promise<void> {
 }
 
 export async function runWhoami(): Promise<void> {
-  const cfg = loadConfig();
-  if (!cfg.token) {
-    console.error('Belum login. Jalankan: numa login <token>');
-    process.exit(1);
-  }
-  if (!(await ensureActiveProject(cfg))) {
-    process.exit(1);
-  }
+  const cfg = await requireSession();
   try {
     const me = await api.whoami(cfg);
     console.log(JSON.stringify(me, null, 2));
@@ -133,22 +142,14 @@ export async function runWhoami(): Promise<void> {
 }
 
 export async function runNext(): Promise<void> {
-  const cfg = loadConfig();
-  if (!cfg.token) {
-    console.error('Belum login. Jalankan: numa login <token>');
-    process.exit(1);
-  }
-  if (!(await ensureActiveProject(cfg))) {
-    process.exit(1);
-  }
+  const cfg = await requireSession();
   try {
     const out = await api.next(cfg);
     if (!out.hasTask) {
       console.log(out.message ?? 'Tidak ada task tersisa.');
       return;
     }
-    cfg.activeTaskId = out.task!.id;
-    saveConfig(cfg);
+    updateGlobalConfig({ activeTaskId: out.task!.id });
     console.log(`Task #${out.task!.order} [${out.task!.layer}] ${out.task!.status}`);
     console.log(`ID    : ${out.task!.id}`);
     console.log(`Judul : ${out.task!.title}`);
@@ -160,23 +161,23 @@ export async function runNext(): Promise<void> {
   }
 }
 
-export async function runStart(id?: string): Promise<void> {
-  const cfg = loadConfig();
-  if (!cfg.token) {
-    console.error('Belum login. Jalankan: numa login <token>');
-    process.exit(1);
-  }
-  if (!(await ensureActiveProject(cfg))) {
-    process.exit(1);
-  }
-  const taskId = id ?? cfg.activeTaskId;
-  if (!taskId) {
-    console.error('Tidak ada task aktif. Jalankan: numa next');
-    process.exit(1);
-  }
+export async function runStart(id?: string, opts?: { dir?: string }): Promise<void> {
+  const cfg = await requireSession();
+  const taskId = resolveTaskId(cfg, id);
   try {
     const r = await api.start(cfg, taskId);
     console.log(`Task ${r.taskId} -> ${r.status}`);
+    updateGlobalConfig({ activeTaskId: r.taskId });
+
+    // Catat baseline agar guard hanya menilai perubahan sejak task dimulai.
+    const dir = opts?.dir ?? process.cwd();
+    const state = captureTaskState(r.taskId, dir);
+    saveTaskState(dir, state);
+    console.log(
+      state.baselineSha
+        ? `Baseline git: ${state.baselineSha.slice(0, 8)} (${Object.keys(state.dirtyAtStart).length} file sudah berubah sebelum task)`
+        : 'Baseline git tidak tersedia (bukan repo git atau belum ada commit).'
+    );
   } catch (e: any) {
     console.error(`Error: ${e?.message || e}`);
     process.exit(1);
@@ -184,19 +185,8 @@ export async function runStart(id?: string): Promise<void> {
 }
 
 export async function runContext(id?: string): Promise<void> {
-  const cfg = loadConfig();
-  if (!cfg.token) {
-    console.error('Belum login. Jalankan: numa login <token>');
-    process.exit(1);
-  }
-  if (!(await ensureActiveProject(cfg))) {
-    process.exit(1);
-  }
-  const taskId = id ?? cfg.activeTaskId;
-  if (!taskId) {
-    console.error('Tidak ada task aktif. Jalankan: numa next');
-    process.exit(1);
-  }
+  const cfg = await requireSession();
+  const taskId = resolveTaskId(cfg, id);
   try {
     const r = await api.context(cfg, taskId);
     console.log(r.markdown);
@@ -207,14 +197,7 @@ export async function runContext(id?: string): Promise<void> {
 }
 
 export async function runPrd(): Promise<void> {
-  const cfg = loadConfig();
-  if (!cfg.token) {
-    console.error('Belum login. Jalankan: numa login <token>');
-    process.exit(1);
-  }
-  if (!(await ensureActiveProject(cfg))) {
-    process.exit(1);
-  }
+  const cfg = await requireSession();
   try {
     const r = await api.prd(cfg);
     const prdObj = r.prd ?? r.brd;
@@ -236,13 +219,34 @@ export async function runPrd(): Promise<void> {
 export function runLogout(): void {
   clearConfig();
   console.log('Token dihapus.');
+  if (process.env.NUMA_TOKEN) console.log('Catatan: NUMA_TOKEN di environment masih terpasang.');
 }
 
 export async function runStatus(): Promise<void> {
   const cfg = loadConfig();
   const healthy = await probeHealth(cfg);
+  console.log(`CLI    : ${CLI_VERSION}`);
   console.log(`Server : ${cfg.apiUrl} -> ${healthy ? 'OK' : 'TIDAK TERHUBUNG'}`);
-  console.log(`Token  : ${cfg.token ? 'tersimpan' : 'kosong'}`);
+  console.log(`Token  : ${cfg.token ? (process.env.NUMA_TOKEN ? 'dari NUMA_TOKEN' : 'tersimpan') : 'kosong'}`);
   if (cfg.activeTaskId) console.log(`Active : ${cfg.activeTaskId}`);
-  if (cfg.projectId) console.log(`Project: ${cfg.projectId}`);
+  if (cfg.projectId) {
+    const root = findWorkspaceRoot();
+    const source = process.env.NUMA_PROJECT_ID ? 'env' : root ? 'workspace' : 'global';
+    console.log(`Project: ${cfg.projectId} (${source})`);
+  }
+  if (cfg.token && healthy) {
+    try {
+      const scopes = await api.listScopes(cfg);
+      const n = ((scopes as any)?.scopes ?? []).length;
+      console.log(`Akses  : token valid, ${n} project`);
+    } catch (e) {
+      console.log(`Akses  : token DITOLAK (${e instanceof ApiError ? e.message : 'error'})`);
+    }
+  }
+  const skills = readSkillsVersion(process.cwd());
+  if (skills && skills !== CLI_VERSION) {
+    console.log(`Skill  : ${skills} (CLI ${CLI_VERSION}) -> jalankan: numa init --update`);
+  } else if (skills) {
+    console.log(`Skill  : ${skills}`);
+  }
 }

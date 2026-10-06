@@ -19,6 +19,8 @@ import {
   Moon,
   Monitor,
   Palette,
+  Download,
+  AlertCircle,
 } from 'lucide-react';
 
 type Token = {
@@ -26,6 +28,9 @@ type Token = {
   name: string;
   lastUsedAt: string | null;
   isRevoked: boolean;
+  expiresAt: string | null;
+  allProjects: boolean;
+  projects: Array<{ id: string; name: string }>;
   createdAt: string;
 };
 
@@ -50,10 +55,17 @@ export function ProfilePage() {
   }, [user?.name]);
 
   useEffect(() => {
-    const unshownDefaultPat = localStorage.getItem('numa_new_default_pat');
+    // Bersihkan sisa penyimpanan lama: PAT mentah tidak boleh bertahan di localStorage.
+    try {
+      localStorage.removeItem('numa_active_pat');
+      localStorage.removeItem('numa_new_default_pat');
+    } catch {
+      // abaikan bila storage tidak tersedia
+    }
+    const unshownDefaultPat = sessionStorage.getItem('numa_new_default_pat');
     if (unshownDefaultPat) {
       setNewToken(unshownDefaultPat);
-      localStorage.removeItem('numa_new_default_pat');
+      sessionStorage.removeItem('numa_new_default_pat');
     }
   }, []);
 
@@ -70,7 +82,7 @@ export function ProfilePage() {
       }),
     onSuccess: (res) => {
       setNewToken(res.token);
-      localStorage.setItem('numa_active_pat', res.token);
+      sessionStorage.setItem('numa_active_pat', res.token);
       setTokenName('Token Default');
       qc.invalidateQueries({ queryKey: ['agent-tokens'] });
     },
@@ -224,11 +236,15 @@ export function ProfilePage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-medium text-foreground">{t.name}</p>
                     <Badge variant="outline" className="text-[10px] bg-primary/5 text-primary border-primary/20">
-                      Semua Proyek
+                      {t.allProjects ? 'Semua Proyek' : `${t.projects.length} Proyek`}
                     </Badge>
                     {t.isRevoked ? (
                       <Badge variant="outline" className="text-[10px] border-destructive text-destructive bg-destructive/5">
                         Dicabut
+                      </Badge>
+                    ) : t.expiresAt && new Date(t.expiresAt).getTime() <= Date.now() ? (
+                      <Badge variant="outline" className="text-[10px] border-destructive text-destructive bg-destructive/5">
+                        Kedaluwarsa
                       </Badge>
                     ) : (
                       <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5">
@@ -242,6 +258,10 @@ export function ProfilePage() {
                     {t.lastUsedAt
                       ? `Terakhir dipakai ${new Date(t.lastUsedAt).toLocaleString('id-ID')}`
                       : 'Belum pernah dipakai'}
+                    {' · '}
+                    {t.expiresAt
+                      ? `Berlaku sampai ${new Date(t.expiresAt).toLocaleDateString('id-ID')}`
+                      : 'Tanpa batas waktu'}
                   </p>
                 </div>
                 {!t.isRevoked && (
@@ -334,6 +354,74 @@ export function ProfilePage() {
           </div>
         </CardContent>
       </Card>
+
+      <DataAccountCard email={data?.user?.email ?? ''} />
     </div>
+  );
+}
+
+// Ekspor data akun dan penghapusan akun permanen.
+function DataAccountCard({ email }: { email: string }) {
+  const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const exportData = useMutation({
+    mutationFn: async () => {
+      const data = await api<unknown>('/api/user/export');
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'numa-account-export.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+
+  const deleteAccount = useMutation({
+    mutationFn: () => api('/api/user/account', { method: 'DELETE', body: JSON.stringify({ confirmEmail: confirm }) }),
+    onSuccess: () => {
+      window.location.href = '/login';
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <ShieldCheck className="h-4 w-4 text-primary" /> Data Akun
+        </CardTitle>
+        <CardDescription>Unduh salinan seluruh data Anda, atau hapus akun secara permanen.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <Button variant="outline" size="sm" onClick={() => exportData.mutate()} disabled={exportData.isPending}>
+          {exportData.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+          Unduh data saya (JSON)
+        </Button>
+
+        <div className="rounded-md border border-destructive/40 p-4 space-y-3">
+          <p className="text-sm font-medium text-destructive flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" /> Hapus akun
+          </p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Seluruh project, PRD, task, dan token milik Anda akan dihapus dan tidak dapat dikembalikan. Ketik email akun Anda untuk
+            mengonfirmasi.
+          </p>
+          <Input value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={email} />
+          <Button
+            variant="destructive"
+            size="sm"
+            disabled={!email || confirm.trim().toLowerCase() !== email.toLowerCase() || deleteAccount.isPending}
+            onClick={() => deleteAccount.mutate()}
+          >
+            {deleteAccount.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+            Hapus akun permanen
+          </Button>
+        </div>
+        {error && <p className="text-xs text-destructive">{error}</p>}
+      </CardContent>
+    </Card>
   );
 }

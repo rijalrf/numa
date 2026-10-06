@@ -1,5 +1,5 @@
 const ROUND_LABELS: Record<number, string> = {
-  1: 'Masalah Utama & Pengguna',
+  1: 'Proses Saat Ini & Masalah',
   2: 'Fitur Inti & Alur Kerja',
   3: 'Aturan Bisnis & Akses',
   4: 'Batasan & Ukuran Sukses',

@@ -15,6 +15,8 @@ declare global {
 export type AuthedRequest = Request;
 
 export async function requireUser(req: Request, res: Response, next: NextFunction) {
+  // Idempotent: guard global dan route boleh sama-sama memanggilnya.
+  if (req.userId) return next();
   try {
     const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
     if (!session?.user) {

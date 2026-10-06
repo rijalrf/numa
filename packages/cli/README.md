@@ -11,22 +11,24 @@ npm install -g numa-cli
 Atau jalankan langsung tanpa instalasi:
 
 ```bash
-npx numa-cli@latest login <token>
+npx numa-cli@latest login
 ```
 
 ## Commands
 
-### `login <token>`
-Login dengan Personal Access Token (PAT) yang dibuat di web UI Settings.
+### `login [token]`
+Login dengan Personal Access Token (PAT) yang dibuat di halaman profil web. Token berlaku 90 hari secara default.
 
-**Contoh:**
+**Cara yang dianjurkan** (token tidak masuk riwayat shell):
 ```bash
-numa login numa_abc123def456...
-# atau via npx:
-npx numa-cli login numa_abc123def456...
+numa login --api-url https://numa.mrijal.my.id   # token diminta lewat prompt tersembunyi
+# atau non-interaktif (CI):
+NUMA_TOKEN=... numa login --api-url https://numa.mrijal.my.id
 ```
 
-Token universal ini bisa diakses ke beberapa project berbeda — cukup switch project sesuai kebutuhan.
+Memberikan token sebagai argumen (`numa login <token>`) masih berjalan tetapi tampil peringatan karena terekam di riwayat shell.
+
+Konfigurasi berlapis: env (`NUMA_TOKEN`, `NUMA_API_URL`, `NUMA_PROJECT_ID`) > `.numa/workspace.json` > `~/.numa/config.json`.
 
 ### `switch [projectId]`
 Beralih project dari token universal. Tanpa parameter tampilkan bantuan, dengan parameter set project aktif.
@@ -66,7 +68,7 @@ Judul : Create database schema for users table
 ```
 
 ### `start [id]`
-Tandai task sebagai IN_PROGRESS. Gunakan setelah `next`.
+Tandai task sebagai IN_PROGRESS dan catat baseline git (`.numa/state.json`). Gunakan setelah `next`.
 
 **Contoh:**
 ```bash
@@ -89,7 +91,9 @@ numa context
 ```
 
 ### `done [id]`
-Tandai task selesai dan perbarui status di server. Trigger checkpoint gate jika layer selesai.
+Jalankan runtime scope guard lalu tandai task selesai. Trigger checkpoint gate jika layer selesai.
+
+Guard menilai file yang berubah **sejak `numa start`**: file `forbidden` memblokir, file di luar lingkup hanya diperingatkan. `validation_commands` dijalankan dengan kebijakan keamanan (pipe, `;`, backtick, `$(...)`, redirect ditolak; program di luar allowlist butuh konfirmasi atau `--allow-unlisted`). `--force` melewati guard tetapi tercatat di server.
 
 **Output jika layer selesai:**
 ```
@@ -104,11 +108,32 @@ Layer FRONTEND selesai. Berhenti dan minta approval user sebelum lanjut ke layer
 -> Lanjut: numa next
 ```
 
+### `retry [id]`, `block [id] --reason <teks>`, `checkpoint`
+- `retry`: kembalikan task BLOCKED/IN_PROGRESS ke TODO.
+- `block`: tandai task BLOCKED dengan alasan lalu berhenti dan lapor ke user.
+- `checkpoint`: tampilkan checkpoint yang menunggu approval user (approval hanya lewat web).
+
+### `init [--update] [--target agents|claude|all]`
+Pasang skill pack dan kontrak arsitektur ke workspace, tulis `.numa/workspace.json` dan `.numa/skills.version`. Gunakan `--update` setelah memperbarui CLI.
+
+Struktur yang dibuat di workspace:
+
+```
+.agents/skills/<skill>/SKILL.md   sumber utama, netral terhadap agent
+.claude/skills/<skill>/SKILL.md   salinan untuk Claude Code (target all atau claude)
+.numa/                            workspace.json, skills.version, state lokal (state.json diabaikan git)
+AGENTS.md                         blok Numa di antara penanda numa:begin dan numa:end
+CLAUDE.md                         hanya berisi @AGENTS.md bila belum ada
+```
+
+Skill: `numa-workflow`, `numa-incremental`, `numa-tdd`, `numa-api-design`, `numa-security`, `numa-production`, `numa-frontend`, dan `numa-architecture` (dibangkitkan dari tech stack project). Isi AGENTS.md dan CLAUDE.md milik Anda tidak ditimpa; blok Numa hanya diperbarui dengan `--force`.
+
 ### `status`
-Cek koneksi server API dan status token lokal.
+Cek koneksi server API, validitas token, dan versi skill pack.
 
 **Output:**
 ```
+CLI    : 0.5.0
 Server : http://localhost:6655 -> OK
 Token  : tersimpan
 Active : abc-123-def
@@ -131,7 +156,7 @@ Sistem auto-trigger checkpoint saat layer selesai:
 - DATABASE -> BACKEND -> FRONTEND -> INTEGRATION
 - Setiap checkpoint butuh **user approval** via web UI sebelum lanjut
 
-Plus: **APPS_READY_FOR_USE** checkpoint setelah FRONTEND selesai untuk verifikasi aplikasi jalan lokal di `http://localhost:9999`.
+Plus: **APPS_READY_FOR_USE** checkpoint setelah FRONTEND selesai untuk verifikasi aplikasi jalan lokal di `http://localhost:$PREVIEW_PORT` (default 9999, dapat diubah lewat env `PREVIEW_PORT` di server).
 
 ## Usage Pattern
 

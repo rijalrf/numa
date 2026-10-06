@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { generateJson } from './ai-service.js';
 import type { TaskGen } from './tasks.js';
 import type { PrdData } from './prd.js';
+import { PROMPT_VERSIONS } from './prompts.js';
 
 export const SecurityFindingSchema = z.object({
   severity: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']),
@@ -43,7 +44,7 @@ export async function auditTasksSecurity(args: {
   tasks: TaskGen[];
   prd?: PrdData | null;
   brd?: PrdData | null; // Kompatibilitas ke belakang
-  projectId?: string;
+  projectId: string;
 }): Promise<SecurityAuditResult> {
   const prdDoc = args.prd ?? args.brd;
   const rules = prdDoc?.productRules?.length ? prdDoc.productRules : prdDoc?.businessRules;
@@ -109,6 +110,7 @@ Format JSON (WAJIB):
     user,
     schema: SecurityAuditResultSchema,
     agentName: 'SecurityAuditor',
+    promptVersion: PROMPT_VERSIONS.securityAudit,
     projectId: args.projectId,
     maxRetries: 2,
   });

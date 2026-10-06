@@ -1,10 +1,12 @@
 // SaaS Monetisasi & Midtrans Checkout / Webhook.
 import { Router } from 'express';
-import crypto from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireUser, type AuthedRequest } from '../middleware/require-user.js';
 import { PLANS } from '../lib/billing.js';
+import { logger } from '../lib/logger.js';
+import { recordAudit } from '../lib/audit.js';
+import { WebhookBodySchema, amountMatches, classifyTransaction, verifySignature } from '../lib/midtrans.js';
 
 export const billingRouter = Router();
 
@@ -65,7 +67,7 @@ billingRouter.post('/api/billing/checkout', requireUser, async (req: AuthedReque
 
     if (!snapRes.ok) {
       const errText = await snapRes.text();
-      console.error('[midtrans-error]', snapRes.status, errText);
+      logger.error('Midtrans menolak pembuatan transaksi', { status: snapRes.status, body: errText.slice(0, 500) });
       return res.status(502).json({ error: 'Gagal membuat transaksi ke Midtrans.' });
     }
 
@@ -87,94 +89,95 @@ billingRouter.post('/api/billing/checkout', requireUser, async (req: AuthedReque
       redirectUrl: snapData.redirect_url,
     });
   } catch (err) {
-    console.error('[checkout-error]', err);
+    logger.error('Checkout gagal', { error: err instanceof Error ? err.message : String(err) });
     res.status(500).json({ error: 'Terjadi kesalahan sistem saat proses checkout.' });
   }
 });
 
 billingRouter.post('/api/billing/webhook', async (req, res) => {
-  const {
-    order_id,
-    status_code,
-    gross_amount,
-    signature_key,
-    transaction_status,
-    payment_type,
-    fraud_status,
-  } = req.body || {};
-
   const serverKey = process.env.MIDTRANS_SERVER_KEY;
-  if (!serverKey || !order_id || !signature_key) {
-    return res.status(400).json({ error: 'Data webhook tidak valid atau server key belum diatur.' });
+  if (!serverKey) {
+    return res.status(503).json({ error: 'Gateway pembayaran belum dikonfigurasi di server.' });
   }
 
-  // Verifikasi signature Midtrans SHA512(order_id + status_code + gross_amount + ServerKey)
-  const hash = crypto
-    .createHash('sha512')
-    .update(`${order_id}${status_code}${gross_amount}${serverKey}`)
-    .digest('hex');
+  const parsed = WebhookBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Data webhook tidak valid.' });
+  }
+  const body = parsed.data;
 
-  if (hash !== signature_key) {
-    console.warn('[midtrans-webhook] Signature verification mismatch untuk order:', order_id);
+  if (!verifySignature(body, serverKey)) {
+    logger.warn('Signature webhook Midtrans tidak cocok', { orderId: body.order_id });
     return res.status(401).json({ error: 'Signature tidak cocok.' });
   }
 
-  const payment = await prisma.payment.findUnique({
-    where: { midtransId: order_id },
-  });
-
+  const payment = await prisma.payment.findUnique({ where: { midtransId: body.order_id } });
   if (!payment) {
-    console.warn('[midtrans-webhook] Order tidak ditemukan:', order_id);
+    logger.warn('Order webhook Midtrans tidak ditemukan', { orderId: body.order_id });
     return res.status(404).json({ error: 'Order tidak ditemukan.' });
   }
 
-  const isSuccess =
-    transaction_status === 'settlement' ||
-    (transaction_status === 'capture' && fraud_status === 'accept');
-
-  const isFailed =
-    transaction_status === 'deny' ||
-    transaction_status === 'cancel' ||
-    transaction_status === 'expire';
-
-  if (isSuccess) {
-    await prisma.payment.update({
-      where: { id: payment.id },
-      data: {
-        status: 'success',
-        paymentType: payment_type || 'midtrans',
-        transactionAt: new Date(),
-      },
+  if (!amountMatches(body.gross_amount, payment.amount)) {
+    logger.error('Nominal webhook Midtrans tidak sesuai', {
+      orderId: body.order_id,
+      expected: payment.amount,
+      received: body.gross_amount,
     });
+    await recordAudit({
+      action: 'billing.webhook.amount_mismatch',
+      actorType: 'system',
+      actorUserId: payment.userId,
+      targetType: 'payment',
+      targetId: payment.id,
+      metadata: { expected: payment.amount, received: body.gross_amount },
+      req,
+    });
+    return res.status(400).json({ error: 'Nominal pembayaran tidak sesuai.' });
+  }
 
-    const targetPlan = (payment.plan in PLANS ? payment.plan : 'starter') as 'starter' | 'pro';
+  // Status success dan failed bersifat final: notifikasi ulang tidak boleh mengubah apa pun.
+  if (payment.status !== 'pending') {
+    return res.json({ ok: true, duplicate: true });
+  }
+
+  const outcome = classifyTransaction(body);
+
+  if (outcome === 'success') {
+    const targetPlan = (payment.plan === 'pro' ? 'pro' : 'starter') as 'starter' | 'pro';
     const config = PLANS[targetPlan];
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 hari
 
-    await prisma.subscription.upsert({
-      where: { userId: payment.userId },
-      create: {
-        userId: payment.userId,
-        plan: targetPlan,
-        quotaUsed: 0,
-        quotaMax: config.quotaMax,
-        expiresAt,
-      },
-      update: {
-        plan: targetPlan,
-        quotaUsed: 0,
-        quotaMax: config.quotaMax,
-        expiresAt,
-      },
+    const applied = await prisma.$transaction(async (tx) => {
+      // Kondisi status pending membuat pengiriman paralel hanya diproses satu kali.
+      const claimed = await tx.payment.updateMany({
+        where: { id: payment.id, status: 'pending' },
+        data: { status: 'success', paymentType: body.payment_type || 'midtrans', transactionAt: new Date() },
+      });
+      if (claimed.count === 0) return false;
+      await tx.subscription.upsert({
+        where: { userId: payment.userId },
+        create: { userId: payment.userId, plan: targetPlan, quotaUsed: 0, quotaMax: config.quotaMax, expiresAt },
+        update: { plan: targetPlan, quotaUsed: 0, quotaMax: config.quotaMax, expiresAt },
+      });
+      return true;
     });
-    console.log(`[billing] User ${payment.userId} berhasil di-upgrade ke paket ${targetPlan}`);
-  } else if (isFailed) {
-    await prisma.payment.update({
-      where: { id: payment.id },
-      data: {
-        status: 'failed',
-        paymentType: payment_type || 'midtrans',
-      },
+
+    if (applied) {
+      logger.info('Pembayaran berhasil, paket diperbarui', { userId: payment.userId, plan: targetPlan });
+      await recordAudit({
+        action: 'billing.payment.success',
+        actorType: 'system',
+        actorUserId: payment.userId,
+        targetType: 'payment',
+        targetId: payment.id,
+        metadata: { plan: targetPlan, amount: payment.amount },
+        req,
+      });
+    }
+  } else if (outcome === 'failed') {
+    await prisma.payment.updateMany({
+      where: { id: payment.id, status: 'pending' },
+      data: { status: 'failed', paymentType: body.payment_type || 'midtrans' },
     });
   }
 
