@@ -194,3 +194,4 @@ Batas paket (dari `billing.ts`):
 - Belum diteruskan ke container: `MIDTRANS_SERVER_KEY` dan `MIDTRANS_IS_PRODUCTION` (compose produksi dan `.env.example`). Selama itu belum ada, pembayaran dan webhook menjawab 503.
 - `.mcp.json` sengaja tidak di-commit.
 - Password lama database tetap ada di riwayat git; rotasi masih diperlukan.
+- Domain server UAT: `https://numa.opendv.xyz` (domain lama `numa.mrijal.my.id` sudah dihapus dari README, AGENTS.md, docs, dan `.env.example`). Di `.env` VPS, `FE_URL`, `BETTER_AUTH_URL`, dan `VITE_API_URL` harus memakai domain ini. Teks README paket CLI ikut berubah, jadi baru tampil di npm setelah CLI dipublish ulang.

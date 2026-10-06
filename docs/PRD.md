@@ -114,7 +114,7 @@ Tahap yang sudah dilewati terkunci read-only (HTTP 403 via `isStageLocked`). Tah
 | FR-6.4 | Profil & pengaturan: edit profil, kelola PAT (generate, list, revoke), riwayat pembayaran | Wajib |
 | FR-6.5 | Observabilitas: `AiCallLog` (model, tokens, latensi, retry, success) + endpoint AI metrics global maupun per project | Wajib |
 | FR-6.6 | Landing page: hero dengan typewriter headline, fitur, terminal demo, pricing, smooth scroll | Wajib |
-| FR-6.7 | Akses publik via tunnel Cloudflare di `https://numa.mrijal.my.id` (ingress `/api/*` -> 6655, sisanya -> 3455) | Wajib |
+| FR-6.7 | Akses publik via tunnel Cloudflare di `https://numa.opendv.xyz` (ingress `/api/*` -> 6655, sisanya -> 3455) | Wajib |
 
 ## 7. Paket Langganan
 

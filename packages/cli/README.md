@@ -21,9 +21,9 @@ Login dengan Personal Access Token (PAT) yang dibuat di halaman profil web. Toke
 
 **Cara yang dianjurkan** (token tidak masuk riwayat shell):
 ```bash
-numa login --api-url https://numa.mrijal.my.id   # token diminta lewat prompt tersembunyi
+numa login --api-url https://numa.opendv.xyz   # token diminta lewat prompt tersembunyi
 # atau non-interaktif (CI):
-NUMA_TOKEN=... numa login --api-url https://numa.mrijal.my.id
+NUMA_TOKEN=... numa login --api-url https://numa.opendv.xyz
 ```
 
 Memberikan token sebagai argumen (`numa login <token>`) masih berjalan tetapi tampil peringatan karena terekam di riwayat shell.

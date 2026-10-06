@@ -56,7 +56,7 @@ Pipeline: **Numa Brief** (Chat & Survey) -> **Numa Blueprint** (Tech Stack & PRD
 - **Profil & pengaturan** — edit profil, kelola PAT (generate, list, revoke), riwayat pembayaran.
 - **Observabilitas** — `AiCallLog` (model, tokens, latensi, retry) dan endpoint AI metrics global maupun per project.
 - **Landing page** — hero dengan typewriter headline, fitur, terminal demo, pricing, smooth scroll.
-- **Akses publik** — tunnel Cloudflare di `https://numa.mrijal.my.id`.
+- **Akses publik** — tunnel Cloudflare di `https://numa.opendv.xyz`.
 
 ## Stack
 
@@ -173,33 +173,33 @@ npx numa sync            # (opsional) kirim ringkasan workspace
 DATABASE_URL=postgresql://postgres:GANTI_PASSWORD@localhost:5432/project_ai_planner
 PORT=6655
 # Daftar origin yang diizinkan, dipisah koma (lokal untuk dev + domain publik untuk akses luar)
-FE_URL=http://localhost:3455,https://numa.mrijal.my.id
+FE_URL=http://localhost:3455,https://numa.opendv.xyz
 AI_PROVIDER=openai
 OPENAI_BASE_URL=http://localhost:20128/v1
 OPENAI_API_KEY=<your-key>
 OPENAI_MODEL=ai-builder
 BETTER_AUTH_SECRET=<random>
-BETTER_AUTH_URL=https://numa.mrijal.my.id
+BETTER_AUTH_URL=https://numa.opendv.xyz
 ```
 
 ## Akses dari Komputer Lain (Cloudflare Tunnel)
 
-Aplikasi di-expose lewat tunnel Cloudflare di satu hostname `numa.mrijal.my.id`
+Aplikasi di-expose lewat tunnel Cloudflare di satu hostname `numa.opendv.xyz`
 (remotely-managed tunnel — ingress diatur dari dashboard Zero Trust, bukan file lokal).
 
 ### Ingress di dashboard Cloudflare (Zero Trust > Networks > Tunnels > Public Hostname)
 
 | Urutan | Hostname | Path | Service |
 |---|---|---|---|
-| 1 | `numa.mrijal.my.id` | `/api/*` | `http://localhost:6655` |
-| 2 | `numa.mrijal.my.id` | (sisanya) | `http://localhost:3455` |
+| 1 | `numa.opendv.xyz` | `/api/*` | `http://localhost:6655` |
+| 2 | `numa.opendv.xyz` | (sisanya) | `http://localhost:3455` |
 
 Urutan penting: rule `/api/*` harus di atas rule catch-all.
 
 ### Web (apps/web/.env)
 
 ```
-VITE_API_URL=https://numa.mrijal.my.id
+VITE_API_URL=https://numa.opendv.xyz
 ```
 
 Dev lokal boleh mengosongkan `VITE_API_URL` (default `http://localhost:6655`).
@@ -210,7 +210,7 @@ CLI dipublish ke npm registry:
 
 ```bash
 npm install -g numa-cli
-numa login <token PAT dari web UI> --api-url https://numa.mrijal.my.id
+numa login <token PAT dari web UI> --api-url https://numa.opendv.xyz
 numa next && numa start && numa context && numa done
 ```
 

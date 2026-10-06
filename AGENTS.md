@@ -122,7 +122,7 @@ Setiap project melewati 8 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 - **Tanpa mock fallback** di CLI/API. Error AI harus eksplisit (HTTP 502 + pesan).
 - **PAT**: disimpan sebagai `sha256` di DB. Plaintext dikembalikan SEKALI saat generate.
 - **Isolasi project**: `requireAgent` middleware attach `projectId`. Agent hanya akses task project sendiri.
-- **Akses publik**: tunnel Cloudflare di `https://numa.mrijal.my.id` (ingress `/api/*` -> 6655, sisanya -> 3455).
+- **Akses publik**: tunnel Cloudflare di `https://numa.opendv.xyz` (ingress `/api/*` -> 6655, sisanya -> 3455).
 - **CLI remote**: `npm i -g numa-cli`, set `NUMA_API_URL`.
 - **Route** dikelompokkan per domain di `apps/api/src/routes/*.ts` (19 router). `app.ts` hanya merakit middleware + mount, `index.ts` hanya bootstrap. Pakai `requireUser` (cookie) atau `requireAgent` (PAT). Validasi body dengan Zod.
 - **AI async**: semua pemanggilan AI berat (generate tasks, tree, techstack, survey) lewat antrean `enqueueAiJob` + handler `registerJobHandler` (`lib/ai/job.ts`). Worker mengklaim job secara atomik, heartbeat, retry, dan tahan restart. Frontend polling via `pollAiJob()` (interval 3s, max 120 attempts atau 6 menit, karena job `tree_generate` menjalankan tree lalu flow berurutan). PRD tetap SSE synchronous dengan heartbeat 15s.

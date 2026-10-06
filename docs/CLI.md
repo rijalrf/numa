@@ -11,7 +11,7 @@ CLI `numa` adalah antarmuka command-line yang digunakan oleh pengembang maupun A
 - **Struktur Data**:
   ```json
   {
-    "apiUrl": "https://numa.mrijal.my.id",
+    "apiUrl": "https://numa.opendv.xyz",
     "token": "numa_...",
     "projectId": "cmtv6l8ar000je61qw5isl3v7",
     "activeTaskId": "cmtv..."
@@ -35,7 +35,7 @@ Perintah dipasang secara global (`-g`), sehingga langsung tersedia di semua dire
 ### 1. `numa login [token]`
 - **Deskripsi**: Menyimpan Personal Access Token (PAT) dan menghubungkan CLI ke server API.
 - **Sumber token** (urutan): argumen `token` (deprecated, tampil peringatan karena terekam di riwayat shell), variabel `NUMA_TOKEN`, lalu prompt tersembunyi. Cara yang dianjurkan: jalankan `numa login` tanpa argumen.
-- **Opsi**: `--api-url <url>` (menentukan URL server target, mis. `https://numa.mrijal.my.id`).
+- **Opsi**: `--api-url <url>` (menentukan URL server target, mis. `https://numa.opendv.xyz`).
 - **Alur Eksekusi**:
   1. Melakukan uji koneksi server ke endpoint `GET /health`.
   2. Menyimpan nilai `token` dan `apiUrl` ke dalam file `~/.numa/config.json` (izin 0600).
