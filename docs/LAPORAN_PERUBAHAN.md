@@ -2,7 +2,7 @@
 
 Periode: 2026-10-05 sampai 2026-10-06. Sumber rinci per fase: [PROD_READINESS_PLAN.md](PROD_READINESS_PLAN.md).
 
-Status: seluruh perubahan masih di working tree, **belum ada commit**. Build Docker dan publish CLI dijalankan manual oleh pemilik.
+Status (2026-10-06): seluruh perubahan sudah di `main` (commit `6426bdc` dan `87df1a2`), CI lolos, dan deploy ke VPS berhasil setelah `.env` server dilengkapi (`POSTGRES_PASSWORD` kini wajib). CLI `numa-cli` 0.5.0 dipublish manual oleh pemilik (cek `npm view numa-cli version` untuk memastikan 0.5.0 sudah tampil).
 
 ## 1. Ringkasan
 
@@ -102,7 +102,7 @@ Catatan: PRD run 2 dan run 3 berbeda, jadi perbandingan tidak sepenuhnya setara.
 - Gateway `ai-builder` diduga menyisipkan prompt sendiri (input minimum sekitar 3.000 token); perlu dicek.
 - Password contoh di `README.md:173` sudah diganti `GANTI_PASSWORD`. Password lama tetap harus dirotasi karena sudah ada di riwayat git.
 
-## 10. Tindakan sebelum rilis produksi
+## 10. Tindakan sebelum rilis produksi (sisa)
 
 1. Jalankan `prisma migrate deploy` di produksi.
 2. Rotasi `admin123` dan secret lain yang pernah tertulis di file lokal.
@@ -186,3 +186,11 @@ Batas paket (dari `billing.ts`):
 - Setiap pesan error yang muncul, beserta `requestId`-nya.
 - Setiap tulisan, tombol, atau ikon yang tampak janggal (aturan proyek: Bahasa Indonesia penuh dan tanpa emoji).
 - Hasil tes ini sebelum memutuskan commit dan rilis.
+
+## 12. Status rilis dan sisa pekerjaan
+
+- Deploy: workflow `Deploy Numa to VPS` pada `main` memverifikasi (audit, lint, dead code, typecheck, test), membangun image, lalu deploy dan migrasi. Run pertama gagal di langkah 4 karena `POSTGRES_PASSWORD` kosong di `.env` VPS; setelah diisi, run ulang berhasil.
+- Audit dependensi menangkap advisory kritis baru di `proxy-addr`; diperbaiki dengan memperbarui ke 2.0.8.
+- Belum diteruskan ke container: `MIDTRANS_SERVER_KEY` dan `MIDTRANS_IS_PRODUCTION` (compose produksi dan `.env.example`). Selama itu belum ada, pembayaran dan webhook menjawab 503.
+- `.mcp.json` sengaja tidak di-commit.
+- Password lama database tetap ada di riwayat git; rotasi masih diperlukan.
