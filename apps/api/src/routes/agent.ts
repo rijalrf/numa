@@ -198,7 +198,6 @@ agentRouter.post('/api/agent/tasks/:id/complete', requireAgent, async (req: Agen
       actorType: 'agent',
       actorUserId: req.agent.userId,
       projectId: req.agent.projectId,
-      orgId: project?.orgId,
       targetType: 'Task',
       targetId: task.id,
       metadata: { tokenId: req.agent.tokenId, outOfScopeCount: completion.guardReport?.outOfScopeFiles.length ?? null },

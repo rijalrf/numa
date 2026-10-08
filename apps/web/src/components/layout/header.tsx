@@ -24,7 +24,6 @@ import {
   Check,
   LogOut,
   FolderGit2,
-  Building2,
   User,
   CreditCard,
   Sun,
@@ -86,12 +85,6 @@ function getPageHeaderInfo(pathname: string): { title: string; subtitle?: string
     return {
       title: 'Pemakaian AI',
       subtitle: 'Total token dan request, rincian per tahap, user, dan paket untuk menimbang harga',
-    };
-  }
-  if (pathname === '/orgs') {
-    return {
-      title: 'Organisasi',
-      subtitle: 'Kelola tim, anggota, dan peran akses project',
     };
   }
   if (pathname === '/profile') {
@@ -243,10 +236,6 @@ export function Header() {
                   <DropdownMenuItem className="cursor-pointer" onClick={() => navigate('/projects')}>
                     <FolderGit2 className="h-4 w-4 mr-2" />
                     Proyek Saya
-                  </DropdownMenuItem>
-                  <DropdownMenuItem className="cursor-pointer" onClick={() => navigate('/orgs')}>
-                    <Building2 className="h-4 w-4 mr-2" />
-                    Organisasi
                   </DropdownMenuItem>
                   <DropdownMenuItem className="cursor-pointer" onClick={() => navigate('/settings/billing')}>
                     <CreditCard className="h-4 w-4 mr-2" />

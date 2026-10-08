@@ -1,12 +1,12 @@
 // Autentikasi PAT agent terpusat: dipakai requireAgent, requireAgentSimple, dan /api/agent/scopes.
 // Aturan akses project:
 // - Token universal (allProjects=true) boleh mengakses semua project yang dapat dikerjakan pemiliknya
-//   (milik sendiri atau project organisasi dengan peran member ke atas).
+//   (project milik pemilik token).
 // - Token berscope hanya boleh mengakses project di AgentTokenScope. Bila semua scope hilang (mis. project dihapus),
 //   token tidak punya akses sama sekali, bukan menjadi universal.
 import crypto from 'node:crypto';
 import { prisma } from './prisma.js';
-import { agentProjectWhere } from './access.js';
+import { projectWhere } from './access.js';
 
 export function hashToken(token: string) {
   return crypto.createHash('sha256').update(token).digest('hex');
@@ -39,12 +39,12 @@ export async function authenticateToken(authHeader: string | undefined, db: Pick
 
 export type AuthedTokenRecord = NonNullable<Awaited<ReturnType<typeof authenticateToken>>['record']>;
 
-/** Project yang boleh diakses token ini: milik pemilik token atau project organisasi (peran member ke atas). */
+/** Project yang boleh diakses token ini: milik pemilik token. */
 export async function listAccessibleProjects(record: AuthedTokenRecord): Promise<Array<{ id: string; name: string }>> {
   const scopedIds = record.agentTokenScopes.map((s) => s.projectId);
   if (!record.allProjects && scopedIds.length === 0) return [];
   return prisma.project.findMany({
-    where: { ...agentProjectWhere(record.userId), ...(record.allProjects ? {} : { id: { in: scopedIds } }) },
+    where: { ...projectWhere(record.userId), ...(record.allProjects ? {} : { id: { in: scopedIds } }) },
     select: { id: true, name: true },
     orderBy: { updatedAt: 'desc' },
   });
@@ -53,5 +53,5 @@ export async function listAccessibleProjects(record: AuthedTokenRecord): Promise
 export async function resolveProjectAccess(record: AuthedTokenRecord, projectId: string) {
   const scopedIds = record.agentTokenScopes.map((s) => s.projectId);
   if (!record.allProjects && !scopedIds.includes(projectId)) return null;
-  return prisma.project.findFirst({ where: agentProjectWhere(record.userId, projectId), select: { id: true, name: true } });
+  return prisma.project.findFirst({ where: projectWhere(record.userId, projectId), select: { id: true, name: true } });
 }

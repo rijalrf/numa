@@ -13,7 +13,6 @@ import { toNodeHandler } from 'better-auth/node';
 import { auth } from './lib/auth.js';
 import { FE_ORIGINS, TRUST_PROXY_HOPS } from './lib/config.js';
 import { requireUser } from './middleware/require-user.js';
-import { requireProjectRole } from './middleware/require-project-role.js';
 import { healthRouter } from './routes/health.js';
 import { projectsRouter } from './routes/projects.js';
 import { agentTokensRouter } from './routes/agent-tokens.js';
@@ -34,7 +33,6 @@ import { cliAuthRouter } from './routes/cli-auth.js';
 import { techstackRouter } from './routes/techstack.js';
 import { flowRouter } from './routes/flow.js';
 import { billingRouter } from './routes/billing.js';
-import { orgsRouter } from './routes/orgs.js';
 
 export function createApp() {
   const app = express();
@@ -125,7 +123,7 @@ export function createApp() {
   // ============================================================
   // Route per domain (routes/*.ts)
   // ============================================================
-  app.use('/api/projects/:id', requireUser, requireProjectRole);
+  app.use('/api/projects/:id', requireUser);
   app.use(healthRouter);
   app.use(projectsRouter);
   app.use(agentTokensRouter);
@@ -146,7 +144,6 @@ export function createApp() {
   app.use(techstackRouter);
   app.use(flowRouter);
   app.use(billingRouter);
-  app.use(orgsRouter);
 
   // ============================================================
   // Global Error Handler Middleware (vuln-0001: pencegahan crash DoS)

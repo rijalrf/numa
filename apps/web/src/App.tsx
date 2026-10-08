@@ -7,7 +7,6 @@ import { LoginPage } from '@/pages/login';
 const LandingPage = lazy(() => import('@/pages/landing').then((m) => ({ default: m.LandingPage })));
 const OnboardingPage = lazy(() => import('@/pages/onboarding').then((m) => ({ default: m.OnboardingPage })));
 const ProfilePage = lazy(() => import('@/pages/profile').then((m) => ({ default: m.ProfilePage })));
-const OrgsPage = lazy(() => import('@/pages/orgs').then((m) => ({ default: m.OrgsPage })));
 const ProjectsPage = lazy(() => import('@/pages/projects/index').then((m) => ({ default: m.ProjectsPage })));
 const ChatPage = lazy(() => import('@/pages/chat').then((m) => ({ default: m.ChatPage })));
 const SurveyPage = lazy(() => import('@/pages/projects/survey').then((m) => ({ default: m.SurveyPage })));
@@ -98,7 +97,6 @@ export function App() {
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/cli-login" element={<CliLoginPage />} />
-        <Route path="/orgs" element={<OrgsPage />} />
         <Route path="/settings/billing" element={<BillingPage />} />
         <Route
           path="/admin/usage"

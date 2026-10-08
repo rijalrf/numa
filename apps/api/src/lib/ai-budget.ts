@@ -17,20 +17,20 @@ export function isOverBudget(used: number, limit: number): boolean {
   return limit > 0 && used >= limit;
 }
 
-type Tenant = { userId: string; orgId: string | null };
+type Tenant = { userId: string };
 
 const TENANT_TTL_MS = 5 * 60_000;
 const USAGE_TTL_MS = 30_000;
 const tenantCache = new Map<string, { value: Tenant | null; at: number }>();
 const usageCache = new Map<string, { used: number; limit: number; at: number }>();
 
-/** Pemilik tagihan dan org dari sebuah project (di-cache singkat). */
+/** Pemilik tagihan dari sebuah project (di-cache singkat). */
 export async function resolveTenant(projectId: string | undefined | null): Promise<Tenant | null> {
   if (!projectId) return null;
   const cached = tenantCache.get(projectId);
   if (cached && Date.now() - cached.at < TENANT_TTL_MS) return cached.value;
-  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { userId: true, orgId: true } });
-  const value = project ? { userId: project.userId, orgId: project.orgId } : null;
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { userId: true } });
+  const value = project ? { userId: project.userId } : null;
   tenantCache.set(projectId, { value, at: Date.now() });
   return value;
 }

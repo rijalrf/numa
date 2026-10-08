@@ -54,5 +54,5 @@ export const PREVIEW_PORT = Number(process.env.PREVIEW_PORT ?? 9999);
 // Jalur lewat nginx web berarti 2. Nilai terlalu besar membuat X-Forwarded-For palsu dipercaya.
 export const TRUST_PROXY_HOPS = Number(process.env.TRUST_PROXY_HOPS ?? 1);
 
-/** Batas atas baris untuk endpoint daftar yang bisa tumbuh tanpa batas (proyek, token, organisasi). */
+/** Batas atas baris untuk endpoint daftar yang bisa tumbuh tanpa batas (proyek, token). */
 export const LIST_LIMIT = 200;

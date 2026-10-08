@@ -111,12 +111,12 @@ type AiCallLogData = {
   failureReason?: string;
 };
 
-// Catat panggilan AI beserta tenant (pemilik tagihan dan org) untuk budget dan laporan.
+// Catat panggilan AI beserta pemilik tagihan untuk budget dan laporan.
 async function logAiCall(data: AiCallLogData): Promise<void> {
   try {
     const tenant = await resolveTenant(data.projectId);
     await prisma.aiCallLog.create({
-      data: { ...data, userId: tenant?.userId ?? null, orgId: tenant?.orgId ?? null },
+      data: { ...data, userId: tenant?.userId ?? null },
     });
   } catch (err) {
     logger.error('Gagal mencatat panggilan AI', { agentName: data.agentName, error: err instanceof Error ? err.message : String(err) });

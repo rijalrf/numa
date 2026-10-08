@@ -4,10 +4,9 @@ import type { Request } from 'express';
 import { prisma } from './prisma.js';
 
 export type AuditEntry = {
-  action: string; // mis. org.member.add, token.revoke, task.force_complete
+  action: string; // mis. token.revoke, task.force_complete
   actorType?: 'user' | 'agent' | 'system';
   actorUserId?: string | null;
-  orgId?: string | null;
   projectId?: string | null;
   targetType?: string;
   targetId?: string;
@@ -22,7 +21,6 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
         action: entry.action,
         actorType: entry.actorType ?? 'user',
         actorUserId: entry.actorUserId ?? null,
-        orgId: entry.orgId ?? null,
         projectId: entry.projectId ?? null,
         targetType: entry.targetType ?? null,
         targetId: entry.targetId ?? null,

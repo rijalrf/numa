@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireUser, type AuthedRequest } from '../middleware/require-user.js';
 import { getUserPlan } from '../lib/billing.js';
-import { buildAccountExport, deleteAccount, findDeletionBlockers } from '../lib/account-data.js';
+import { buildAccountExport, deleteAccount } from '../lib/account-data.js';
 import { recordAudit } from '../lib/audit.js';
 import { isPlatformAdmin } from '../lib/platform-admin.js';
 
@@ -114,15 +114,6 @@ userRouter.delete('/api/user/account', requireUser, async (req: AuthedRequest, r
   if (!user) return res.status(404).json({ error: 'Akun tidak ditemukan.' });
   if (parsed.data.confirmEmail.trim().toLowerCase() !== user.email.toLowerCase()) {
     return res.status(400).json({ error: 'Email konfirmasi tidak cocok dengan akun Anda.', code: 'email_mismatch' });
-  }
-
-  const blockers = await findDeletionBlockers(req.userId);
-  if (blockers.length > 0) {
-    return res.status(409).json({
-      error: 'Anda satu-satunya owner di organisasi yang masih punya anggota. Alihkan kepemilikan atau keluarkan anggota terlebih dahulu.',
-      code: 'sole_owner_with_members',
-      organizations: blockers.map((b) => ({ id: b.orgId, name: b.orgName })),
-    });
   }
 
   await recordAudit({ action: 'account.delete', actorUserId: req.userId, targetType: 'User', targetId: req.userId, req });

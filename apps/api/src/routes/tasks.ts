@@ -2,7 +2,7 @@
 import { logger, serializeError } from '../lib/logger.js';
 import { Router } from 'express';
 import { recordAudit } from '../lib/audit.js';
-import { projectWhere, getProjectRole, hasRole } from '../lib/access.js';
+import { projectWhere } from '../lib/access.js';
 import { prisma } from '../lib/prisma.js';
 import { requireUser, type AuthedRequest } from '../middleware/require-user.js';
 import { getUserPlan, checkQuota, incrementQuota } from '../lib/billing.js';
@@ -357,10 +357,8 @@ tasksRouter.patch('/api/tasks/:taskId', requireUser, async (req: AuthedRequest, 
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Data tidak valid.' });
-  const task = await prisma.task.findUnique({ where: { id: req.params.taskId }, include: { project: true } });
-  const role = task ? await getProjectRole(req.userId, task.projectId) : null;
-  if (!task || role === null) return res.status(404).json({ error: 'Task tidak ditemukan.' });
-  if (!hasRole(role, 'member')) return res.status(403).json({ error: 'Peran Anda tidak memiliki izin untuk aksi ini.', code: 'insufficient_role' });
+  const task = await prisma.task.findFirst({ where: { id: req.params.taskId, project: projectWhere(req.userId) } });
+  if (!task) return res.status(404).json({ error: 'Task tidak ditemukan.' });
   const updated = await prisma.task.update({
     where: { id: task.id },
     data: {
@@ -386,7 +384,6 @@ tasksRouter.patch('/api/tasks/:taskId', requireUser, async (req: AuthedRequest, 
       action: 'task.status_change',
       actorUserId: req.userId,
       projectId: task.projectId,
-      orgId: task.project.orgId,
       targetType: 'Task',
       targetId: task.id,
       metadata: { from: task.status, to: parsed.data.status },

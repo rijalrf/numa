@@ -34,7 +34,6 @@ model User {
   chatSessions   ChatSession[]
   subscription   Subscription?
   payments       Payment[]
-  memberships    Membership[]
 }
 
 model Session {
@@ -89,7 +88,6 @@ model Project {
   artifactVersions ArtifactVersion[]
   id          String   @id @default(cuid())
   userId      String
-  orgId       String?                    // null = project pribadi milik userId
   name        String
   idea        String   // ide mentah dari onboarding
   description String?
@@ -103,7 +101,6 @@ model Project {
   updatedAt   DateTime @updatedAt
 
   user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  org              Organization?        @relation(fields: [orgId], references: [id], onDelete: SetNull)
   stacks           Stack[]
   questions        DiscoveryQuestion[]
   prd              Prd?
@@ -119,7 +116,6 @@ model Project {
   aiJobs           AiJob[]
 
   @@index([userId])
-  @@index([orgId])
 }
 
 model Stack {
@@ -480,7 +476,6 @@ model AiCallLog {
   promptVersion String?  // versi prompt, untuk membandingkan sebelum dan sesudah optimasi
   estimated     Boolean  @default(false) // true bila token ditaksir karena provider tidak mengirim usage
   userId        String?  // pemilik tagihan (Project.userId) saat panggilan terjadi; dasar budget token
-  orgId         String?  // organisasi project saat panggilan terjadi (atribusi laporan)
   createdAt     DateTime @default(now())
 
   // SetNull: log tetap ada setelah project dihapus agar budget bulanan tidak bisa dihindari dengan menghapus project.
@@ -530,48 +525,19 @@ model Payment {
 }
 
 
-// Organisasi (tenant) tempat beberapa user berbagi project.
-model Organization {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  members  Membership[]
-  projects Project[]
-}
-
-// Peran: owner | admin | member | viewer
-model Membership {
-  id        String   @id @default(cuid())
-  orgId     String
-  userId    String
-  role      String   @default("member")
-  createdAt DateTime @default(now())
-
-  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([orgId, userId])
-  @@index([userId])
-}
-
 // Jejak audit aksi sensitif. Tanpa FK agar tetap ada setelah entitas terkait dihapus.
 model AuditLog {
   id          String   @id @default(cuid())
   actorType   String   // user | agent | system
   actorUserId String?
-  orgId       String?
   projectId   String?
-  action      String   // mis. org.member.add, token.revoke, task.force_complete
+  action      String   // mis. token.revoke, task.force_complete
   targetType  String?
   targetId    String?
   metadata    Json?
   ip          String?
   createdAt   DateTime @default(now())
 
-  @@index([orgId, createdAt])
   @@index([projectId, createdAt])
   @@index([actorUserId, createdAt])
   @@index([action])

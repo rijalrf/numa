@@ -55,7 +55,7 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 | `prd-store.ts` | `savePrd` (upsert PRD + `wizardStep` board dalam satu transaksi, snapshot versi lama best-effort), `applyProductSpec` (spec hanya menempel pada versi PRD yang diekstrak). `prd-spec.ts`: `ensureProductSpec` menunggu job `prd_spec` yang aktif. |
 | `task-persist.ts` | `persistGeneratedTasks` — simpan hasil AI ke DB (dipakai oleh routes/tasks dan routes/cycles). |
 | `task-context.ts` | Penyusun konteks per task untuk `numa context`: detail requirement/edge case/journey, filter endpoint dan model data, file nyata dari laporan guard, ringkasan kontrak arsitektur. Fungsi murni. |
-| `access.ts` | RBAC org: `projectWhere`, `getProjectRole`, `hasRole`, `agentProjectWhere`. Wajib dipakai untuk query project (jangan `{ id, userId }`). |
+| `access.ts` | `projectWhere`: filter project milik user (`Project.userId`). Wajib dipakai untuk query project (jangan `{ id, userId }`). |
 | `audit.ts` | `recordAudit` — jejak aksi sensitif ke `AuditLog` (tidak pernah melempar error). |
 | `ai-budget.ts` | Budget token AI bulanan per pemilik tagihan; `assertAiBudget` dipanggil di ai-service. |
 | `artifact-version.ts` | `snapshotArtifact` — snapshot PRD/business flow sebelum ditimpa. |
@@ -84,8 +84,7 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 | `AgentToken`, `AgentTokenScope` | PAT token CLI (hash sha256, multi-project scope). Dibuat hanya otomatis (semua project, 90 hari) saat CLI login lewat browser; tidak ada pembuatan manual. |
 | `CliAuthRequest` | Permintaan login CLI lewat browser (device code): hash deviceCode, userCode `XXXX-XXXX`, status pending/approved/denied/consumed, TTL 10 menit. Token dibuat tepat sekali saat CLI mengambil hasil persetujuan. |
 | `AgentSession` | Tracking sesi kerja agent. |
-| `AiCallLog` | Observabilitas: model, tokens, latensi, retry, success; `userId`/`orgId` untuk budget per tenant. |
-| `Organization`, `Membership` | Tenant dan peran (viewer < member < admin < owner). `Project.orgId` null = project pribadi. |
+| `AiCallLog` | Observabilitas: model, tokens, latensi, retry, success; `userId` (pemilik tagihan) untuk budget bulanan. |
 | `AuditLog` | Jejak aksi sensitif (tanpa FK). |
 | `AiJob` | Antrean job AI tahan restart (queued/running/done/failed/cancelled). |
 | `ArtifactVersion` | Snapshot versi lama PRD dan business flow. |
@@ -99,9 +98,9 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 │   ├── api/          # Express + Prisma + Zod + Better Auth (port 6655)
 │   │   ├── prisma/   # schema.prisma + migrations + seed.ts
 │   │   └── src/
-│   │       ├── app.ts                # createApp(): middleware + mount 19 router (tanpa listen, dipakai tes supertest)
+│   │       ├── app.ts                # createApp(): middleware + mount 20 router (tanpa listen, dipakai tes supertest)
 │   │       ├── index.ts              # bootstrap: env, listen, worker antrean, shutdown rapi
-│   │       ├── routes/               # 19 domain router (health, projects, agent, tasks, cycles, survey, dll.)
+│   │       ├── routes/               # 20 domain router (health, projects, agent, tasks, cycles, survey, dll.)
 │   │       ├── lib/{prisma,auth,stage,markdown-export,task-persist,task-context}.ts
 │   │       ├── lib/ai/{ai-service,chat,job,prd,roadmap,tasks,...}.ts
 │   │       ├── middleware/{require-user,require-agent,require-agent-simple}.ts
@@ -133,9 +132,9 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 - **Isolasi project**: `requireAgent` middleware attach `projectId`. Agent hanya akses task project sendiri.
 - **Akses publik**: tunnel Cloudflare di `https://numa.opendv.xyz` (ingress `/api/*` -> 6655, sisanya -> 3455).
 - **CLI remote**: `npm i -g numa-cli`, set `NUMA_API_URL`.
-- **Route** dikelompokkan per domain di `apps/api/src/routes/*.ts` (19 router). `app.ts` hanya merakit middleware + mount, `index.ts` hanya bootstrap. Pakai `requireUser` (cookie) atau `requireAgent` (PAT). Validasi body dengan Zod.
+- **Route** dikelompokkan per domain di `apps/api/src/routes/*.ts` (20 router). `app.ts` hanya merakit middleware + mount, `index.ts` hanya bootstrap. Pakai `requireUser` (cookie) atau `requireAgent` (PAT). Validasi body dengan Zod.
 - **AI async**: semua pemanggilan AI berat (generate tasks, techstack, survey) lewat antrean `enqueueAiJob` + handler `registerJobHandler` (`lib/ai/job.ts`). Worker mengklaim job secara atomik, heartbeat, retry, dan tahan restart. Frontend polling via `pollAiJob()` (default interval 3s, max 120 attempts atau 6 menit; halaman survey memakai 1,5s dan 240 attempts). Generate PRD juga lewat antrean (`prd_generate`): handler menulis teks sementara ke `AiJob.result` (`reportJobProgress`) yang dibaca halaman PRD lewat polling; tidak ada lagi SSE.
-- **Multi-tenant**: akses project selalu lewat `projectWhere` dan guard `requireProjectRole` (GET viewer, mutasi member, DELETE admin). Aksi sensitif dicatat dengan `recordAudit`.
+- **Akses project**: setiap project hanya milik satu user (`Project.userId`); tidak ada organisasi, anggota, atau peran. Akses selalu lewat `projectWhere`. Aksi sensitif dicatat dengan `recordAudit`.
 - **Env baru**: `TRUST_PROXY_HOPS`, `PLATFORM_ADMIN_EMAILS`, `AI_PRICE_INPUT_PER_MTOK_REASONING|CHEAP`, `AI_PRICE_OUTPUT_PER_MTOK_REASONING|CHEAP`, `AI_JOB_CONCURRENCY`, `AI_MAX_ACTIVE_JOBS_PER_USER`, `AI_TOKEN_BUDGET_FREE|STARTER|PRO`, `OPENAI_REASONING_EFFORT_CHEAP|REASONING`, `LOG_LEVEL`, `LOG_FORMAT`, `OIDC_*` (lihat `.env.example`).
 - **Pembayaran (Mayar.id)**: `routes/billing.ts` memakai Mayar API V2 (V1 sudah deprecated). Env: `MAYAR_API_KEY`, `MAYAR_WEBHOOK_TOKEN` (dicocokkan dengan header `X-Callback-Token`), `MAYAR_IS_PRODUCTION` (true = api.mayar.id, selain itu sandbox api.mayar.io). Webhook tidak memercayai payload: status dan nominal selalu dikonfirmasi ke `GET /transactions/{id}`; `POST /api/billing/payments/:id/sync` merekonsiliasi saat user kembali dari halaman bayar. Tanpa key, checkout dan webhook menjawab 503. URL webhook didaftarkan di dashboard Mayar: `<domain>/api/billing/webhook`. Rencana dan hasil riset: `docs/MAYAR_MIGRATION_PLAN.md`.
 - **Health**: `/health` (liveness) dan `/ready` (database + worker antrean; 503 bila gagal), dipakai healthcheck produksi.

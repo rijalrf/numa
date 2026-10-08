@@ -323,3 +323,12 @@ Atas arahan user: tidak ada pipeline CI tanpa pengawasan, sehingga login CLI sel
 - **Web.** Halaman profil tidak lagi memuat form Buat Token Baru dan teks PAT/CLI. Daftar kecil "Sesi CLI" dengan tombol Cabut hanya tampil bila ada sesi aktif.
 - **Skrip uji.** Tiga skrip e2e (`test-e2e-wizard`, `real-test-invtrack`, `real-test-minitask`) tidak lagi membuat token per project; mereka memakai alur device code (`start`, `approve` dengan sesi uji, `poll`).
 - **Dampak.** Menjalankan `numa` tanpa orang yang bisa menyetujui di browser tidak lagi didukung. Karena perilaku CLI berubah, rilis CLI berikutnya perlu naik versi.
+
+## 20. Penghapusan fitur organisasi (2026-10-08)
+
+Atas arahan user: eksekusi dilakukan satu agent milik satu user per project (Master Prompt yang sama dipakai semua anggota akan mengerjakan task yang sama dua kali, karena `next` tidak mengunci task), sehingga organisasi tidak punya nilai dan dihapus tuntas.
+
+- **Database.** Migrasi `20261008060000_drop_organization`: tabel `Membership` dan `Organization` dibuang, kolom `orgId` dibuang dari `Project`, `AiCallLog`, dan `AuditLog`. Project yang dulu di organisasi tetap milik pembuatnya; anggota lain kehilangan akses. Deploy mengambil backup `pg_dump` sebelum migrasi.
+- **API.** `routes/orgs.ts` dan `middleware/require-project-role.ts` dihapus. `lib/access.ts` hanya berisi `projectWhere` (milik sendiri); `hasRole`, `getProjectRole`, `getOrgRole`, `agentProjectWhere` hilang. `PATCH /api/tasks/:taskId` dan riwayat versi artefak memakai `projectWhere`. Audit log project (`GET /api/projects/:id/audit-logs`) dipindah ke `routes/projects.ts` untuk pemilik project. Hapus akun tidak lagi punya blokir `sole_owner_with_members`, dan ekspor akun tidak memuat keanggotaan.
+- **Web.** Halaman dan menu Organisasi dihapus. Halaman `/projects/:projectId/settings` (hanya mengarahkan ke token di profil) ikut dihapus, dan menu "Profil & Token" menjadi "Profil".
+- **Dampak.** Tidak ada lagi berbagi project antar user. Endpoint `/api/orgs/*` dan `PUT /api/projects/:id/org` tidak ada.
