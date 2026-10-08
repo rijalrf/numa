@@ -7,110 +7,55 @@ import { prisma } from '../lib/prisma.js';
 import { requireUser, type AuthedRequest } from '../middleware/require-user.js';
 import { getUserPlan, checkQuota, incrementQuota } from '../lib/billing.js';
 import { isStageLocked } from '../lib/stage.js';
-import { PrdSchema, readPrdContent } from '../lib/ai/prd.js';
+import { readPrdContent } from '../lib/ai/prd.js';
 import { generateRoadmapFromPRD } from '../lib/ai/roadmap.js';
-import { generateTasksFromRoadmap } from '../lib/ai/tasks.js';
+import { generateTasksByPhase } from '../lib/ai/tasks.js';
+import { appendFindings, saveValidationReport, type Finding } from '../lib/ai/validation-report.js';
+import { auditTasksSecurity, toReportFindings, type AuditableTask } from '../lib/ai/security-audit.js';
+import { saveRoadmap } from '../lib/roadmap-store.js';
 import { BusinessFlowSchema } from '../lib/ai/schemas.js';
 import { checkSpecConsistency } from '../lib/ai/product-spec.js';
 import { enumerateFlowPaths, renderFlowScenarios } from '../lib/ai/flow-contract.js';
 import { buildJourneyScenarios, renderJourneyScenarios } from '../lib/ai/journey-contract.js';
-import { saveValidationReport, type Finding } from '../lib/ai/validation-report.js';
 import { ensureProductSpec } from '../lib/prd-spec.js';
 import { runTaskQualityGate } from '../lib/task-quality.js';
 import { resolveStackContract } from '../lib/ai/stack-contract.js';
 import { persistGeneratedTasks } from '../lib/task-persist.js';
-import { enqueueAiJob, getLatestJob, hasActiveJob, isAiJobType, registerJobHandler, toClientStatus, cancelAiJob, NonRetryableJobError, rejectJobLimit } from '../lib/ai/job.js';
+import { enqueueAiJobOnce, getLatestJob, isAiJobType, registerJobHandler, reportJobProgress, toClientStatus, cancelAiJob, NonRetryableJobError, rejectJobLimit } from '../lib/ai/job.js';
 
 export const tasksRouter = Router();
 
-registerJobHandler<{ isFirstGeneration?: boolean }>('tasks_generate', async ({ projectId, userId, payload }) => {
+/**
+ * Tier model untuk generate task per fase. 'cheap' = model tanpa reasoning (OPENAI_MODEL_CHEAP):
+ * output task terstruktur tidak butuh reasoning dan jauh lebih cepat; kualitas dijaga oleh quality gate.
+ */
+const TASK_GENERATION_TIER = 'cheap' as const;
+
+registerJobHandler<{ isFirstGeneration?: boolean }>('tasks_generate', async ({ jobId, projectId, userId, payload, assertActive }) => {
   const isFirstGeneration = payload?.isFirstGeneration === true;
-  let currentProject = await prisma.project.findFirst({
-    where: { id: projectId },
-    include: {
-      prd: true,
-      stacks: true,
-      roadmap: { include: { features: { include: { dependencies: true } } } },
-    },
-  });
-  if (!currentProject) throw new NonRetryableJobError('Project tidak ditemukan saat proses latar belakang.');
+  // Langkah yang sedang berjalan ditulis ke hasil job; halaman Board menampilkannya lewat polling.
+  const progress = (step: 'spec' | 'roadmap' | 'tasks' | 'validate' | 'save', label: string, done?: number, total?: number) =>
+    reportJobProgress(jobId, { step, label, done, total });
 
-  // Auto-generate roadmap jika belum ada tapi PRD ada
-  if (currentProject.roadmap.length === 0) {
-    if (!currentProject.prd) throw new NonRetryableJobError('PRD belum ada. Generate PRD dulu.');
-    const parsedPrd = PrdSchema.parse(currentProject.prd.content);
-    const roadmapData = await generateRoadmapFromPRD(parsedPrd, { projectId: currentProject.id });
-    await prisma.roadmapPhase.deleteMany({ where: { projectId: currentProject.id } });
-
-    const phaseMap = new Map<string, string>();
-    for (const p of roadmapData.phases) {
-      const created = await prisma.roadmapPhase.create({
-        data: { projectId: currentProject.id, order: p.order, title: p.title, description: p.description, layer: p.layer },
-      });
-      for (const f of p.features) {
-        const fcreated = await prisma.roadmapFeature.create({
-          data: { phaseId: created.id, title: f.title, description: f.description },
-        });
-        phaseMap.set(f.id, fcreated.id);
-      }
-    }
-    for (const p of roadmapData.phases) {
-      for (const f of p.features) {
-        if (f.dependsOn.length === 0) continue;
-        const fromId = phaseMap.get(f.id);
-        if (!fromId) continue;
-        for (const dep of f.dependsOn) {
-          const toId = phaseMap.get(dep);
-          if (!toId) continue;
-          await prisma.roadmapDependency.create({ data: { featureId: fromId, dependsOnId: toId } });
-        }
-      }
-    }
-
-    const refetched = await prisma.project.findFirst({
+  const loadProject = () =>
+    prisma.project.findFirst({
       where: { id: projectId },
       include: {
         prd: true,
         stacks: true,
-        roadmap: { include: { features: { include: { dependencies: true } } } },
+        roadmap: { orderBy: { order: 'asc' }, include: { features: { include: { dependencies: true } } } },
       },
     });
-    if (refetched) currentProject = refetched;
-  }
 
-  if (currentProject.roadmap.length === 0) throw new NonRetryableJobError('Roadmap belum ada.');
+  let currentProject = await loadProject();
+  if (!currentProject) throw new NonRetryableJobError('Project tidak ditemukan saat proses latar belakang.');
+  if (!currentProject.prd) throw new NonRetryableJobError('PRD belum ada. Generate PRD dulu.');
 
-  // Konversi Prisma ke shape yang dipahami AI generator.
-  const featureIdMap = new Map<string, string>(); // dbId -> tmpId
-  const featuresForAI: { id: string; title: string; description?: string; layer: string; dependsOn: string[] }[] = [];
-  let tmpCounter = 1;
-  for (const phase of currentProject.roadmap) {
-    for (const f of phase.features) {
-      const tmpId = `f${tmpCounter++}`;
-      featureIdMap.set(f.id, tmpId);
-      featuresForAI.push({
-        id: tmpId,
-        title: f.title,
-        description: f.description ?? undefined,
-        layer: phase.layer,
-        dependsOn: f.dependencies.map((d) => featureIdMap.get(d.dependsOnId) ?? '').filter(Boolean),
-      });
-    }
-  }
-  const phasesForAI = currentProject.roadmap.map((p) => ({
-    order: p.order,
-    title: p.title,
-    description: p.description ?? undefined,
-    layer: p.layer as 'BOOTSTRAP' | 'DATABASE' | 'BACKEND' | 'FRONTEND' | 'INTEGRATION',
-    features: featuresForAI
-      .filter((f) => currentProject!.roadmap.find((rp) => rp.features.find((rf) => featureIdMap.get(rf.id) === f.id))?.id === p.id)
-      .map((f) => ({ id: f.id, title: f.title, description: f.description, dependsOn: f.dependsOn })),
-  }));
-
-  // Spec terstruktur PRD (diekstrak otomatis untuk PRD lama) dan kontrak flow bisnis.
+  // Spec terstruktur PRD (disusun di background setelah PRD tersimpan; diekstrak langsung untuk PRD lama) dan kontrak flow bisnis.
+  await progress('spec', 'Menyiapkan spesifikasi PRD');
   const preFindings: Finding[] = [];
-  const specResult = await ensureProductSpec(currentProject.id);
-  const prdDoc = specResult?.prd ?? readPrdContent(currentProject.prd?.content);
+  const specResult = await ensureProductSpec(projectId);
+  const prdDoc = specResult?.prd ?? readPrdContent(currentProject.prd.content);
   if (!prdDoc.spec) {
     preFindings.push({
       code: 'SPEC_MISSING',
@@ -122,9 +67,39 @@ registerJobHandler<{ isFirstGeneration?: boolean }>('tasks_generate', async ({ p
       preFindings.push({ code: 'SPEC_INCONSISTENT', severity: 'info', message: w });
     }
   }
+  const stackContract = resolveStackContract(currentProject.stacks || []);
+
+  // Roadmap otomatis bila belum ada (input spec, disimpan atomik).
+  if (currentProject.roadmap.length === 0) {
+    assertActive();
+    await progress('roadmap', 'Menyusun roadmap fitur');
+    await saveRoadmap(projectId, await generateRoadmapFromPRD(prdDoc, { projectId, stack: stackContract }));
+    currentProject = (await loadProject()) ?? currentProject;
+  }
+  if (currentProject.roadmap.length === 0) throw new NonRetryableJobError('Roadmap belum ada.');
+
+  // Konversi Prisma ke shape yang dipahami AI generator: id sementara f1..fN, dependsOn dipetakan dua tahap
+  // agar dependensi ke fitur yang muncul belakangan tidak hilang.
+  const featureIdMap = new Map<string, string>(); // dbId -> tmpId
+  let tmpCounter = 1;
+  for (const phase of currentProject.roadmap) {
+    for (const f of phase.features) featureIdMap.set(f.id, `f${tmpCounter++}`);
+  }
+  const phasesForAI = currentProject.roadmap.map((p) => ({
+    order: p.order,
+    title: p.title,
+    description: p.description ?? undefined,
+    layer: p.layer as 'BOOTSTRAP' | 'DATABASE' | 'BACKEND' | 'FRONTEND' | 'INTEGRATION',
+    features: p.features.map((f) => ({
+      id: featureIdMap.get(f.id)!,
+      title: f.title,
+      description: f.description ?? undefined,
+      dependsOn: f.dependencies.map((d) => featureIdMap.get(d.dependsOnId) ?? '').filter(Boolean),
+    })),
+  }));
 
   // Flow (legacy, hanya backend) dipakai bila ada; selain itu skenario E2E disusun dari journey di spec PRD.
-  const flowRow = await prisma.businessFlow.findUnique({ where: { projectId: currentProject.id } });
+  const flowRow = await prisma.businessFlow.findUnique({ where: { projectId } });
   const parsedFlow = flowRow ? BusinessFlowSchema.safeParse(flowRow.content) : null;
   const flow = parsedFlow?.success ? parsedFlow.data : null;
   const journeys = prdDoc.spec?.journeys;
@@ -134,27 +109,35 @@ registerJobHandler<{ isFirstGeneration?: boolean }>('tasks_generate', async ({ p
       ? renderJourneyScenarios(buildJourneyScenarios(journeys).scenarios)
       : undefined;
 
-  const stackContract = resolveStackContract(currentProject.stacks || []);
+  assertActive();
+  const totalPhases = phasesForAI.length;
+  await progress('tasks', 'Merancang task per fase', 0, totalPhases);
+  const generated = await generateTasksByPhase(
+    {
+      roadmap: { phases: phasesForAI },
+      projectName: currentProject.name,
+      prd: prdDoc as any,
+      projectId,
+      stack: stackContract,
+      e2eScenarios,
+      tier: TASK_GENERATION_TIER,
+    },
+    { onPhaseDone: (done, total) => void progress('tasks', 'Merancang task per fase', done, total) },
+  );
 
-  const generated = await generateTasksFromRoadmap({
-    roadmap: { phases: phasesForAI },
-    projectName: currentProject.name,
-    prd: prdDoc as any,
-    projectId: currentProject.id,
-    stack: stackContract,
-    e2eScenarios,
-  });
-
-  const gate = await runTaskQualityGate({ generated, prd: prdDoc, flow, journeys, projectId: currentProject.id });
+  assertActive();
+  await progress('validate', 'Memvalidasi task');
+  const gate = await runTaskQualityGate({ generated, prd: prdDoc, flow, journeys });
   const validTasks = gate.tasks;
   const findings = [...preFindings, ...gate.findings];
 
   // Tulis ulang task secara atomik. Task yang sudah DONE adalah pekerjaan nyata di repo user,
   // jadi dipertahankan; task hasil generate yang kembar dengan task DONE dilewati.
+  await progress('save', 'Menyimpan task');
   await prisma.$transaction(
     async (tx) => {
       const preserved = await tx.task.findMany({
-        where: { projectId: currentProject!.id, status: 'DONE' },
+        where: { projectId, status: 'DONE' },
         select: { title: true, order: true, aiContext: true },
       });
       const norm = (v: string) => v.trim().toLowerCase();
@@ -170,10 +153,10 @@ registerJobHandler<{ isFirstGeneration?: boolean }>('tasks_generate', async ({ p
       );
       const startOrder = preserved.reduce((max, t) => Math.max(max, t.order), 0) + 1;
 
-      await tx.task.deleteMany({ where: { projectId: currentProject!.id, status: { not: 'DONE' } } });
-      await persistGeneratedTasks(tx, currentProject!.id, fresh, featureIdMap, null, startOrder);
+      await tx.task.deleteMany({ where: { projectId, status: { not: 'DONE' } } });
+      await persistGeneratedTasks(tx, projectId, fresh, featureIdMap, null, startOrder);
       await tx.project.update({
-        where: { id: currentProject!.id },
+        where: { id: projectId },
         data: {
           wizardStep: 'board',
         },
@@ -183,7 +166,8 @@ registerJobHandler<{ isFirstGeneration?: boolean }>('tasks_generate', async ({ p
   );
 
   try {
-    await saveValidationReport(currentProject.id, 'tasks_generate', findings);
+    const report = await saveValidationReport(projectId, 'tasks_generate', findings);
+    await enqueueSecurityAudit(projectId, userId, report.id, null);
   } catch (err) {
     logger.error('Gagal menyimpan laporan validasi tasks', { scope: 'tasks/generate', error: serializeError(err) });
   }
@@ -191,8 +175,50 @@ registerJobHandler<{ isFirstGeneration?: boolean }>('tasks_generate', async ({ p
   if (isFirstGeneration && userId) {
     await incrementQuota(userId);
   }
+  return { step: 'done', count: validTasks.length };
 });
 
+/**
+ * Audit keamanan AI di background: hanya menambah temuan ke laporan validasi dan tidak mengubah task
+ * (kriteria keamanan baseline sudah disuntikkan deterministik saat generate).
+ */
+registerJobHandler<{ reportId: string; cycleId?: string | null }>('security_audit', async ({ projectId, payload, assertActive }) => {
+  if (!payload?.reportId) throw new NonRetryableJobError('Laporan validasi tidak ditentukan.');
+  const [project, rows] = await Promise.all([
+    prisma.project.findUnique({ where: { id: projectId }, include: { prd: true } }),
+    prisma.task.findMany({ where: { projectId, cycleId: payload.cycleId ?? null }, orderBy: { order: 'asc' } }),
+  ]);
+  if (!project?.prd) throw new NonRetryableJobError('PRD belum ada.');
+  if (rows.length === 0) return { findings: 0 };
+
+  const tasks: AuditableTask[] = rows.map((t) => {
+    const ctx = (t.aiContext ?? {}) as Record<string, any>;
+    return {
+      taskId: ctx.taskId ?? t.id,
+      title: t.title,
+      layer: t.layer as AuditableTask['layer'],
+      files_to_create: ctx.files_to_create ?? [],
+      files_to_modify: ctx.files_to_modify ?? [],
+      apiContracts: (t.apiContracts ?? []) as AuditableTask['apiContracts'],
+      consumesApis: ctx.consumesApis ?? [],
+      acceptanceCriteria: (t.acceptanceCriteria ?? []) as string[],
+    };
+  });
+
+  const audit = await auditTasksSecurity({ tasks, prd: readPrdContent(project.prd.content), projectId });
+  assertActive();
+  await appendFindings(payload.reportId, toReportFindings(audit.findings));
+  return { findings: audit.findings.length };
+});
+
+/** Antrekan audit keamanan background; kegagalan hanya dicatat dan tidak menggagalkan generate. */
+export async function enqueueSecurityAudit(projectId: string, userId: string | null, reportId: string, cycleId: string | null) {
+  try {
+    await enqueueAiJobOnce({ projectId, type: 'security_audit', userId, payload: { reportId, cycleId }, maxAttempts: 1 });
+  } catch (err) {
+    logger.warn('Audit keamanan background tidak dijadwalkan', { scope: 'tasks/generate', projectId, error: serializeError(err) });
+  }
+}
 
 tasksRouter.post('/api/projects/:id/tasks/generate', requireUser, async (req: AuthedRequest, res) => {
   const projectId = req.params.id;
@@ -234,11 +260,8 @@ tasksRouter.post('/api/projects/:id/tasks/generate', requireUser, async (req: Au
       }
     }
 
-    if (await hasActiveJob(projectId, 'tasks_generate')) {
-      return res.status(409).json({ error: 'Perancangan task sedang berlangsung. Mohon tunggu sejenak.' });
-    }
-
-    await enqueueAiJob({ projectId, type: 'tasks_generate', userId, payload: { isFirstGeneration } });
+    // Idempoten di level DB: klik ganda atau generate yang sedang berjalan tidak membuat job kedua.
+    await enqueueAiJobOnce({ projectId, type: 'tasks_generate', userId, payload: { isFirstGeneration } });
 
     res.json({
       ok: true,

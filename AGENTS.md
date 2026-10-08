@@ -18,7 +18,7 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 | 2 | Numa Brief | `interview` | `/projects/:id/interview` | AI generate pertanyaan survey per putaran (jumlah putaran sesuai paket). Putaran 1 dimulai dari proses existing (cara kerja sebelum ada aplikasi), lalu fitur, aturan bisnis, dan batasan. User jawab atau pakai saran Numa. Ringkasan survey memuat bagian Proses Saat Ini (As-Is). |
 | 3 | Numa Blueprint | `techstack` | `/projects/:id/techstack` | Rekomendasi AI (default) atau pilih Golden Stack manual. Rekomendasi di-prefetch begitu ringkasan survey selesai (bukan paket Free); hasil beserta alasannya ditampilkan untuk dikonfirmasi user sebelum disimpan dan lanjut ke PRD. |
 | 4 | Numa Blueprint | `prd` | `/projects/:id/prd` | AI generate PRD terstruktur (functional requirements, product rules, constraints, edge case). Generate lewat antrean job `prd_generate` (teks tersusun terbaca bertahap lewat polling 1,5 dtk); setelah PRD tersimpan, spec (journey utama dan gagal, entitas, endpoint) disusun di background oleh job `prd_spec` dan menjadi skenario E2E task. Pembuatan task menunggu job spec bila masih berjalan. |
-| 5 | Numa Forge | `board` | `/projects/:id/board` | AI generate atomic tasks dengan bounded context. Kanban board. |
+| 5 | Numa Forge | `board` | `/projects/:id/board` | AI generate atomic tasks dengan bounded context. Kanban board. Job `tasks_generate`: spec PRD, roadmap (bila belum ada), task per fase secara paralel, quality gate, simpan; langkah berjalan terbaca lewat polling dan ditampilkan di Board. Audit keamanan AI berjalan di background (`security_audit`) dan hanya menambah temuan ke laporan validasi. |
 | 6 | Numa Agent | `guide` | `/projects/:id/guide` | Generate Master Prompt + PAT token. User copy ke AI coding agent. |
 | 7 | Numa Agent | `done` | - | AI coding agent eksekusi via CLI `numa next/start/context/done`. |
 
@@ -28,19 +28,21 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 |--------|--------|
 | `ai-service.ts` | Client OpenAI SDK. Auto-retry Zod, logging token/latensi ke `AiCallLog`, model routing (`reasoning` vs `cheap`), `reasoning_effort` opsional lewat `OPENAI_REASONING_EFFORT_CHEAP|REASONING`. |
 | `chat.ts` | `finalizeChatSession` (buat session + project dalam satu transaksi, tanpa AI), `draftProjectName`, `buildTechStackInput` + `recommendTechStack` (tier cheap; input = ringkasan survey + ide), generate flow (legacy, backend saja). |
-| `job.ts` | Async AI job runner: fire-and-forget via `startAiJob`, state machine `running/done/failed`, auto-fail stale job >10 menit. `enqueueAiJobOnce` idempoten untuk `survey_round`/`survey_summary`/`techstack_recommend`/`prd_generate`/`prd_spec` (partial unique index `AiJob_idempotent_active_key`: satu job aktif per project+type). |
+| `job.ts` | Async AI job runner: fire-and-forget via `startAiJob`, state machine `running/done/failed`, auto-fail stale job >10 menit. `enqueueAiJobOnce` idempoten untuk `survey_round`/`survey_summary`/`techstack_recommend`/`prd_generate`/`prd_spec`/`tasks_generate`/`security_audit` (partial unique index `AiJob_idempotent_active_key`: satu job aktif per project+type). |
 | `prd.ts` | Generator PRD markdown (stream) dari hasil wawancara, `buildChatHistory` (riwayat chat dibuang bila hanya berisi ide awal), `readPrdContent`. |
-| `roadmap.ts` | Generator pembagian fase dan fitur dari PRD. |
-| `tasks.ts` | Generator atomic tasks dari roadmap dengan bounded context (`files_to_create`, `files_to_modify`, `forbidden`, `validation_commands`). |
+| `roadmap.ts` | Generator pembagian fase dan fitur: input spec PRD ringkas (`buildRoadmapInput`, markdown hanya bila spec tidak ada), tier cheap, mengikuti stack terpilih. Disimpan atomik lewat `lib/roadmap-store.ts`. |
+| `tasks.ts` | Generator atomic tasks dengan bounded context (`files_to_create`, `files_to_modify`, `forbidden`, `validation_commands`). `generateTasksByPhase`: satu panggilan per fase roadmap secara paralel (maks 5), tier cheap, prompt per fase (`PhaseScope`), diulang sekali untuk fase yang gagal; `generateTasksFromRoadmap`: satu panggilan penuh (change cycle). |
+| `task-merge.ts` | `mergePhaseTasks`: nomor global TASK-NNN, pemetaan depends_on lokal dan featureId, dependensi lintas fitur dari roadmap; `mapWithConcurrency`. |
+| `security-baseline.ts` | `applySecurityBaseline`: kriteria keamanan baseline (prefiks "Keamanan:") disuntikkan deterministik per layer dan endpoint tanpa AI. |
 | `cycle.ts` | Analisis change request dan merge delta PRD untuk change cycle. |
-| `security-audit.ts` | Audit keamanan hasil generate. |
+| `security-audit.ts` | Audit keamanan AI (tier reasoning) berjalan di background lewat job `security_audit`; hanya menghasilkan temuan untuk laporan validasi, tidak mengubah task. |
 | `product-spec.ts`, `golden-stack.ts`, `stack-contract.ts`, `architecture-contract.ts`, `journey-contract.ts`, `flow-contract.ts` (legacy) | Kontrak produk, golden stack, stack, arsitektur, dan alur yang menjadi acuan prompt dan validator. `journey-contract.ts` menyusun skenario E2E (jalur utama dan jalur gagal bercabang lewat `branchFrom`) dari `ProductSpec.journeys`, menyuntiknya ke task INTEGRATION, dan memeriksa cakupan requirement per journey (warning `JOURNEY_REQ_UNCOVERED`). `flow-contract.ts` dipakai hanya bila project masih punya `BusinessFlow` (akan dihapus, lihat `docs/JOURNEY_MIGRATION_PLAN.md`). |
 | `api-coverage-validator.ts`, `cleanup-validator.ts`, `validation-report.ts` | Validator hasil generate tasks dan laporan validasi. |
 | `usage.ts` | Pencatatan dan taksiran token per panggilan AI, termasuk `reasoningTokens` (`AiCallLog.reasoningTokens`). |
 | `dag-validator.ts` | Validasi DAG task: deteksi siklus, hapus invalid dependency, topological sort. |
 | `schemas.ts` | Kontrak data Zod untuk semua interaksi AI. |
 | `../survey.ts` | Generator pertanyaan survey per putaran dan ringkasan survey (`generateSurveyRound`, `generateSurveySummary`). Tema putaran 1: Proses Saat Ini & Masalah Utama; putaran 1 juga memberi `appName`. Putaran memakai tier `cheap`, ringkasan tetap `reasoning`. |
-| `prompts.ts` | Katalog system prompt bersama dan `PROMPT_VERSIONS` (versi prompt semua tahap, dicatat di `AiCallLog.promptVersion`; naikkan versi saat isi prompt berubah). Versi saat ini: tech-stack@3, prd@3, tasks@3, flow@2, roadmap@1, cycle@1, product-spec@3, security-audit@1, survey-round@4, survey-summary@2. |
+| `prompts.ts` | Katalog system prompt bersama dan `PROMPT_VERSIONS` (versi prompt semua tahap, dicatat di `AiCallLog.promptVersion`; naikkan versi saat isi prompt berubah). Versi saat ini: tech-stack@3, prd@3, tasks@4, flow@2, roadmap@2, cycle@1, product-spec@3, security-audit@2, survey-round@4, survey-summary@2. |
 
 ## Shared Lib (`apps/api/src/lib/`)
 

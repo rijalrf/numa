@@ -442,8 +442,9 @@ model AiJob {
 
   @@index([projectId, type, status])
   @@index([status, runAfter])
-  // Catatan: migrasi 20261008020000 menjaga partial unique index "AiJob_idempotent_active_key" di SQL
-  // (satu job survey_round/survey_summary/techstack_recommend aktif per project+type).
+  // Catatan: migrasi 20261008040000 menjaga partial unique index "AiJob_idempotent_active_key" di SQL
+  // (satu job survey_round/survey_summary/techstack_recommend/prd_generate/prd_spec/tasks_generate/
+  // security_audit aktif per project+type; migrasi terbaru 20261008040000).
   // Prisma tidak dapat menyatakannya di schema.
 }
 

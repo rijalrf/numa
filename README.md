@@ -240,7 +240,7 @@ URL API tersimpan di `~/.numa/config.json` saat login, jadi perintah berikutnya 
 | GET | `/api/projects/:id/prd/download` (`/brd/download`) | user | unduh PRD Markdown |
 | POST | `/api/projects/:id/roadmap/generate` | user | AI generate roadmap |
 | GET | `/api/projects/:id/roadmap` | user | roadmap + edges |
-| POST | `/api/projects/:id/tasks/generate` | user | AI generate atomic tasks |
+| POST | `/api/projects/:id/tasks/generate` | user | mulai job generate atomic tasks (idempoten; langkah dan hasil lewat `GET /ai-jobs?type=tasks_generate`) |
 | GET | `/api/projects/:id/tasks` | user | daftar task board |
 | PATCH | `/api/tasks/:taskId` | user | update status/posisi task |
 | GET | `/api/projects/:id/master-prompt` | user | template Master Prompt |

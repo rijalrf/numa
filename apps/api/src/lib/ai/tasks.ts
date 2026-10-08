@@ -4,8 +4,10 @@ import { z } from 'zod';
 import { generateJson } from './ai-service.js';
 import { PROMPT_VERSIONS } from './prompts.js';
 import type { RoadmapData } from './roadmap.js';
+import { describeOtherPhases, mapWithConcurrency, mergePhaseTasks, phasePrefix, type PhaseResult } from './task-merge.js';
 import type { StackContract } from './stack-contract.js';
 import { resolveArchitectureContract, renderArchitectureContract } from './architecture-contract.js';
+import type { ModelTier } from './ai-service.js';
 
 export function defaultValidation(layer: string, stack?: StackContract): string[] {
   const beFramework = (stack?.backend.framework ?? 'Express').toLowerCase();
@@ -167,7 +169,22 @@ export type PrdTaskContext = {
   techRequirements?: string[];
 };
 
+/** Lingkup satu fase roadmap bila task dibuat per fase (paralel). Tanpa ini, seluruh roadmap dibuat sekaligus. */
+export type PhaseScope = {
+  order: number;
+  title: string;
+  layer: 'BOOTSTRAP' | 'DATABASE' | 'BACKEND' | 'FRONTEND' | 'INTEGRATION';
+  /** Awalan taskId untuk fase ini, mis. "P2" -> P2-001. */
+  prefix: string;
+  /** Ringkasan fase lain (layer, judul, id fitur) sebagai konteks dependensi lintas fase. */
+  otherPhases: string;
+};
+
 export type GenerateTasksArgs = {
+  /** Bila diisi, hanya membuat task untuk fase ini (roadmap berisi tepat fase ini). */
+  phase?: PhaseScope;
+  /** Tier model; kosong = default agent. */
+  tier?: ModelTier;
   roadmap: RoadmapData;
   projectName: string;
   appRoot?: string; // mis. "apps/api", "apps/web"
@@ -198,6 +215,37 @@ export function buildTasksPrompt(args: GenerateTasksArgs): { system: string; use
 - Urutan order task mulai dari ${args.cycle.startOrder ?? 1}.\n`
     : '';
 
+  const phase = args.phase;
+  const inLayer = (layer: PhaseScope['layer']) => !phase || phase.layer === layer;
+
+  const phaseScopeRules = phase
+    ? `
+LINGKUP FASE INI (WAJIB):
+- Anda hanya membuat task untuk fase "${phase.title}" (layer ${phase.layer}); fase lain ditangani panggilan terpisah. Seluruh task WAJIB berlayer ${phase.layer} dan hanya untuk fitur pada ROADMAP di pesan user.
+- 'taskId' memakai awalan ${phase.prefix}- secara berurutan (${phase.prefix}-001, ${phase.prefix}-002, dst) dan 'order' mulai dari 1 dalam fase ini.
+- 'depends_on' boleh berisi taskId pada fase ini, atau featureId fitur dari fase lain (lihat RINGKASAN FASE LAIN) bila task bergantung padanya. Jangan mengarang ID.
+`
+    : '';
+
+  const bootstrapRule = inLayer('BOOTSTRAP')
+    ? `\n9. WAJIB ada task BOOTSTRAP di awal (order: 1): "Project Initialization & Shared Configuration" yang menyiapkan dependensi utama, struktur folder, .env.example, .env (WAJIB ada contoh variabel konfigurasi & PORT), .gitignore, dan README.md (cara install, setup env, dan jalankan aplikasi).`
+    : '';
+  const wiringRule = inLayer('INTEGRATION')
+    ? `\n10. WAJIB ada WIRING tasks di transisi antar layer sesuai stack pilihan (koneksi database, API client/service wrapper, dan integrasi antar halaman/komponen).`
+    : '';
+
+  const backendRules = inLayer('BACKEND')
+    ? `
+
+ATURAN WAJIB LAYER BACKEND (KEAMANAN, ERROR HANDLING, VALIDASI):
+11. KEAMANAN: Dilarang menggunakan fallback default untuk secret/credential. Password WAJIB di-hash (misal bcrypt / hash aman native). WAJIB terapkan proteksi keamanan HTTP (CORS, headers).
+12. ERROR HANDLING: Controller async WAJIB menangani exception/error agar server tidak crash. WAJIB return JSON error terstruktur dengan status code yang tepat.
+13. VALIDASI INPUT: Setiap endpoint POST/PUT/PATCH WAJIB memvalidasi request body sebelum memproses.
+14. TRANSAKSI & ATOMISITAS: Operasi yang melibatkan baca-lalu-tulis pada resource bersama WAJIB menggunakan transaksi database.
+15. INTEGRITAS RELASI: Endpoint DELETE WAJIB memeriksa relasi aktif. Jika ada relasi aktif, TOLAK penghapusan dengan status Conflict (HTTP 409).
+16. PAGINATION: Setiap endpoint GET yang mengembalikan daftar WAJIB menerima query params ?page=1&limit=20 dan mengembalikan data berpaginasi beserta metadata.`
+    : '';
+
   const system = `Anda adalah Tech Lead senior. Tugas Anda adalah memecah fitur aplikasi menjadi atomic tasks terstruktur yang dirancang agar DAPAT DIEKSEKUSI DENGAN SUKSES OLEH LOW-COST AI CODING AGENT ATAU JUNIOR DEVELOPER TANPA HALUSINASI DAN MENGHASILKAN APLIKASI YANG BISA DIJALANKAN 100% END-TO-END.
 
 PRINSIP ATOMIC & LOW-COST COMPATIBILITY:
@@ -212,17 +260,8 @@ PRINSIP ATOMIC & LOW-COST COMPATIBILITY:
 8. KONSISTENSI & PARITY API KE UI (SANGAT KRUSIAL):
    - Setiap endpoint MUTASI (POST, PUT, PATCH, DELETE) yang ada di SPESIFIKASI ENDPOINT API atau task BACKEND WAJIB memiliki antarmuka pemanggil di frontend (form, modal, dialog, atau tombol aksi interaktif). Dilarang menyisakan endpoint backend tanpa antarmuka pemanggil di frontend.
    - Setiap task FRONTEND yang memanggil endpoint mutasi WAJIB mendeklarasikan field 'consumesApis' dengan array [{ method, path, description }].
-9. WAJIB ada task BOOTSTRAP di awal (order: 1): "Project Initialization & Shared Configuration" yang menyiapkan dependensi utama, struktur folder, .env.example, .env (WAJIB ada contoh variabel konfigurasi & PORT), .gitignore, dan README.md (cara install, setup env, dan jalankan aplikasi).
-10. WAJIB ada WIRING tasks di transisi antar layer sesuai stack pilihan (koneksi database, API client/service wrapper, dan integrasi antar halaman/komponen).
-
-ATURAN WAJIB LAYER BACKEND (KEAMANAN, ERROR HANDLING, VALIDASI):
-11. KEAMANAN: Dilarang menggunakan fallback default untuk secret/credential. Password WAJIB di-hash (misal bcrypt / hash aman native). WAJIB terapkan proteksi keamanan HTTP (CORS, headers).
-12. ERROR HANDLING: Controller async WAJIB menangani exception/error agar server tidak crash. WAJIB return JSON error terstruktur dengan status code yang tepat.
-13. VALIDASI INPUT: Setiap endpoint POST/PUT/PATCH WAJIB memvalidasi request body sebelum memproses.
-14. TRANSAKSI & ATOMISITAS: Operasi yang melibatkan baca-lalu-tulis pada resource bersama WAJIB menggunakan transaksi database.
-15. INTEGRITAS RELASI: Endpoint DELETE WAJIB memeriksa relasi aktif. Jika ada relasi aktif, TOLAK penghapusan dengan status Conflict (HTTP 409).
-16. PAGINATION: Setiap endpoint GET yang mengembalikan daftar WAJIB menerima query params ?page=1&limit=20 dan mengembalikan data berpaginasi beserta metadata.
-${cycleSystemRules}`;
+${bootstrapRule}${wiringRule}${backendRules}
+${phaseScopeRules}${cycleSystemRules}`;
 
   const fence = (label: string, data: unknown) => {
     if (!data) return '';
@@ -278,8 +317,51 @@ ${fence('HASIL ANALISIS DAMPAK CYCLE', args.cycle.impact)}
 ${fence('RINGKASAN WORKSPACE REPO (numa sync)', args.cycle.repoSummary)}`
     : '';
 
-  const user = `ROADMAP:
+  const taskIdRules = phase
+    ? `Aturan taskId dan depends_on (WAJIB KONSISTEN):
+- Gunakan format 'taskId' ${phase.prefix}-001, ${phase.prefix}-002, dst secara berurutan dalam fase ini.
+- 'depends_on' berisi taskId prasyarat pada fase ini (misal ["${phase.prefix}-001"]) atau featureId fitur dari fase lain bila bergantung padanya. Jangan gunakan ID sembarang.`
+    : `Aturan taskId dan depends_on (WAJIB KONSISTEN):
+- Gunakan format 'taskId' standar: TASK-001, TASK-002, TASK-003, dst secara berurutan.
+- 'depends_on' HARUS mereferensikan 'taskId' task prasyarat (misal ["TASK-001"]). Jangan gunakan ID sembarang agar Execution Graph dapat terhubung sempurna.`;
+
+  const frontendRules = inLayer('FRONTEND')
+    ? `Aturan khusus FRONTEND (Design System Contract & UI/UX Specs):
+- Default app shell: sidebar menu (nav kiri + konten utama); header hanya untuk info global. Ikuti panduan skill .agents/skills/numa-frontend/SKILL.md (design token, komponen internal, pola halaman, aksesibilitas).
+- Terapkan Design System Contract: mobile-first, clean layout, semantic HTML, dan konsistensi visual.
+- Spacing terstandarisasi: gunakan kelipatan 4px (Tailwind: gap-1, gap-2, p-3, p-4, p-6, space-y-4).
+- Tangani state interaksi secara lengkap pada acceptance criteria: idle, loading (spinner/skeleton), error, dan success.
+- Halaman UI WAJIB memanggil API Client (bukan hardcoded data mock).
+- PARITY UI: Setiap endpoint mutasi (POST/PUT/PATCH/DELETE) di backend HARUS punya antarmuka pemanggil (dialog/modal/form) yang terdaftar di 'consumesApis' pada task FRONTEND.
+- DILARANG menggunakan window.alert() atau alert() untuk menampilkan error/notifikasi. WAJIB gunakan AlertBanner atau Toast.
+- Setiap <label> WAJIB memiliki atribut htmlFor yang menunjuk ke id elemen input terkait. Setiap tombol ikon (tanpa teks visible) WAJIB punya aria-label.
+- Loading state WAJIB menggunakan skeleton loader (animated placeholder), BUKAN teks "Loading..." polos.
+
+`
+    : '';
+
+  const acceptRules = `Aturan acceptance criteria (HARUS DIPATUHI):
+- Setiap acceptance criterion HARUS measurable dan testable, bukan subjektif.
+- BACKEND: "Endpoint [METHOD] [PATH] merespons HTTP status yang sesuai dan format JSON valid sesuai contract".
+- FRONTEND: "Halaman [Nama] memuat data dari API [PATH] dengan skeleton loader saat loading, AlertBanner saat error, empty state saat data kosong, dan menampilkan data secara dinamis."
+- INTEGRATION: "Suite test integrasi/E2E berhasil mengeksekusi critical user journeys tanpa kegagalan dan aplikasi dapat diakses normal".
+
+`;
+
+  const integrationRules = inLayer('INTEGRATION')
+    ? `Wajib pada layer INTEGRATION include minimal task integrasi ini:
+1. Wire Database to Backend API - pastikan koneksi database/ORM terhubung dan migrasi/skema berjalan.
+2. Wire Frontend to Backend API - buat API client wrapper dan hubungkan seluruh antarmuka ke API.
+3. Test Automation & Critical User Journey Verification - setup konfigurasi testing sesuai stack (${args.stack?.testing ?? 'automated test suite'}) dan tulis test untuk SETIAP skenario E2E pada bagian SKENARIO E2E DARI BUSINESS FLOW (bila ada), jika tidak ada gunakan alur kritis dari PRD.
+
+`
+    : '';
+
+  const otherPhasesText = phase?.otherPhases ? fence('RINGKASAN FASE LAIN (HANYA UNTUK KONTEKS DEPENDENSI)', phase.otherPhases) : '';
+
+  const user = `ROADMAP${phase ? ` (HANYA FASE ${phase.order}: ${phase.title})` : ''}:
 ${JSON.stringify(args.roadmap)}
+${otherPhasesText}
 ${stackContractText}
 ${archContractText}
 ${cycleText}
@@ -299,7 +381,7 @@ Schema JSON (WAJIB):
 {
   "tasks": [
     {
-      "taskId": "TASK-001",
+      "taskId": "${phase ? `${phase.prefix}-001` : 'TASK-001'}",
       "title": "Judul task singkat & instruktif",
       "description": "Deskripsi lingkup teknis task",
       "layer": "BOOTSTRAP" | "DATABASE" | "BACKEND" | "FRONTEND" | "INTEGRATION",
@@ -363,50 +445,15 @@ Aturan lingkup task (Stack-Aware & Fleksibel):
   * Go: cmd/, internal/, pkg/, dsb.
 - Field file (files_to_create, files_to_modify, files_readonly, forbidden) bersifat rekomendasi/panduan arsitektural. Fokus utama keberhasilan task adalah Acceptance Criteria dan Validation Commands. Dilarang memaksakan path atau ekstensi .ts jika tech stack backend/frontend yang dipilih bukan Node/TypeScript.
 
-Aturan taskId dan depends_on (WAJIB KONSISTEN):
-- Gunakan format 'taskId' standar: TASK-001, TASK-002, TASK-003, dst secara berurutan.
-- 'depends_on' HARUS mereferensikan 'taskId' task prasyarat (misal ["TASK-001"]). Jangan gunakan ID sembarang agar Execution Graph dapat terhubung sempurna.
+${taskIdRules}
 
-Aturan khusus FRONTEND (Design System Contract & UI/UX Specs):
-- Default app shell: sidebar menu (nav kiri + konten utama); header hanya untuk info global. Ikuti panduan skill .agents/skills/numa-frontend/SKILL.md (design token, komponen internal, pola halaman, aksesibilitas).
-- Terapkan Design System Contract: mobile-first, clean layout, semantic HTML, dan konsistensi visual.
-- Spacing terstandarisasi: gunakan kelipatan 4px (Tailwind: gap-1, gap-2, p-3, p-4, p-6, space-y-4).
-- Tangani state interaksi secara lengkap pada acceptance criteria: idle, loading (spinner/skeleton), error, dan success.
-- Halaman UI WAJIB memanggil API Client (bukan hardcoded data mock).
-- PARITY UI: Setiap endpoint mutasi (POST/PUT/PATCH/DELETE) di backend HARUS punya antarmuka pemanggil (dialog/modal/form) yang terdaftar di 'consumesApis' pada task FRONTEND.
-- DILARANG menggunakan window.alert() atau alert() untuk menampilkan error/notifikasi. WAJIB gunakan AlertBanner atau Toast.
-- Setiap <label> WAJIB memiliki atribut htmlFor yang menunjuk ke id elemen input terkait. Setiap tombol ikon (tanpa teks visible) WAJIB punya aria-label.
-- Loading state WAJIB menggunakan skeleton loader (animated placeholder), BUKAN teks "Loading..." polos.
-
-Aturan acceptance criteria (HARUS DIPATUHI):
-- Setiap acceptance criterion HARUS measurable dan testable, bukan subjektif.
-- BACKEND: "Endpoint [METHOD] [PATH] merespons HTTP status yang sesuai dan format JSON valid sesuai contract".
-- FRONTEND: "Halaman [Nama] memuat data dari API [PATH] dengan skeleton loader saat loading, AlertBanner saat error, empty state saat data kosong, dan menampilkan data secara dinamis."
-- INTEGRATION: "Suite test integrasi/E2E berhasil mengeksekusi critical user journeys tanpa kegagalan dan aplikasi dapat diakses normal".
-
-Wajib pada layer INTEGRATION include minimal task integrasi ini:
-1. Wire Database to Backend API - pastikan koneksi database/ORM terhubung dan migrasi/skema berjalan.
-2. Wire Frontend to Backend API - buat API client wrapper dan hubungkan seluruh antarmuka ke API.
-3. Test Automation & Critical User Journey Verification - setup konfigurasi testing sesuai stack (${args.stack?.testing ?? 'automated test suite'}) dan tulis test untuk SETIAP skenario E2E pada bagian SKENARIO E2E DARI BUSINESS FLOW (bila ada), jika tidak ada gunakan alur kritis dari PRD.
-
-Minimal 1 task per fitur. Urutkan order global. Pastikan semua task acceptance criteria testable sebelum submit. Kembalikan HANYA JSON.`;
+${frontendRules}${acceptRules}${integrationRules}${phase ? 'Minimal 1 task per fitur pada fase ini.' : 'Minimal 1 task per fitur. Urutkan order global.'} Pastikan semua task acceptance criteria testable sebelum submit. Kembalikan HANYA JSON.`;
 
   return { system, user };
 }
 
-export async function generateTasksFromRoadmap(args: GenerateTasksArgs): Promise<TaskGen[]> {
-  const { system, user } = buildTasksPrompt(args);
-
-  const out = await generateJson({
-    system,
-    user,
-    schema: TasksSchema,
-    agentName: 'AtomicTaskArchitect',
-    promptVersion: PROMPT_VERSIONS.tasks,
-    projectId: args.projectId,
-  });
-
-  const normalizedTasks = out.tasks.map((t) => {
+function normalizeTasks(tasks: TaskGen[], stack?: StackContract): TaskGen[] {
+  return tasks.map((t) => {
     const cmds = t.validation_commands;
     // Hanya ganti jika kosong — hormati pilihan eksplisit AI termasuk ['npm run build']
     const isEmpty = !cmds || cmds.length === 0;
@@ -414,10 +461,83 @@ export async function generateTasksFromRoadmap(args: GenerateTasksArgs): Promise
     const isAdvisoryEmpty = !advisory || advisory.length === 0;
     return {
       ...t,
-      validation_commands: isEmpty ? defaultValidation(t.layer, args.stack) : cmds,
-      advisory_commands: isAdvisoryEmpty ? defaultAdvisory(t.layer, args.stack) : advisory,
+      validation_commands: isEmpty ? defaultValidation(t.layer, stack) : cmds,
+      advisory_commands: isAdvisoryEmpty ? defaultAdvisory(t.layer, stack) : advisory,
     };
   });
+}
 
-  return normalizedTasks;
+async function callTaskModel(args: GenerateTasksArgs): Promise<TaskGen[]> {
+  const { system, user } = buildTasksPrompt(args);
+  const out = await generateJson({
+    system,
+    user,
+    schema: TasksSchema,
+    agentName: 'AtomicTaskArchitect',
+    promptVersion: PROMPT_VERSIONS.tasks,
+    projectId: args.projectId,
+    tier: args.tier,
+  });
+  return normalizeTasks(out.tasks, args.stack);
+}
+
+/** Generate seluruh task dalam satu panggilan (dipakai change cycle, roadmap kecil). */
+export async function generateTasksFromRoadmap(args: GenerateTasksArgs): Promise<TaskGen[]> {
+  return callTaskModel(args);
+}
+
+/** Batas panggilan AI paralel saat task dibuat per fase. */
+export const PHASE_CONCURRENCY = 5;
+
+/**
+ * Generate task per fase roadmap secara paralel lalu gabungkan (nomor global, dependensi lintas fase).
+ * Fase yang gagal diulang sekali; bila masih gagal, seluruh proses gagal dengan nama fase yang bermasalah.
+ */
+export async function generateTasksByPhase(
+  args: Omit<GenerateTasksArgs, 'phase'>,
+  opts: { concurrency?: number; onPhaseDone?: (done: number, total: number) => void } = {},
+): Promise<TaskGen[]> {
+  const phases = [...args.roadmap.phases].sort((a, b) => a.order - b.order);
+  let done = 0;
+
+  const runPhase = async (phase: RoadmapData['phases'][number]): Promise<PhaseResult> => {
+    const tasks = await callTaskModel({
+      ...args,
+      roadmap: { phases: [phase] },
+      phase: {
+        order: phase.order,
+        title: phase.title,
+        layer: phase.layer,
+        prefix: phasePrefix(phase.order),
+        otherPhases: describeOtherPhases(phases, phase.order),
+      },
+    });
+    opts.onPhaseDone?.(++done, phases.length);
+    // Layer dikunci ke layer fase: fase lain ditangani panggilan terpisah.
+    return {
+      phase: { order: phase.order, layer: phase.layer, features: phase.features.map((f) => ({ id: f.id, dependsOn: f.dependsOn })) },
+      tasks: tasks.map((t) => ({ ...t, layer: phase.layer })),
+    };
+  };
+
+  const concurrency = opts.concurrency ?? PHASE_CONCURRENCY;
+  let settled = await mapWithConcurrency(phases, concurrency, runPhase);
+
+  const failedIdx = settled.flatMap((r, i) => (r.status === 'rejected' ? [i] : []));
+  if (failedIdx.length > 0) {
+    const retried = await mapWithConcurrency(failedIdx.map((i) => phases[i]), concurrency, runPhase);
+    settled = settled.map((r, i) => {
+      const at = failedIdx.indexOf(i);
+      return at >= 0 ? retried[at] : r;
+    });
+  }
+
+  const results: PhaseResult[] = [];
+  settled.forEach((r, i) => {
+    if (r.status === 'rejected') {
+      throw new Error(`Gagal merancang task fase "${phases[i].title}": ${(r.reason as Error)?.message ?? 'kesalahan tidak diketahui'}`);
+    }
+    results.push(r.value);
+  });
+  return mergePhaseTasks(results);
 }

@@ -1,10 +1,12 @@
-// Security Audit Sub-pipeline untuk generated tasks
-// Menjalankan audit AppSec pra-implementasi dan menyuntikkan kriteria keamanan ke tasks
+// Security Audit untuk generated tasks: audit AppSec pra-implementasi yang menghasilkan temuan untuk laporan validasi.
+// Berjalan di background (job security_audit) dan tidak mengubah task; kriteria keamanan baseline disuntikkan
+// secara deterministik oleh security-baseline.ts.
 import { z } from 'zod';
 import { generateJson } from './ai-service.js';
 import type { TaskGen } from './tasks.js';
 import type { PrdData } from './prd.js';
 import { PROMPT_VERSIONS } from './prompts.js';
+import type { Finding } from './validation-report.js';
 
 export const SecurityFindingSchema = z.object({
   severity: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']),
@@ -28,20 +30,35 @@ export type SecurityFinding = z.infer<typeof SecurityFindingSchema>;
 
 export const SecurityAuditResultSchema = z.object({
   findings: z.array(SecurityFindingSchema).default([]),
-  additionalAcceptanceCriteria: z
-    .array(
-      z.object({
-        taskId: z.string(),
-        criteria: z.array(z.string()),
-      }),
-    )
-    .default([]),
 });
 
 export type SecurityAuditResult = z.infer<typeof SecurityAuditResultSchema>;
 
+/** Bagian task yang dibaca audit; cukup untuk task dari AI maupun yang dimuat dari database. */
+export type AuditableTask = Pick<
+  TaskGen,
+  'taskId' | 'title' | 'layer' | 'files_to_create' | 'files_to_modify' | 'apiContracts' | 'consumesApis' | 'acceptanceCriteria'
+>;
+
+const SECURITY_SEVERITY: Record<SecurityFinding['severity'], Finding['severity']> = {
+  CRITICAL: 'error',
+  HIGH: 'error',
+  MEDIUM: 'warning',
+  LOW: 'info',
+};
+
+/** Ubah temuan audit menjadi temuan laporan validasi. */
+export function toReportFindings(findings: SecurityFinding[]): Finding[] {
+  return findings.map((f) => ({
+    code: `SEC_${f.category}`,
+    severity: SECURITY_SEVERITY[f.severity] ?? 'warning',
+    message: `[${f.taskId}] ${f.description} Rekomendasi: ${f.recommendation}`,
+    refs: [f.taskId],
+  }));
+}
+
 export async function auditTasksSecurity(args: {
-  tasks: TaskGen[];
+  tasks: AuditableTask[];
   prd?: PrdData | null;
   brd?: PrdData | null; // Kompatibilitas ke belakang
   projectId: string;
@@ -59,10 +76,9 @@ Tinjau seluruh task untuk mendeteksi potensi celah keamanan berikut:
 6. Integritas Relasi: apakah endpoint DELETE menolak penghapusan record berelasi aktif (HTTP 409)?
 7. Kebocoran Data: larangan mengembalikan password hash atau token internal pada response JSON.
 
-Untuk setiap temuan, masukkan ke array 'findings'.
-Untuk setiap task yang perlu diperkuat keamanannya, masukkan kriteria penerimaan tambahan ke 'additionalAcceptanceCriteria'.
-Kriteria tambahan HARUS presisi, ringkas, dan dapat diuji (measurable & testable).
-Jika seluruh task sudah aman, kembalikan array kosong untuk findings dan additionalAcceptanceCriteria.
+Task sudah memuat kriteria keamanan baseline (prefiks "Keamanan:"); laporkan HANYA celah spesifik yang belum tercakup oleh kriteria itu.
+Untuk setiap temuan, masukkan ke array 'findings' dengan rekomendasi perbaikan yang presisi dan ringkas.
+Jika seluruh task sudah aman, kembalikan array kosong untuk findings.
 Kembalikan HANYA JSON valid sesuai skema.`;
 
   const taskSummaries = args.tasks.map((t) => ({
@@ -92,15 +108,6 @@ Format JSON (WAJIB):
       "taskId": "TASK-001",
       "description": "Deskripsi celah spesifik",
       "recommendation": "Rekomendasi fix teknis"
-    }
-  ],
-  "additionalAcceptanceCriteria": [
-    {
-      "taskId": "TASK-001",
-      "criteria": [
-        "Keamanan: Validasi bahwa JWT_SECRET diambil dari process.env tanpa fallback default",
-        "Keamanan: Endpoint memverifikasi session token sebelum membaca data"
-      ]
     }
   ]
 }`;

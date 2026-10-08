@@ -21,3 +21,18 @@ export async function saveValidationReport(projectId: string, kind: string, find
     data: { projectId, kind, summary: summarizeFindings(findings), findings: findings as any },
   });
 }
+
+/**
+ * Tambahkan temuan ke laporan yang sudah ada (mis. hasil audit keamanan AI yang selesai belakangan).
+ * Tidak melempar error bila laporan sudah tidak ada; mengembalikan false dalam kasus itu.
+ */
+export async function appendFindings(reportId: string, extra: Finding[]): Promise<boolean> {
+  const report = await prisma.validationReport.findUnique({ where: { id: reportId } });
+  if (!report) return false;
+  const findings = [...((report.findings as Finding[] | null) ?? []), ...extra];
+  await prisma.validationReport.update({
+    where: { id: reportId },
+    data: { findings: findings as any, summary: summarizeFindings(findings) },
+  });
+  return true;
+}

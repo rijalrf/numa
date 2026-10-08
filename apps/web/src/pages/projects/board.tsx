@@ -25,6 +25,7 @@ import {
 } from '@/components/kanban/task-detail-dialog';
 import { KanbanColumn } from '@/components/kanban/kanban-column';
 import { CheckpointBanner } from '@/components/kanban/checkpoint-banner';
+import { GenerationProgress } from '@/components/kanban/generation-progress';
 import { CycleBar } from '@/components/cycle/cycle-bar';
 import { CycleDetailDialog } from '@/components/cycle/cycle-detail-dialog';
 import { ChangeRequestPanel } from '@/components/cycle/change-request-panel';
@@ -53,6 +54,8 @@ export function BoardPage() {
     error,
     successMessage,
     setSuccessMessage,
+    progress,
+    stillProcessing,
     cycles,
     activeCycleId,
     setActiveCycleId,
@@ -183,13 +186,14 @@ export function BoardPage() {
 
   const displayedTasks = tasks;
 
-  if (generating || loading) {
+  if (generating) {
+    return <GenerationProgress progress={progress} />;
+  }
+
+  if (loading) {
     return (
       <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center">
-        <NumaLoader
-          label={generating ? 'Sedang merancang task...' : 'Memuat papan task...'}
-          sublabel={generating ? 'AI sedang menyusun daftar task berdasarkan diagram arsitektur' : undefined}
-        />
+        <NumaLoader label="Memuat papan task..." />
       </div>
     );
   }
@@ -202,6 +206,20 @@ export function BoardPage() {
           projectId={projectId}
           refreshKey={tasks.filter((t) => t.status === 'DONE').length}
         />
+      )}
+
+      {/* Job melewati batas tunggu klien tetapi masih bisa berjalan di server: bukan kegagalan */}
+      {stillProcessing && !error && (
+        <AlertBanner variant="info" className="gap-3 p-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <Loader2 className="h-4 w-4 shrink-0" />
+            <span>Perancangan task masih diproses di server. Anda bisa memeriksa statusnya kapan saja.</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => loadTasks('manual')} className="h-7 text-xs gap-1 shrink-0">
+            <RefreshCw className="h-3 w-3" />
+            Periksa Status
+          </Button>
+        </AlertBanner>
       )}
 
       {/* Banner Error jika terjadi kesalahan */}

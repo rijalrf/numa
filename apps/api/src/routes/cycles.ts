@@ -10,6 +10,7 @@ import { getUserPlan } from '../lib/billing.js';
 import { readPrdContent } from '../lib/ai/prd.js';
 import { runTaskQualityGate } from '../lib/task-quality.js';
 import { saveValidationReport } from '../lib/ai/validation-report.js';
+import { enqueueSecurityAudit } from './tasks.js';
 import { analyzeChangeRequest, mergePrdDelta } from '../lib/ai/cycle.js';
 import { generateTasksFromRoadmap } from '../lib/ai/tasks.js';
 import { resolveStackContract } from '../lib/ai/stack-contract.js';
@@ -26,7 +27,7 @@ type CycleGeneratePayload = {
   overrideTitle?: string;
 };
 
-registerJobHandler<CycleGeneratePayload>('cycle_generate', async ({ projectId, payload }) => {
+registerJobHandler<CycleGeneratePayload>('cycle_generate', async ({ projectId, userId, payload }) => {
   const { cycleId, splitMode, partRequest, overrideTitle } = payload;
   // Ambil ulang data segar di dalam job
   const freshProject = await prisma.project.findFirst({
@@ -132,7 +133,6 @@ registerJobHandler<CycleGeneratePayload>('cycle_generate', async ({ projectId, p
   const gate = await runTaskQualityGate({
     generated,
     prd: prdDoc ?? { markdown: '', requirementIndex: [] },
-    projectId,
   });
   const validTasks = gate.tasks;
 
@@ -162,7 +162,8 @@ registerJobHandler<CycleGeneratePayload>('cycle_generate', async ({ projectId, p
   );
 
   try {
-    await saveValidationReport(projectId, 'cycle_generate', gate.findings);
+    const report = await saveValidationReport(projectId, 'cycle_generate', gate.findings);
+    await enqueueSecurityAudit(projectId, userId, report.id, cycleId);
   } catch (err) {
     logger.error('Gagal menyimpan laporan validasi cycle', { scope: 'cycles/generate', error: serializeError(err) });
   }

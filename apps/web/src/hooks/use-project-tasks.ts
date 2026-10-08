@@ -1,10 +1,20 @@
 // State dan logika task project: muat, generate, polling, dan riwayat siklus
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/http';
+import { pollAiJob } from '@/lib/ai-job';
 import type { TaskDetail } from '@/components/kanban/task-detail-dialog';
 import type { ProjectCycleItem } from '@/components/cycle/cycle-bar';
 
 type Task = TaskDetail;
+
+/** Langkah yang sedang dikerjakan job tasks_generate (dibaca dari hasil sementara job). */
+export type GenerationStep = 'spec' | 'roadmap' | 'tasks' | 'validate' | 'save';
+export type GenerationProgress = { step: GenerationStep; label: string; done?: number; total?: number };
+
+// Polling mengikuti status job (bukan jumlah percobaan). Batas 10 menit sama dengan batas waktu job di server;
+// setelah itu Board menampilkan "masih diproses" dan tombol periksa ulang, bukan pesan gagal.
+const POLL_INTERVAL_MS = 2000;
+const POLL_MAX_ATTEMPTS = 300;
 
 export type LoadTasksMode = 'initial' | 'manual' | 'silent';
 
@@ -15,87 +25,72 @@ export function useProjectTasks(projectId: string | undefined) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [progress, setProgress] = useState<GenerationProgress | null>(null);
+  const [stillProcessing, setStillProcessing] = useState(false);
 
   const [cycles, setCycles] = useState<ProjectCycleItem[]>([]);
   const [activeCycleId, setActiveCycleId] = useState<string | null | 'all'>('all');
   const [initialTaskCounts, setInitialTaskCounts] = useState<{ total: number; done: number }>({ total: 0, done: 0 });
 
   const isGeneratingRef = useRef(false);
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stopPollingRef = useRef<(() => void) | null>(null);
 
-  // Bersihkan timer polling saat unmount
+  // Hentikan polling saat unmount
   useEffect(() => {
-    return () => {
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-    };
+    return () => stopPollingRef.current?.();
+  }, []);
+
+  const finishGeneration = useCallback(() => {
+    stopPollingRef.current = null;
+    isGeneratingRef.current = false;
+    setGenerating(false);
+    setLoading(false);
+    setProgress(null);
   }, []);
 
   const pollForGeneratedTasks = useCallback(() => {
     if (!projectId) return;
-    if (pollTimerRef.current) return; // sudah polling — jangan reset timer
+    if (stopPollingRef.current) return; // sudah polling — jangan mulai poller kedua
     isGeneratingRef.current = true;
 
     setGenerating(true);
+    setStillProcessing(false);
     setError(null);
-    let attempts = 0;
-    const maxAttempts = 60; // 3 menit (polling tiap 3 detik)
 
-    pollTimerRef.current = setInterval(async () => {
-      attempts++;
-      try {
-        const json = await api<{
-          tasks: Task[];
-          generationStatus?: 'idle' | 'generating' | 'done' | 'failed';
-          generationError?: string | null;
-        }>(`/api/projects/${projectId}/tasks`);
-
-        if (json.generationStatus === 'failed') {
-          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-          pollTimerRef.current = null;
-          isGeneratingRef.current = false;
-          setGenerating(false);
-          setLoading(false);
-          setError(json.generationError || 'AI gagal menghasilkan task.');
-          return;
+    stopPollingRef.current = pollAiJob(projectId, 'tasks_generate', {
+      intervalMs: POLL_INTERVAL_MS,
+      maxAttempts: POLL_MAX_ATTEMPTS,
+      onProgress: (job) => {
+        if (job.result?.step) setProgress(job.result as GenerationProgress);
+      },
+      onDone: async () => {
+        finishGeneration();
+        try {
+          const json = await api<{ tasks: Task[] }>(`/api/projects/${projectId}/tasks`);
+          if (json.tasks && json.tasks.length > 0) {
+            setTasks(json.tasks);
+            setSuccessMessage(`${json.tasks.length} task berhasil dirancang.`);
+            setError(null);
+          } else {
+            // Job selesai tapi tidak ada task tersimpan
+            setTasks([]);
+            setError('Perancangan task selesai tanpa menghasilkan task. Coba generate ulang.');
+          }
+        } catch {
+          setError('Task selesai dirancang tetapi gagal dimuat. Silakan periksa ulang.');
         }
-
-        if (json.tasks && json.tasks.length > 0) {
-          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-          pollTimerRef.current = null;
-          isGeneratingRef.current = false;
-          setTasks(json.tasks);
-          setSuccessMessage(`${json.tasks.length} task berhasil dirancang.`);
-          setGenerating(false);
-          setLoading(false);
-          setError(null);
-          return;
-        }
-
-        if (json.generationStatus === 'done') {
-          // Job selesai tapi tidak ada task tersimpan — jangan polling terus
-          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-          pollTimerRef.current = null;
-          isGeneratingRef.current = false;
-          setGenerating(false);
-          setLoading(false);
-          setTasks([]);
-          setError('Perancangan task selesai tanpa menghasilkan task. Coba generate ulang.');
-          return;
-        }
-      } catch {
-        // Polling sementara gagal, ulangi di tick berikutnya
-      }
-
-      if (attempts >= maxAttempts) {
-        if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-        pollTimerRef.current = null;
-        isGeneratingRef.current = false;
-        setGenerating(false);
-        setLoading(false);
-        setError('Proses perancangan task memakan waktu lebih lama dari biasanya. Silakan periksa ulang beberapa saat lagi.');
-      }
-    }, 3000);
-  }, [projectId]);
+      },
+      onFailed: (err) => {
+        finishGeneration();
+        setError(err || 'AI gagal menghasilkan task.');
+      },
+      onTimeout: () => {
+        // Job masih bisa berjalan di server: bukan kegagalan.
+        finishGeneration();
+        setStillProcessing(true);
+      },
+    });
+  }, [projectId, finishGeneration]);
 
   const generateTasks = useCallback(async () => {
     if (!projectId || isGeneratingRef.current) return;
@@ -113,12 +108,11 @@ export function useProjectTasks(projectId: string | undefined) {
       // Gagal start (403 plan, 409 lock, 500): tampilkan error asli, jangan polling.
       console.warn('POST tasks/generate gagal:', err);
       setError(err?.message || 'Gagal memulai perancangan task.');
-      setGenerating(false);
-      isGeneratingRef.current = false;
+      finishGeneration();
       return;
     }
     pollForGeneratedTasks();
-  }, [projectId, pollForGeneratedTasks]);
+  }, [projectId, pollForGeneratedTasks, finishGeneration]);
 
   const loadCycles = useCallback(async () => {
     if (!projectId) return;
@@ -203,6 +197,8 @@ export function useProjectTasks(projectId: string | undefined) {
     error,
     successMessage,
     setSuccessMessage,
+    progress,
+    stillProcessing,
     cycles,
     activeCycleId,
     setActiveCycleId,

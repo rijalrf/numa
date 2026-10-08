@@ -1,5 +1,5 @@
 // Quality gate untuk task hasil generate AI: normalisasi DAG, cakupan requirement/API, kebersihan,
-// kontrak E2E (journey, atau flow legacy), dan audit keamanan. Semua temuan dikumpulkan sebagai Finding dan disimpan sebagai laporan.
+// kontrak E2E (journey, atau flow legacy), dan kriteria keamanan baseline. Semua temuan dikumpulkan sebagai Finding dan disimpan sebagai laporan.
 import type { TaskGen } from './ai/tasks.js';
 import type { PrdDoc } from './ai/prd.js';
 import type { BusinessFlow } from './ai/schemas.js';
@@ -9,15 +9,8 @@ import { validateCleanup } from './ai/cleanup-validator.js';
 import { applyFlowContract } from './ai/flow-contract.js';
 import { applyJourneyContract } from './ai/journey-contract.js';
 import type { SpecJourney } from './ai/product-spec.js';
-import { auditTasksSecurity } from './ai/security-audit.js';
+import { applySecurityBaseline } from './ai/security-baseline.js';
 import type { Finding } from './ai/validation-report.js';
-
-const SECURITY_SEVERITY: Record<string, Finding['severity']> = {
-  CRITICAL: 'error',
-  HIGH: 'error',
-  MEDIUM: 'warning',
-  LOW: 'info',
-};
 
 export async function runTaskQualityGate(args: {
   generated: TaskGen[];
@@ -25,8 +18,6 @@ export async function runTaskQualityGate(args: {
   flow?: BusinessFlow | null;
   /** Journey dari spec PRD; dipakai sebagai kontrak E2E bila flow (legacy) tidak ada. */
   journeys?: SpecJourney[];
-  projectId: string;
-  securityAudit?: boolean;
 }): Promise<{ tasks: TaskGen[]; findings: Finding[]; healed: boolean }> {
   const findings: Finding[] = [];
 
@@ -63,26 +54,12 @@ export async function runTaskQualityGate(args: {
     findings.push(...contract.findings);
   }
 
-  if (args.securityAudit !== false) {
-    try {
-      const audit = await auditTasksSecurity({ tasks, prd: args.prd, projectId: args.projectId });
-      for (const f of audit.findings) {
-        findings.push({
-          code: `SEC_${f.category}`,
-          severity: SECURITY_SEVERITY[f.severity] ?? 'warning',
-          message: `[${f.taskId}] ${f.description} Rekomendasi: ${f.recommendation}`,
-          refs: [f.taskId],
-        });
-      }
-      const extra = new Map(audit.additionalAcceptanceCriteria.map((a) => [a.taskId, a.criteria]));
-      tasks = tasks.map((t) => {
-        const add = (t.taskId && extra.get(t.taskId)) || [];
-        const fresh = add.filter((c) => !t.acceptanceCriteria.includes(c));
-        return fresh.length > 0 ? { ...t, acceptanceCriteria: [...t.acceptanceCriteria, ...fresh] } : t;
-      });
-    } catch (err) {
-      findings.push({ code: 'SEC_AUDIT_FAILED', severity: 'warning', message: `Audit keamanan task gagal dijalankan: ${(err as Error).message}` });
-    }
+  // Kriteria keamanan baseline disuntikkan deterministik (tanpa AI) agar task selalu siap dengan kriteria keamanan.
+  // Audit AI (temuan spesifik per task) berjalan terpisah di background dan hanya menambah laporan.
+  const baseline = applySecurityBaseline(tasks, args.prd.spec?.endpoints ?? args.prd.apiEndpoints ?? []);
+  tasks = baseline.tasks;
+  if (baseline.touched > 0) {
+    findings.push({ code: 'SEC_BASELINE_APPLIED', severity: 'info', message: `Kriteria keamanan baseline ditambahkan ke ${baseline.touched} task.` });
   }
 
   return { tasks, findings, healed: dag.healed };

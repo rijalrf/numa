@@ -17,6 +17,7 @@ export const AI_JOB_TYPES = [
   'techstack_recommend',
   'prd_generate',
   'prd_spec',
+  'security_audit',
 ] as const;
 
 export type AiJobType = (typeof AI_JOB_TYPES)[number];
@@ -137,7 +138,7 @@ export async function enqueueAiJob(args: EnqueueArgs) {
 
 /**
  * Seperti enqueueAiJob, tetapi idempoten untuk tipe yang dijaga partial unique index
- * "AiJob_idempotent_active_key" (survey_round, survey_summary, techstack_recommend, prd_generate, prd_spec): bila sudah ada job aktif untuk project+type,
+ * "AiJob_idempotent_active_key" (survey_round, survey_summary, techstack_recommend, prd_generate, prd_spec, tasks_generate, security_audit): bila sudah ada job aktif untuk project+type,
  * job itu dikembalikan (created=false). Aman terhadap request bersamaan karena penjaganya di level DB.
  */
 export async function enqueueAiJobOnce(args: EnqueueArgs): Promise<{ job: { id: string }; created: boolean }> {
