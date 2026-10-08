@@ -24,7 +24,7 @@ Pipeline: **Numa Brief** (Chat & Survey) -> **Numa Blueprint** (Tech Stack & PRD
   | Next.js Fullstack | App Router, Server Actions, Prisma | SQLite / PostgreSQL / MySQL / Supabase |
   | Laravel PHP | Laravel, Blade/Tailwind, Eloquent | MySQL / PostgreSQL / SQLite |
 - **Rekomendasi AI** (`/projects/:id/techstack`) — rekomendasi otomatis (default, langsung lanjut) atau pilih manual per kategori. Validasi `validateGoldenSelection` menolak kombinasi di luar kontrak (mis. MongoDB, Drizzle, TypeORM).
-- **PRD / BRD** (`/projects/:id/prd`) — AI generate dokumen kebutuhan terstruktur (functional requirements, product rules, constraints) dengan versioning. Mendukung unduh Markdown dan stream SSE saat generate.
+- **PRD / BRD** (`/projects/:id/prd`) — AI generate dokumen kebutuhan terstruktur (functional requirements, product rules, constraints) dengan versioning. Mendukung unduh Markdown; generate berjalan sebagai job dan teks tampil bertahap lewat polling, spec terstruktur (journey) menyusul di background.
 
 ### 3. Numa Forge — Atomic Tasks
 
@@ -234,8 +234,9 @@ URL API tersimpan di `~/.numa/config.json` saat login, jadi perintah berikutnya 
 | POST | `/api/projects/:id/survey/submit`, `/complete` | user | jawab & selesaikan survey |
 | POST | `/api/projects/:id/techstack/recommend` | user | rekomendasi AI |
 | PUT | `/api/projects/:id/techstack` | user | simpan pilihan stack |
-| POST | `/api/projects/:id/prd/generate` (`/brd/generate`) | user | AI generate PRD (SSE) |
-| GET | `/api/projects/:id/prd` (`/brd`) | user | PRD viewer |
+| POST | `/api/projects/:id/prd/generate` (`/brd/generate`) | user | mulai job generate PRD (idempoten; pantau lewat `GET /ai-jobs?type=prd_generate`) |
+| POST | `/api/projects/:id/prd/spec/extract` | user | mulai job ekstraksi spec PRD (`prd_spec`) |
+| GET | `/api/projects/:id/prd` (`/brd`) | user | PRD viewer, beserta `specStatus` |
 | GET | `/api/projects/:id/prd/download` (`/brd/download`) | user | unduh PRD Markdown |
 | POST | `/api/projects/:id/roadmap/generate` | user | AI generate roadmap |
 | GET | `/api/projects/:id/roadmap` | user | roadmap + edges |
