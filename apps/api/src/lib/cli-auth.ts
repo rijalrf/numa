@@ -81,7 +81,7 @@ export async function pollCliAuth(deviceCode: string): Promise<PollResult> {
   if (!row.userId) return { state: 'expired' };
   const claimed = await prisma.cliAuthRequest.updateMany({ where: { id: row.id, status: 'approved' }, data: { status: 'consumed' } });
   if (claimed.count !== 1) return { state: 'expired' };
-  const { token, record } = await issueAgentToken({ userId: row.userId, name: `CLI: ${row.clientName}`, allProjects: true });
+  const { token, record } = await issueAgentToken({ userId: row.userId, name: `CLI: ${row.clientName}` });
   return { state: 'approved', token, tokenId: record.id, userId: row.userId, expiresAt: record.expiresAt };
 }
 

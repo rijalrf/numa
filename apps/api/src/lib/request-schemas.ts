@@ -40,13 +40,6 @@ export const RepoSummaryBodySchema = z.object({
   summary: z.unknown().refine((v) => v !== undefined && v !== null && v !== '', 'Ringkasan repo (summary) diperlukan.').refine(maxJsonSize(200_000), 'Ringkasan repo terlalu besar.'),
 });
 
-export const CreateTokenBodySchema = z
-  .object({
-    name: z.string().trim().min(1).max(100).optional(),
-    expiresInDays: z.coerce.number().finite().optional(),
-  })
-  .partial();
-
 export const TechStackBodySchema = z.object({
   techStack: z.array(z.string().trim().min(1).max(200)).max(20),
 });

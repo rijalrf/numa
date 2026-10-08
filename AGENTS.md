@@ -81,7 +81,7 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 | `RoadmapPhase`, `RoadmapFeature`, `RoadmapDependency` | Graph rencana pengembangan. |
 | `Task`, `TaskDependency` | Atomic task: bounded context JSON, acceptance criteria, layer, relasi DAG. |
 | `TreeNode`, `BusinessFlow` | Legacy: tidak lagi digenerate di wizard (tree dihapus, flow hanya via API backend). Tabel dibuang di langkah akhir `docs/JOURNEY_MIGRATION_PLAN.md`. |
-| `AgentToken`, `AgentTokenScope` | PAT token CLI (hash sha256, multi-project scope). Dibuat otomatis (semua project, 90 hari) saat CLI login lewat browser, atau manual di halaman profil untuk CI/headless. |
+| `AgentToken`, `AgentTokenScope` | PAT token CLI (hash sha256, multi-project scope). Dibuat hanya otomatis (semua project, 90 hari) saat CLI login lewat browser; tidak ada pembuatan manual. |
 | `CliAuthRequest` | Permintaan login CLI lewat browser (device code): hash deviceCode, userCode `XXXX-XXXX`, status pending/approved/denied/consumed, TTL 10 menit. Token dibuat tepat sekali saat CLI mengambil hasil persetujuan. |
 | `AgentSession` | Tracking sesi kerja agent. |
 | `AiCallLog` | Observabilitas: model, tokens, latensi, retry, success; `userId`/`orgId` untuk budget per tenant. |
@@ -127,8 +127,8 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 - **Bahasa**: semua string UI, komentar publik, komunikasi ke user dalam **Bahasa Indonesia**.
 - **Tanpa emoji** di UI/kode/komunikasi. Pakai `lucide-react` icons.
 - **Tanpa mock fallback** di CLI/API. Error AI harus eksplisit (HTTP 502 + pesan).
-- **PAT**: disimpan sebagai `sha256` di DB. Plaintext dikembalikan SEKALI (saat generate di profil, atau saat CLI mengambil hasil persetujuan login). Master Prompt dan dialog web tidak pernah memuat token.
-- **Login CLI**: tanpa `numa login` dan tanpa menyalin token. `lib/cli-auth.ts` + `routes/cli-auth.ts`: CLI `POST /api/cli-auth/start` -> user membuka `/cli-login?code=...` di web dan menyetujui -> CLI `POST /api/cli-auth/poll` menerima token semua project. `NUMA_TOKEN` tetap didukung untuk CI. Endpoint start/approve/deny dibatasi rate limit.
+- **PAT**: disimpan sebagai `sha256` di DB. Plaintext dikembalikan SEKALI, saat CLI mengambil hasil persetujuan login. Master Prompt dan dialog web tidak pernah memuat token.
+- **Login CLI**: tanpa `numa login` dan tanpa menyalin token. `lib/cli-auth.ts` + `routes/cli-auth.ts`: CLI `POST /api/cli-auth/start` -> user membuka `/cli-login?code=...` di web dan menyetujui -> CLI `POST /api/cli-auth/poll` menerima token semua project. Tidak ada jalur token manual dan tidak ada `NUMA_TOKEN`: login selalu butuh persetujuan user di browser. Halaman profil hanya menampilkan daftar Sesi CLI (`GET /api/agent-tokens`) dengan tombol cabut (`DELETE /api/agent-tokens/:id`). Endpoint start/approve/deny dibatasi rate limit.
 - **Master Prompt**: satu sumber di `lib/master-prompt.ts` (`buildMasterPrompt`, mode `confirm`|`auto`); dialog web hanya mengambil dari API dan mengingat pilihan mode per project di localStorage.
 - **Isolasi project**: `requireAgent` middleware attach `projectId`. Agent hanya akses task project sendiri.
 - **Akses publik**: tunnel Cloudflare di `https://numa.opendv.xyz` (ingress `/api/*` -> 6655, sisanya -> 3455).

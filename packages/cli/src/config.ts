@@ -1,5 +1,5 @@
 // Konfigurasi CLI berlapis. Prioritas (tinggi ke rendah):
-//   1. Environment: NUMA_TOKEN, NUMA_API_URL, NUMA_PROJECT_ID
+//   1. Environment: NUMA_API_URL, NUMA_PROJECT_ID
 //   2. Workspace:   .numa/workspace.json { projectId, apiUrl } (dicari naik dari cwd)
 //   3. Global:      ~/.numa/config.json { apiUrl, token?, activeTaskId?, projectId? }
 // Token TIDAK pernah ditulis ke workspace (aman untuk di-commit).
@@ -63,7 +63,7 @@ export function loadConfig(from: string = process.cwd()): Config {
   const ws = root ? readJson<WorkspaceConfig>(path.join(root, WORKSPACE_DIR_NAME, WORKSPACE_FILE_NAME)) : null;
   return {
     apiUrl: process.env.NUMA_API_URL || ws?.apiUrl || global.apiUrl,
-    token: process.env.NUMA_TOKEN || global.token,
+    token: global.token,
     activeTaskId: global.activeTaskId,
     projectId: process.env.NUMA_PROJECT_ID || ws?.projectId || global.projectId,
   };

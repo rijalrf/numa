@@ -101,7 +101,7 @@ Tahap yang sudah dilewati terkunci read-only (HTTP 403 via `isStageLocked`). Tah
 | FR-5.2 | Skill pack: `numa init` memasang 7 skill bundled (`numa-workflow`, `numa-incremental`, `numa-tdd`, `numa-api-design`, `numa-security`, `numa-production`, `numa-frontend`) ke `.agents/skills/` (salinan di `.claude/skills/`) plus kontrak arsitektur project | Wajib |
 | FR-5.3 | CLI `numa` — loop eksekusi task: `switch`, `whoami`, `next`, `start`, `context`, `done` (guard verifikasi file + `validation_commands`, flag `--force`/`--dir`), `prd`, `status`, `init`, `sync`, `logout`. **Tanpa mock fallback** — error AI selalu eksplisit (HTTP 502 + pesan) | Wajib |
 | FR-5.4 | Mode eksekusi agent: "dengan konfirmasi per layer" (default; agent berhenti di akhir tiap layer dan meminta konfirmasi user di percakapan) atau "otomatis penuh". `numa done` hanya memberi info netral `layerCompleted` / `allTasksDone`; tidak ada gate atau persetujuan di web | Wajib |
-| FR-5.6 | Login CLI lewat browser (device code): CLI menampilkan alamat dan kode, user menyetujui di web, token semua project diterima otomatis tanpa disalin; `NUMA_TOKEN` untuk CI | Wajib |
+| FR-5.6 | Login CLI lewat browser (device code): CLI menampilkan alamat dan kode, user menyetujui di web, token semua project diterima otomatis tanpa disalin; tidak ada token manual maupun `NUMA_TOKEN` | Wajib |
 | FR-5.5 | Repo summary: `numa sync` mengirim file tree + manifest workspace ke server agar konteks agent selalu relevan | Wajib |
 
 ### 6.6 Platform & Lain-lain

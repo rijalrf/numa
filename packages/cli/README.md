@@ -24,10 +24,9 @@ numa --api-url https://numa.opendv.xyz switch <project-id>   # --api-url disimpa
 ```
 
 - Sesi tanpa TTY (mis. AI agent): CLI menunggu ~90 detik lalu keluar kode 2; setelah Anda menyetujui, jalankan ulang perintah yang sama.
-- CI / tanpa browser: set `NUMA_TOKEN` dengan PAT dari halaman profil web.
 - Token kedaluwarsa atau dicabut (HTTP 401) dihapus lokal; perintah berikutnya meminta login lagi. `numa logout` menghapus sesi.
 
-Konfigurasi berlapis: env (`NUMA_TOKEN`, `NUMA_API_URL`, `NUMA_PROJECT_ID`) > `.numa/workspace.json` > `~/.numa/config.json`.
+Konfigurasi berlapis: env (`NUMA_API_URL`, `NUMA_PROJECT_ID`) > `.numa/workspace.json` > `~/.numa/config.json`.
 
 ### `switch [projectId]`
 Beralih project dari token universal. Tanpa parameter tampilkan bantuan, dengan parameter set project aktif.

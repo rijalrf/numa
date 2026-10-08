@@ -2,6 +2,27 @@ import assert from 'node:assert';
 
 const API_BASE = process.env.NUMA_API_URL || 'http://localhost:6655';
 
+/** Token CLI lewat alur device code (satu-satunya jalur): start, setujui dengan sesi uji, lalu poll. */
+async function issueCliToken(authedFetch: (path: string, opts?: RequestInit) => Promise<Response>): Promise<string> {
+  const startRes = await fetch(`${API_BASE}/api/cli-auth/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientName: 'e2e' }),
+  });
+  if (startRes.status !== 201) throw new Error(`Mulai login CLI gagal: ${startRes.status} ${await startRes.text()}`);
+  const { deviceCode, userCode } = await startRes.json();
+  const approveRes = await authedFetch('/api/cli-auth/approve', { method: 'POST', body: JSON.stringify({ code: userCode }) });
+  if (!approveRes.ok) throw new Error(`Setujui login CLI gagal: ${approveRes.status} ${await approveRes.text()}`);
+  const pollRes = await fetch(`${API_BASE}/api/cli-auth/poll`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deviceCode }),
+  });
+  const pollJson = await pollRes.json();
+  if (pollRes.status !== 200 || !pollJson.token) throw new Error(`Ambil token login CLI gagal: ${pollRes.status} ${JSON.stringify(pollJson)}`);
+  return pollJson.token as string;
+}
+
 async function run() {
   console.log('--- 1. REGISTER & LOGIN REAL TEST USER ---');
   const email = `test-minitask-${Date.now()}@numa.dev`;
@@ -130,16 +151,8 @@ async function run() {
   });
 
   console.log('\n--- 8. TAHAP GUIDE (Master Prompt & Agent Token) ---');
-  const tokenRes = await authedFetch(`/api/projects/${projectId}/agent-tokens`, {
-    method: 'POST',
-    body: JSON.stringify({ name: 'Jerry CLI Token' }),
-  });
-  if (!tokenRes.ok) {
-    throw new Error(`Generate token gagal: ${await tokenRes.text()}`);
-  }
-  const tokenJson = await tokenRes.json();
-  const rawToken = tokenJson.token || tokenJson.plainToken;
-  console.log('PAT Token berhasil dibuat:', rawToken);
+  const rawToken = await issueCliToken(authedFetch);
+  console.log('Token CLI berhasil dibuat lewat login device code.');
 
   const guideRes = await authedFetch(`/api/projects/${projectId}/master-prompt`);
   if (!guideRes.ok) {

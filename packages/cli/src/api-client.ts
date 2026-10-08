@@ -43,7 +43,7 @@ async function request<T>(cfg: Config, path: string, init: RequestInit = {}): Pr
       body = text;
     }
   }
-  if (resp.status === 401 && !process.env.NUMA_TOKEN) {
+  if (resp.status === 401) {
     // Token tersimpan kedaluwarsa atau dicabut: hapus agar perintah berikutnya otomatis login ulang.
     updateGlobalConfig({ token: undefined });
     throw new ApiError('Sesi login berakhir atau token dicabut. Jalankan ulang perintah; CLI akan meminta login lagi.', 401, body);

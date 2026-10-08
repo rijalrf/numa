@@ -24,7 +24,7 @@ export function resolveTaskId(cfg: Config, id?: string): string {
 
 /**
  * Konfigurasi dengan token. Bila belum login, jalankan login lewat browser (sekali), pilih project aktif otomatis bila
- * hanya ada satu, lalu lanjutkan. Token dari NUMA_TOKEN (CI/headless) dipakai apa adanya tanpa login interaktif.
+ * hanya ada satu, lalu lanjutkan.
  */
 export async function ensureLoggedIn(): Promise<Config> {
   const cfg = loadConfig();

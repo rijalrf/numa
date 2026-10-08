@@ -145,7 +145,6 @@ export async function runPrd(): Promise<void> {
 export function runLogout(): void {
   clearConfig();
   console.log('Sesi login dihapus. Perintah berikutnya akan meminta login lagi.');
-  if (process.env.NUMA_TOKEN) console.log('Catatan: NUMA_TOKEN di environment masih terpasang.');
 }
 
 export async function runStatus(): Promise<void> {
@@ -153,7 +152,7 @@ export async function runStatus(): Promise<void> {
   const healthy = await probeHealth(cfg);
   console.log(`CLI    : ${CLI_VERSION}`);
   console.log(`Server : ${cfg.apiUrl} -> ${healthy ? 'OK' : 'TIDAK TERHUBUNG'}`);
-  console.log(`Login  : ${cfg.token ? (process.env.NUMA_TOKEN ? 'dari NUMA_TOKEN' : 'tersimpan') : 'belum (otomatis diminta saat perintah berikutnya)'}`);
+  console.log(`Login  : ${cfg.token ? 'tersimpan' : 'belum (otomatis diminta saat perintah berikutnya)'}`);
   if (cfg.activeTaskId) console.log(`Active : ${cfg.activeTaskId}`);
   if (cfg.projectId) {
     const root = findWorkspaceRoot();

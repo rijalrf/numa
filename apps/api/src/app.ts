@@ -121,7 +121,6 @@ export function createApp() {
   app.use(['/api/projects/:id/survey/generate', '/api/projects/:id/survey/submit'], aiRateLimiter);
   app.use(['/api/cli-auth/start', '/api/cli-auth/approve', '/api/cli-auth/deny', '/api/cli-auth/request'], cliAuthLimiter);
   app.use('/api/agent-tokens', tokenRateLimiter);
-  app.use('/api/projects/:id/agent-tokens', tokenRateLimiter);
 
   // ============================================================
   // Route per domain (routes/*.ts)

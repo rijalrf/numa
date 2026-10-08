@@ -14,7 +14,6 @@ const SurveyPage = lazy(() => import('@/pages/projects/survey').then((m) => ({ d
 const TechStackPage = lazy(() => import('@/pages/projects/techstack').then((m) => ({ default: m.TechStackPage })));
 const PrdPage = lazy(() => import('@/pages/projects/prd').then((m) => ({ default: m.PrdPage })));
 const BoardPage = lazy(() => import('@/pages/projects/board').then((m) => ({ default: m.BoardPage })));
-const SettingsPage = lazy(() => import('@/pages/projects/settings').then((m) => ({ default: m.SettingsPage })));
 const BillingPage = lazy(() => import('@/pages/settings/billing').then((m) => ({ default: m.BillingPage })));
 const CliLoginPage = lazy(() => import('@/pages/cli-login').then((m) => ({ default: m.CliLoginPage })));
 const AdminUsagePage = lazy(() => import('@/pages/admin/usage').then((m) => ({ default: m.AdminUsagePage })));
@@ -117,7 +116,6 @@ export function App() {
         <Route path="/projects/:projectId/prd" element={<PrdPage />} />
         <Route path="/projects/:projectId/brd" element={<PrdPage />} />
         <Route path="/projects/:projectId/board" element={<BoardPage />} />
-        <Route path="/projects/:projectId/settings" element={<SettingsPage />} />
       </Route>
 
       {/* Fallback */}

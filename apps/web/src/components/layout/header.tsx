@@ -70,12 +70,6 @@ function getPageHeaderInfo(pathname: string): { title: string; subtitle?: string
       subtitle: 'Pantau pemakaian kuota dan kelola paket langganan Anda',
     };
   }
-  if (pathname.includes('/settings')) {
-    return {
-      title: 'Pengaturan Proyek',
-      subtitle: 'Pengaturan konfigurasi dan token akses proyek',
-    };
-  }
   if (pathname === '/chat' || pathname.startsWith('/chat/')) {
     return {
       title: 'Brainstorming Ide',
@@ -102,7 +96,7 @@ function getPageHeaderInfo(pathname: string): { title: string; subtitle?: string
   }
   if (pathname === '/profile') {
     return {
-      title: 'Profil & Token Akses',
+      title: 'Profil Akses',
       subtitle: 'Informasi akun dan manajemen Token Akses Agen (PAT)',
     };
   }
@@ -244,7 +238,7 @@ export function Header() {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem className="cursor-pointer" onClick={() => navigate('/profile')}>
                     <User className="h-4 w-4 mr-2" />
-                    Profil & Token
+                    Profil
                   </DropdownMenuItem>
                   <DropdownMenuItem className="cursor-pointer" onClick={() => navigate('/projects')}>
                     <FolderGit2 className="h-4 w-4 mr-2" />

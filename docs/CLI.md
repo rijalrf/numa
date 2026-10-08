@@ -42,11 +42,10 @@ Perintah dipasang secara global (`-g`), sehingga langsung tersedia di semua dire
   4. CLI melakukan polling `POST /api/cli-auth/poll` sampai disetujui. Token berlingkup **semua project** dibuat sekali saat polling pertama setelah persetujuan, berlaku 90 hari, lalu disimpan di `~/.numa/config.json` (izin 0600). Bila hanya ada satu proyek, otomatis menjadi proyek aktif.
 - **Sesi non-interaktif** (mis. dijalankan AI agent tanpa TTY): CLI menunggu maksimal ~90 detik (`NUMA_LOGIN_WAIT_SECONDS`), lalu keluar dengan kode 2 dan menyimpan permintaan di `~/.numa/pending-login.json`. Setelah user menyetujui, menjalankan ulang perintah yang sama melanjutkan permintaan itu tanpa meminta kode baru.
 - **Kedaluwarsa**: kode login berlaku 10 menit. Token yang kedaluwarsa atau dicabut (HTTP 401) dihapus dari konfigurasi lokal; perintah berikutnya otomatis meminta login lagi.
-- **CI / tanpa browser**: set `NUMA_TOKEN` dengan PAT yang dibuat di halaman profil web; login interaktif tidak dijalankan.
-- **Logout**: `numa logout` menghapus sesi lokal. Token bisa dicabut kapan saja di halaman profil.
+- **Logout**: `numa logout` menghapus sesi lokal. Sesi CLI bisa dicabut kapan saja di halaman profil.
 
 #### Konfigurasi berlapis
-Prioritas dari tertinggi: environment (`NUMA_TOKEN`, `NUMA_API_URL`, `NUMA_PROJECT_ID`), lalu `.numa/workspace.json` (`{projectId, apiUrl}`, dicari naik dari direktori kerja, aman di-commit karena tanpa token), lalu `~/.numa/config.json`. `numa init` dan `numa switch` menulis `workspace.json` sehingga satu mesin dapat mengerjakan beberapa project paralel tanpa saling menimpa.
+Prioritas dari tertinggi: environment (`NUMA_API_URL`, `NUMA_PROJECT_ID`), lalu `.numa/workspace.json` (`{projectId, apiUrl}`, dicari naik dari direktori kerja, aman di-commit karena tanpa token), lalu `~/.numa/config.json`. `numa init` dan `numa switch` menulis `workspace.json` sehingga satu mesin dapat mengerjakan beberapa project paralel tanpa saling menimpa.
 
 ---
 
@@ -134,7 +133,7 @@ Perintah berasal dari data task hasil AI sehingga tidak dipercaya begitu saja:
 - **Deskripsi**: Menampilkan status diagnostik koneksi server dan sesi lokal.
 - **Alur Eksekusi**:
   - Memeriksa endpoint `GET /health` di server.
-  - Menampilkan versi CLI, status server (`OK` atau `TIDAK TERHUBUNG`), status token (disimpan atau dari `NUMA_TOKEN`), validitas akses token, `activeTaskId`, `projectId` beserta sumbernya (env/workspace/global), dan versi skill pack.
+  - Menampilkan versi CLI, status server (`OK` atau `TIDAK TERHUBUNG`), status token (tersimpan atau belum), validitas akses token, `activeTaskId`, `projectId` beserta sumbernya (env/workspace/global), dan versi skill pack.
 
 ---
 
