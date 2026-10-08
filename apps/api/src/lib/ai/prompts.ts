@@ -5,7 +5,7 @@ import { GOLDEN_PACKS } from './golden-stack.js';
 // agar token, latensi, dan kualitas dapat dibandingkan sebelum dan sesudah perubahan.
 export const PROMPT_VERSIONS = {
   techStack: 'tech-stack@3',
-  prd: 'prd@2',
+  prd: 'prd@3',
   tasks: 'tasks@3',
   flow: 'flow@2',
   roadmap: 'roadmap@1',

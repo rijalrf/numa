@@ -15,6 +15,8 @@ export const AI_JOB_TYPES = [
   'survey_summary',
   'flow_generate',
   'techstack_recommend',
+  'prd_generate',
+  'prd_spec',
 ] as const;
 
 export type AiJobType = (typeof AI_JOB_TYPES)[number];
@@ -135,7 +137,7 @@ export async function enqueueAiJob(args: EnqueueArgs) {
 
 /**
  * Seperti enqueueAiJob, tetapi idempoten untuk tipe yang dijaga partial unique index
- * "AiJob_idempotent_active_key" (survey_round, survey_summary, techstack_recommend): bila sudah ada job aktif untuk project+type,
+ * "AiJob_idempotent_active_key" (survey_round, survey_summary, techstack_recommend, prd_generate, prd_spec): bila sudah ada job aktif untuk project+type,
  * job itu dikembalikan (created=false). Aman terhadap request bersamaan karena penjaganya di level DB.
  */
 export async function enqueueAiJobOnce(args: EnqueueArgs): Promise<{ job: { id: string }; created: boolean }> {
@@ -150,6 +152,26 @@ export async function enqueueAiJobOnce(args: EnqueueArgs): Promise<{ job: { id: 
     if (!existing) throw err;
     return { job: existing, created: false };
   }
+}
+
+/** Tulis hasil sementara job yang sedang berjalan (mis. teks PRD yang sudah tersusun) untuk dibaca lewat polling. */
+export async function reportJobProgress(jobId: string, result: unknown): Promise<void> {
+  await prisma.aiJob.updateMany({ where: { id: jobId, status: 'running' }, data: { result: result as any } });
+}
+
+/** Tunggu sampai tidak ada job aktif project+type. Mengembalikan false bila melewati batas waktu. */
+export async function waitForNoActiveJob(
+  projectId: string,
+  type: AiJobType,
+  opts: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<boolean> {
+  const deadline = Date.now() + (opts.timeoutMs ?? 4 * 60_000);
+  const interval = opts.intervalMs ?? 2_000;
+  while (await hasActiveJob(projectId, type)) {
+    if (Date.now() >= deadline) return false;
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
+  return true;
 }
 
 /** Batalkan job aktif project+type. Job running dihentikan secara kooperatif (hasil dibuang). */

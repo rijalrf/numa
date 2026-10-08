@@ -223,9 +223,14 @@ async function runTest() {
   console.log('\n--- 8. TEST PRD (GENERATE DARI SURVEY KEBUTUHAN) ---');
   // Generate PRD (sekarang diizinkan karena sudah paket Starter)
   const prdGenRes = await authedFetch(`/api/projects/${projectId}/prd/generate`, { method: 'POST' });
-  assert.strictEqual(prdGenRes.status === 200 || prdGenRes.status === 201, true, 'PRD generate status harus 200/201');
-  const sseText = await prdGenRes.text();
-  assert(sseText.includes('"done":true'), 'PRD stream harus selesai dengan status done');
+  assert.strictEqual(prdGenRes.status, 200, 'PRD generate status harus 200');
+  assert.strictEqual((await prdGenRes.json()).status, 'generating', 'PRD generate harus mengembalikan status generating');
+  // Generate ganda saat job berjalan tidak boleh membuat job kedua (idempoten)
+  const prdGenAgain = await authedFetch(`/api/projects/${projectId}/prd/generate`, { method: 'POST' });
+  assert.strictEqual(prdGenAgain.status, 200, 'Generate PRD kedua harus tetap 200 (idempoten)');
+  await pollJob(authedFetch, projectId, 'prd_generate', 'Generate PRD');
+  // Spec terstruktur (journey) disusun di background setelah PRD tersimpan
+  await pollJob(authedFetch, projectId, 'prd_spec', 'Ekstraksi spec PRD');
   console.log('PRD berhasil digenerate.');
 
   // Ambil PRD

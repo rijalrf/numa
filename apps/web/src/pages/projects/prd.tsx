@@ -9,7 +9,7 @@ import { useWizardNav } from '@/components/layout/wizard-nav';
 import { PricingDialog } from '@/components/billing/pricing-dialog';
 import { MarkdownView } from '@/components/ui/markdown-view';
 import { NumaLoader } from '@/components/ui/numa-loader';
-import { usePrdStream } from '@/hooks/use-prd-stream';
+import { usePrdGeneration } from '@/hooks/use-prd-generation';
 import { JourneyList } from '@/components/prd/journey-list';
 
 export function PrdPage() {
@@ -23,13 +23,14 @@ export function PrdPage() {
   const [userPlan, setUserPlan] = useState<{ plan: string; planName: string } | null>(null);
   const [pricingOpen, setPricingOpen] = useState(false);
 
-  const { markdown, setMarkdown, journeys, setJourneys, generating, error, streamPrd } = usePrdStream(projectId, isLocked);
+  const { markdown, journeys, generating, specStatus, specError, error, loadPrd, resumeOrStart, startGeneration, retrySpec } =
+    usePrdGeneration(projectId, isLocked);
 
   // Load status project & PRD saat mount
   useEffect(() => {
     if (!projectId) return;
 
-    const loadPrd = async () => {
+    const initPage = async () => {
       try {
         const [projectRes, billingRes] = await Promise.all([
           api<{ project?: { wizardStep?: string; name?: string } }>(`/api/projects/${projectId}`),
@@ -43,20 +44,9 @@ export function PrdPage() {
         const locked = isStageLocked(currentStep, 'prd');
         setIsLocked(locked);
 
-        const json = await api<{ prd?: { content: any }; brd?: { content: any } }>(`/api/projects/${projectId}/prd`);
-        const content = json.prd?.content ?? json.brd?.content;
-
-        if (content) {
-          setJourneys(content?.spec?.journeys ?? []);
-          if (typeof content === 'string') {
-            setMarkdown(content);
-          } else if (content.markdown) {
-            setMarkdown(content.markdown);
-          } else {
-            setMarkdown(JSON.stringify(content, null, 2));
-          }
-        } else if (!locked) {
-          await streamPrd();
+        // PRD tersimpan dimuat; bila belum ada, lanjutkan job yang berjalan atau mulai penyusunan baru.
+        if (!(await loadPrd()) && !locked) {
+          await resumeOrStart();
         }
       } catch (err) {
         console.error('Gagal load PRD:', err);
@@ -65,7 +55,7 @@ export function PrdPage() {
       }
     };
 
-    loadPrd();
+    initPage();
   }, [projectId]);
 
   const handleBackToTechStack = async () => {
@@ -199,7 +189,7 @@ export function PrdPage() {
           <Button
             size="sm"
             variant="outline"
-            onClick={streamPrd}
+            onClick={startGeneration}
             className="gap-1.5 h-8 text-xs border-destructive/40 hover:bg-destructive/20 ml-3 shrink-0"
           >
             <RefreshCw className="h-3.5 w-3.5" />
@@ -223,13 +213,38 @@ export function PrdPage() {
       ) : markdown ? (
         <div className="select-text pt-2 space-y-8">
           <MarkdownView content={markdown} />
-          {!generating && <JourneyList journeys={journeys} />}
+          {generating && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+              <span>Numa masih menulis dokumen PRD...</span>
+            </div>
+          )}
+          {!generating && specStatus === 'generating' && (
+            <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
+              <span>Menyusun alur pengguna (journey) dan spesifikasi terstruktur. Anda bisa membaca PRD sambil menunggu.</span>
+            </div>
+          )}
+          {!generating && (specStatus === 'failed' || specStatus === 'idle') && !isLocked && (
+            <div className="flex items-center justify-between gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-950 dark:text-amber-200">
+              <span>
+                {specStatus === 'failed'
+                  ? `Spesifikasi terstruktur belum terbentuk${specError ? `: ${specError}` : '.'}`
+                  : 'Spesifikasi terstruktur (journey) belum disusun.'}
+              </span>
+              <Button size="sm" variant="outline" onClick={retrySpec} className="shrink-0 gap-1.5 h-8 text-xs">
+                <RefreshCw className="h-3.5 w-3.5" />
+                Susun sekarang
+              </Button>
+            </div>
+          )}
+          {!generating && specStatus === 'done' && <JourneyList journeys={journeys} />}
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
           <p className="text-xs italic">Belum ada dokumen PRD.</p>
           {!isLocked && (
-            <Button onClick={streamPrd} size="sm" className="gap-1.5">
+            <Button onClick={startGeneration} size="sm" className="gap-1.5">
               Generate PRD Sekarang
             </Button>
           )}

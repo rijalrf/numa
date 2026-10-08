@@ -140,6 +140,17 @@ export function readPrdContent(content: unknown): PrdDoc {
 // Zod schema untuk validasi & transformasi seragam
 export const PrdSchema = z.custom<any>().transform((data) => readPrdContent(data));
 
+/**
+ * Riwayat percakapan untuk prompt PRD. Bila satu-satunya isi percakapan adalah ide awal (yang sudah dikirim
+ * sebagai IDE PENGGUNA), mengembalikan undefined agar ide tidak terkirim dua kali.
+ */
+export function buildChatHistory(messages: Array<{ role: string; content: string }>, idea: string): string | undefined {
+  const ideaText = idea.trim();
+  const hasMore = messages.some((m) => !(m.role === 'user' && m.content.trim() === ideaText));
+  if (!hasMore) return undefined;
+  return messages.map((m) => `${m.role}: ${m.content}`).join('\n');
+}
+
 export async function generatePrdMarkdownStream(
   args: {
     idea: string;

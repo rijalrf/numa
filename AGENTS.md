@@ -17,7 +17,7 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 | 1 | Numa Brief | `chat` | `/chat` | Input ide awal. Satu request `POST /api/chat/finalize` membuat project (tanpa panggilan AI); nama aplikasi dihasilkan survey putaran 1. |
 | 2 | Numa Brief | `interview` | `/projects/:id/interview` | AI generate pertanyaan survey per putaran (jumlah putaran sesuai paket). Putaran 1 dimulai dari proses existing (cara kerja sebelum ada aplikasi), lalu fitur, aturan bisnis, dan batasan. User jawab atau pakai saran Numa. Ringkasan survey memuat bagian Proses Saat Ini (As-Is). |
 | 3 | Numa Blueprint | `techstack` | `/projects/:id/techstack` | Rekomendasi AI (default) atau pilih Golden Stack manual. Rekomendasi di-prefetch begitu ringkasan survey selesai (bukan paket Free); hasil beserta alasannya ditampilkan untuk dikonfirmasi user sebelum disimpan dan lanjut ke PRD. |
-| 4 | Numa Blueprint | `prd` | `/projects/:id/prd` | AI generate PRD terstruktur (functional requirements, product rules, constraints, edge case). Spec hasil ekstraksi memuat journey pengguna (utama dan gagal) yang ditampilkan di halaman PRD dan menjadi skenario E2E task. |
+| 4 | Numa Blueprint | `prd` | `/projects/:id/prd` | AI generate PRD terstruktur (functional requirements, product rules, constraints, edge case). Generate lewat antrean job `prd_generate` (teks tersusun terbaca bertahap lewat polling 1,5 dtk); setelah PRD tersimpan, spec (journey utama dan gagal, entitas, endpoint) disusun di background oleh job `prd_spec` dan menjadi skenario E2E task. Pembuatan task menunggu job spec bila masih berjalan. |
 | 5 | Numa Forge | `board` | `/projects/:id/board` | AI generate atomic tasks dengan bounded context. Kanban board. |
 | 6 | Numa Agent | `guide` | `/projects/:id/guide` | Generate Master Prompt + PAT token. User copy ke AI coding agent. |
 | 7 | Numa Agent | `done` | - | AI coding agent eksekusi via CLI `numa next/start/context/done`. |
@@ -29,7 +29,7 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 | `ai-service.ts` | Client OpenAI SDK. Auto-retry Zod, logging token/latensi ke `AiCallLog`, model routing (`reasoning` vs `cheap`), `reasoning_effort` opsional lewat `OPENAI_REASONING_EFFORT_CHEAP|REASONING`. |
 | `chat.ts` | `finalizeChatSession` (buat session + project dalam satu transaksi, tanpa AI), `draftProjectName`, `buildTechStackInput` + `recommendTechStack` (tier cheap; input = ringkasan survey + ide), generate flow (legacy, backend saja). |
 | `job.ts` | Async AI job runner: fire-and-forget via `startAiJob`, state machine `running/done/failed`, auto-fail stale job >10 menit. `enqueueAiJobOnce` idempoten untuk `survey_round`/`survey_summary`/`techstack_recommend` (partial unique index `AiJob_idempotent_active_key`: satu job aktif per project+type). |
-| `prd.ts` | Generator PRD terstruktur dari hasil wawancara. |
+| `prd.ts` | Generator PRD markdown (stream) dari hasil wawancara, `buildChatHistory` (riwayat chat dibuang bila hanya berisi ide awal), `readPrdContent`. |
 | `roadmap.ts` | Generator pembagian fase dan fitur dari PRD. |
 | `tasks.ts` | Generator atomic tasks dari roadmap dengan bounded context (`files_to_create`, `files_to_modify`, `forbidden`, `validation_commands`). |
 | `cycle.ts` | Analisis change request dan merge delta PRD untuk change cycle. |
@@ -107,7 +107,7 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 │       └── src/
 │           ├── main.tsx, App.tsx
 │           ├── components/{ui,layout,chat,wizard,prd,kanban,cycle,execution,billing}/
-│           ├── hooks/{use-project-tasks,use-prd-stream,...}.ts
+│           ├── hooks/{use-project-tasks,use-prd-generation,...}.ts
 │           ├── lib/{utils,http,auth-client,ai-job,constants}.ts
 │           └── pages/{login,home,profile,chat,projects/*}.tsx
 ├── packages/cli/     # numa (commander)

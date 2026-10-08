@@ -17,11 +17,15 @@ export type AiJobType =
   | 'survey_round'
   | 'survey_summary'
   | 'flow_generate'
-  | 'techstack_recommend';
+  | 'techstack_recommend'
+  | 'prd_generate'
+  | 'prd_spec';
 
 export type PollAiJobOptions = {
   intervalMs?: number;
   maxAttempts?: number;
+  /** Dipanggil di setiap tick selama job belum selesai (mis. teks sementara di json.result). */
+  onProgress?: (job: AiJobResponse) => void;
   onDone?: (result: any) => void;
   onFailed?: (error: string) => void;
   onTimeout?: () => void;
@@ -40,6 +44,8 @@ export function pollAiJob(
     attempts++;
     try {
       const json = await api<AiJobResponse>(`/api/projects/${projectId}/ai-jobs?type=${type}`);
+
+      opts.onProgress?.(json);
 
       if (json.status === 'done') {
         clearInterval(timer);
