@@ -1,8 +1,10 @@
 // Hook streaming PRD via SSE + load data project
 import { useCallback, useRef, useState } from 'react';
+import type { PrdJourney } from '@/components/prd/journey-list';
 
 export function usePrdStream(projectId: string | undefined, isLocked: boolean) {
   const [markdown, setMarkdown] = useState('');
+  const [journeys, setJourneys] = useState<PrdJourney[]>([]);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const streamingRef = useRef(false);
@@ -13,6 +15,7 @@ export function usePrdStream(projectId: string | undefined, isLocked: boolean) {
     setGenerating(true);
     setError(null);
     setMarkdown('');
+    setJourneys([]);
 
     let accumulated = '';
     let streamError: string | null = null;
@@ -48,6 +51,7 @@ export function usePrdStream(projectId: string | undefined, isLocked: boolean) {
               try {
                 const data = JSON.parse(line.slice(6));
                 if (data.delta) accumulated += data.delta;
+                if (data.done) setJourneys(data.prd?.content?.spec?.journeys ?? []);
                 if (data.error) {
                   console.error('Error dari SSE stream:', data.error);
                   streamError = data.error;
@@ -75,5 +79,5 @@ export function usePrdStream(projectId: string | undefined, isLocked: boolean) {
     }
   }, [projectId, isLocked, generating]);
 
-  return { markdown, setMarkdown, generating, error, setError, streamPrd };
+  return { markdown, setMarkdown, journeys, setJourneys, generating, error, setError, streamPrd };
 }

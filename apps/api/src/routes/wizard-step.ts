@@ -9,7 +9,7 @@ import { STAGE_ORDER } from '../lib/stage.js';
 export const wizardStepRouter = Router();
 
 const WizardStepBody = z.object({
-  step: z.enum(['chat', 'survey', 'techstack', 'prd', 'tree', 'board']),
+  step: z.enum(['chat', 'survey', 'techstack', 'prd', 'board']),
 });
 
 wizardStepRouter.post('/api/projects/:id/wizard-step', requireUser, async (req: AuthedRequest, res) => {

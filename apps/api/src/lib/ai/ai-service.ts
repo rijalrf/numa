@@ -42,7 +42,6 @@ const REASONING_AGENTS = new Set([
   'generateSurveyRound',
   'generateSurveySummary',
   'finalizeChatSession',
-  'generateTreeFromPrd',
   'generateFlowFromPrd',
   'SecurityAuditor',
   'ChangeCycleAnalyzer',
@@ -66,6 +65,16 @@ function resolveModel(opts: { tier?: ModelTier; agentName: string; modelOverride
 function resolveTier(tier: ModelTier | undefined, agentName: string): ModelTier {
   if (tier) return tier;
   return REASONING_AGENTS.has(agentName) ? 'reasoning' : 'cheap';
+}
+
+/**
+ * Tingkat reasoning per tier lewat env OPENAI_REASONING_EFFORT_CHEAP / _REASONING (low|medium|high dst).
+ * Tanpa env, parameter tidak dikirim: tidak semua gateway menerimanya, dan gateway lokal
+ * saat ini mengabaikannya (reasoning_tokens tetap tercatat di AiCallLog untuk dipantau).
+ */
+function reasoningEffortFor(tier: ModelTier): { reasoning_effort?: 'low' | 'medium' | 'high' } {
+  const raw = (tier === 'cheap' ? process.env.OPENAI_REASONING_EFFORT_CHEAP : process.env.OPENAI_REASONING_EFFORT_REASONING)?.trim();
+  return raw === 'low' || raw === 'medium' || raw === 'high' ? { reasoning_effort: raw } : {};
 }
 
 const client = new OpenAI({
@@ -95,6 +104,7 @@ type AiCallLogData = {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  reasoningTokens?: number;
   estimated?: boolean;
   latencyMs?: number;
   retryCount?: number;
@@ -143,6 +153,7 @@ export async function generateJson<T>({
         messages: conversationMessages,
         response_format: { type: 'json_object' },
         temperature: 0.4,
+        ...reasoningEffortFor(effectiveTier),
       });
       // Token dihitung walau hasil nanti gagal validasi: retry tetap memakai kuota.
       usage.add(resp.usage);

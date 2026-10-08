@@ -31,7 +31,9 @@ Masih ada celah di keamanan pembayaran, akurasi pencatatan token, operasional, d
 
 ## Fase 1 - Keamanan dan integritas tagihan (P0) [SELESAI]
 
-### 1.1 Webhook Midtrans idempoten
+### 1.1 Webhook pembayaran idempoten
+
+> Catatan 2026-10-06: gateway kini Mayar.id (lihat `docs/MAYAR_MIGRATION_PLAN.md`). Uraian di bawah ditulis saat memakai Midtrans; prinsipnya (idempoten, cocokkan nominal, verifikasi keaslian, satu transaksi) tetap dipertahankan.
 File: `apps/api/src/routes/billing.ts` (`POST /api/billing/webhook`)
 
 **Masalah**

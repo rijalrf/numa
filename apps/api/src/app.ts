@@ -32,7 +32,7 @@ import { adminUsageRouter } from './routes/admin-usage.js';
 import { chatRouter } from './routes/chat.js';
 import { surveyRouter } from './routes/survey.js';
 import { techstackRouter } from './routes/techstack.js';
-import { treeRouter } from './routes/tree.js';
+import { flowRouter } from './routes/flow.js';
 import { billingRouter } from './routes/billing.js';
 import { orgsRouter } from './routes/orgs.js';
 
@@ -71,7 +71,7 @@ export function createApp() {
     message: { error: 'Terlalu banyak percobaan autentikasi. Silakan tunggu beberapa saat.' },
   });
 
-  // Rate limiter untuk AI chat & generation endpoints (obs-3.1: mitigasi resource exhaustion & cost inflation)
+  // Rate limiter untuk endpoint yang memicu job AI (obs-3.1: mitigasi resource exhaustion & cost inflation)
   const aiRateLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 30, // 30 req/menit per IP
@@ -109,7 +109,7 @@ export function createApp() {
 
   // Terapkan rate limiters ke endpoint AI dan token
   app.use('/api', apiRateLimiter);
-  app.use('/api/chat/sessions', aiRateLimiter);
+  app.use(['/api/projects/:id/survey/generate', '/api/projects/:id/survey/submit'], aiRateLimiter);
   app.use('/api/agent-tokens', tokenRateLimiter);
   app.use('/api/projects/:id/agent-tokens', tokenRateLimiter);
 
@@ -135,7 +135,7 @@ export function createApp() {
   app.use(chatRouter);
   app.use(surveyRouter);
   app.use(techstackRouter);
-  app.use(treeRouter);
+  app.use(flowRouter);
   app.use(billingRouter);
   app.use(orgsRouter);
 

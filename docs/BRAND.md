@@ -183,8 +183,8 @@ menjadi arsitektur terstruktur dan task atomic yang siap dieksekusi AI agent."
              │
              ▼
 [Level 3: Bukti & Alur Eksekusi (Pillars)]
-Numa Brief  ──>  Numa Blueprint  ──>  Numa Flow  ──>  Numa Forge  ──>  Numa Agent
- (Discovery)        (PRD & Stack)     (Tree & DAG)     (Task Graph)     (CLI Runner)
+Numa Brief  ──>  Numa Blueprint  ──>  Numa Forge  ──>  Numa Agent
+ (Discovery)        (PRD & Stack)      (Task Graph)     (CLI Runner)
 ```
 
 ### Rincian Messaging per Tingkatan
@@ -193,7 +193,7 @@ Numa Brief  ──>  Numa Blueprint  ──>  Numa Flow  ──>  Numa Forge  �
    - *"Shape ideas into software."*
    - Pesan: Ringkas, fokus pada transformasi pemikiran menjadi wujud software nyata.
 2. **Subheadline Produk**:
-   - *"Deskripsikan ide aplikasimu. Numa merancang dokumen kebutuhan, menyusun pohon arsitektur, membagi task atomic dengan batas konteks terisolasi, dan menjalankannya via coding agent langsung di mesin lokalmu."*
+   - *"Deskripsikan ide aplikasimu. Numa merancang dokumen kebutuhan, menyusun alur pengguna di PRD, membagi task atomic dengan batas konteks terisolasi, dan menjalankannya via coding agent langsung di mesin lokalmu."*
 3. **Pilar Bukti Teknis**:
    - **Tanpa Halusinasi Arsitektur**: Setiap task memiliki boundary eksplisit (`files_to_create`, `files_to_modify`, `forbidden_files`).
    - **Validasi Siklus DAG**: Ketergantungan antar task diuji secara matematis bebas dari siklus sirkular.
@@ -208,10 +208,9 @@ Seluruh fitur inti Numa mengadopsi pola nama terpadu dengan awalan **Numa + [Kat
 | Nama Fitur | Tahap Alur | Fungsi & Output Teknis |
 |---|---|---|
 | **Numa Brief** | Tahap 1 - 2 (Chat & Interview) | Modul wawancara discovery kebutuhan. Menggali arsitektur dan edge case produk dari dialog interaktif. |
-| **Numa Blueprint** | Tahap 3 - 4 (Tech Stack & PRD) | Modul spesifikasi kebutuhan produk (PRD) komprehensif dan matriks pemilihan teknologi. |
-| **Numa Flow** | Tahap 5 (Tree Hierarchy) | Modul dekomposisi hierarki visual aplikasi (App -> Fitur -> Sub-fitur) dan relasi antar komponen. |
-| **Numa Forge** | Tahap 6 (Board & Tasks) | Mesin peracik atomic tasks dengan bounded context ketat dan papan Kanban eksekusi. |
-| **Numa Agent** | Tahap 7 - 8 (Guide & CLI) | Runner eksekusi otonom berbasis CLI (`numa next/context/done`) yang bekerja di terminal developer. |
+| **Numa Blueprint** | Tahap 3 - 4 (Tech Stack & PRD) | Modul spesifikasi kebutuhan produk (PRD) komprehensif, journey pengguna (utama dan gagal), dan matriks pemilihan teknologi. |
+| **Numa Forge** | Tahap 5 (Board & Tasks) | Mesin peracik atomic tasks dengan bounded context ketat dan papan Kanban eksekusi. |
+| **Numa Agent** | Tahap 6 - 7 (Guide & CLI) | Runner eksekusi otonom berbasis CLI (`numa next/context/done`) yang bekerja di terminal developer. |
 
 ---
 

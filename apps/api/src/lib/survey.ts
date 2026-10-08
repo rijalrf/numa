@@ -16,6 +16,8 @@ export type SurveyQuestionItem = z.infer<typeof SurveyQuestionItemSchema>;
 
 export const SurveyRoundOutputSchema = z.object({
   questions: z.array(SurveyQuestionItemSchema).min(2).max(3),
+  /** Nama aplikasi usulan; hanya diminta pada putaran 1. */
+  appName: z.string().optional(),
 });
 
 export const SurveySummarySchema = z.object({
@@ -45,13 +47,17 @@ const ROUND_THEMES: Record<number, { theme: string; description: string }> = {
   },
 };
 
+// Putaran 1 sekaligus memberi nama aplikasi (menggantikan panggilan AI terpisah).
+const APP_NAME_RULE = `7. Putaran 1 WAJIB menyertakan field "appName": nama aplikasi 1-3 kata, mudah diingat dan dieja, relevan dengan fungsi utama, boleh Bahasa Indonesia atau istilah umum industri software. Tanpa emoji, tanda kutip, atau kata generik seperti "Aplikasi" dan "Sistem".
+`;
+
 export async function generateSurveyRound(args: {
   idea: string;
   priorAnswers: Array<{ question: string; answer: string }>;
   round: number;
   totalRounds: number;
   projectId: string;
-}): Promise<SurveyQuestionItem[]> {
+}): Promise<{ questions: SurveyQuestionItem[]; appName?: string }> {
   const roundInfo = ROUND_THEMES[args.round] || {
     theme: `Aspek Kebutuhan Tahap ${args.round}`,
     description: 'Eksplorasi kebutuhan aplikasi yang perlu diperjelas.',
@@ -83,9 +89,9 @@ PRINSIP KONSULTAN PRODUK (INTERVIEW-ME):
    - "required": true untuk kebutuhan esensial, false untuk preferensi tambahan.
    - "suggestion": nilai rekomendasi default Numa (WAJIB persis sama dengan salah satu teks di array "options").
    - "suggestionReason": penjelasan 1 kalimat mengapa opsi ini disarankan berdasarkan ide awal pengguna (tebakan cerdas terarah).
-
+${args.round === 1 ? APP_NAME_RULE : ''}
 Output JSON WAJIB valid sesuai schema SurveyRoundOutputSchema:
-{
+{${args.round === 1 ? '\n  "appName": "Nama Aplikasi",' : ''}
   "questions": [
     {
       "id": "contoh_id",
@@ -117,7 +123,7 @@ Buat 2-3 pertanyaan untuk Putaran ${args.round} (${roundInfo.theme}).`;
     tier: 'reasoning',
   });
 
-  return res.questions;
+  return { questions: res.questions, appName: res.appName?.trim() || undefined };
 }
 
 export async function generateSurveySummary(args: {

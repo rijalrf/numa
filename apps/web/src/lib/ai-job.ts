@@ -16,10 +16,8 @@ export type AiJobType =
   | 'roadmap_generate'
   | 'survey_round'
   | 'survey_summary'
-  | 'tree_generate'
   | 'flow_generate'
-  | 'techstack_recommend'
-  | 'chat_finalize';
+  | 'techstack_recommend';
 
 export type PollAiJobOptions = {
   intervalMs?: number;
@@ -35,7 +33,7 @@ export function pollAiJob(
   opts: PollAiJobOptions = {}
 ): () => void {
   const intervalMs = opts.intervalMs ?? 3000;
-  const maxAttempts = opts.maxAttempts ?? 120; // 6 menit (job tree menjalankan tree lalu flow berurutan)
+  const maxAttempts = opts.maxAttempts ?? 120; // 6 menit
   let attempts = 0;
 
   const timer = setInterval(async () => {

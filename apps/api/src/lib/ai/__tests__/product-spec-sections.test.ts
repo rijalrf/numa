@@ -21,17 +21,17 @@ const prd = [
   '## 8. Kebutuhan Non-Fungsional',
   'Tidak dipakai.',
   '## 9. Skenario Edge Cases & Penanganan Kesalahan',
-  'Tidak dipakai.',
+  '- EC-001 Pembayaran ditolak',
   '## 11. Metrik Keberhasilan (Success Metrics)',
   'Tidak dipakai.',
 ].join('\n');
 
-test('selectSpecSections menyimpan bagian yang dipakai dan membuang sisanya', () => {
+test('selectSpecSections menyimpan bagian yang dipakai (termasuk edge case untuk jalur gagal) dan membuang sisanya', () => {
   const out = selectSpecSections(prd);
-  for (const keep of ['Target Pengguna', 'Functional Requirements', 'Aturan Produk', 'Model Data', 'Endpoint API']) {
+  for (const keep of ['Target Pengguna', 'Functional Requirements', 'Aturan Produk', 'Model Data', 'Endpoint API', 'Edge Cases']) {
     assert.ok(out.includes(keep), `bagian ${keep} harus ada`);
   }
-  for (const drop of ['Ringkasan Eksekutif', 'Tujuan Produk', 'Non-Fungsional', 'Edge Cases', 'Metrik Keberhasilan']) {
+  for (const drop of ['Ringkasan Eksekutif', 'Tujuan Produk', 'Non-Fungsional', 'Metrik Keberhasilan']) {
     assert.ok(!out.includes(drop), `bagian ${drop} harus dibuang`);
   }
   assert.ok(out.length < prd.length);

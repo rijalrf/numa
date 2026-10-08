@@ -13,6 +13,7 @@ import { generateTasksFromRoadmap } from '../lib/ai/tasks.js';
 import { BusinessFlowSchema } from '../lib/ai/schemas.js';
 import { checkSpecConsistency } from '../lib/ai/product-spec.js';
 import { enumerateFlowPaths, renderFlowScenarios } from '../lib/ai/flow-contract.js';
+import { buildJourneyScenarios, renderJourneyScenarios } from '../lib/ai/journey-contract.js';
 import { saveValidationReport, type Finding } from '../lib/ai/validation-report.js';
 import { ensureProductSpec } from '../lib/prd-spec.js';
 import { runTaskQualityGate } from '../lib/task-quality.js';
@@ -122,17 +123,16 @@ registerJobHandler<{ isFirstGeneration?: boolean }>('tasks_generate', async ({ p
     }
   }
 
+  // Flow (legacy, hanya backend) dipakai bila ada; selain itu skenario E2E disusun dari journey di spec PRD.
   const flowRow = await prisma.businessFlow.findUnique({ where: { projectId: currentProject.id } });
   const parsedFlow = flowRow ? BusinessFlowSchema.safeParse(flowRow.content) : null;
   const flow = parsedFlow?.success ? parsedFlow.data : null;
-  if (!flow) {
-    preFindings.push({
-      code: 'FLOW_MISSING',
-      severity: 'info',
-      message: 'Business flow belum tersedia atau tidak valid, skenario E2E diturunkan dari PRD saja.',
-    });
-  }
-  const flowScenarios = flow ? renderFlowScenarios(flow, enumerateFlowPaths(flow)) : undefined;
+  const journeys = prdDoc.spec?.journeys;
+  const e2eScenarios = flow
+    ? renderFlowScenarios(flow, enumerateFlowPaths(flow))
+    : journeys?.length
+      ? renderJourneyScenarios(buildJourneyScenarios(journeys).scenarios)
+      : undefined;
 
   const stackContract = resolveStackContract(currentProject.stacks || []);
 
@@ -142,10 +142,10 @@ registerJobHandler<{ isFirstGeneration?: boolean }>('tasks_generate', async ({ p
     prd: prdDoc as any,
     projectId: currentProject.id,
     stack: stackContract,
-    flowScenarios,
+    e2eScenarios,
   });
 
-  const gate = await runTaskQualityGate({ generated, prd: prdDoc, flow, projectId: currentProject.id });
+  const gate = await runTaskQualityGate({ generated, prd: prdDoc, flow, journeys, projectId: currentProject.id });
   const validTasks = gate.tasks;
   const findings = [...preFindings, ...gate.findings];
 

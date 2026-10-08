@@ -3,18 +3,22 @@ export type UsageSnapshot = {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  /** Bagian dari outputTokens yang dipakai reasoning (biaya tersembunyi); 0 bila provider tidak melaporkan. */
+  reasoningTokens: number;
 };
 
 export type ProviderUsage = {
   prompt_tokens?: number | null;
   completion_tokens?: number | null;
   total_tokens?: number | null;
+  completion_tokens_details?: { reasoning_tokens?: number | null } | null;
 } | null | undefined;
 
 export class UsageAccumulator {
   inputTokens = 0;
   outputTokens = 0;
   totalTokens = 0;
+  reasoningTokens = 0;
   /** True bila ada bagian yang ditaksir karena provider tidak mengirim usage. */
   estimated = false;
 
@@ -25,6 +29,7 @@ export class UsageAccumulator {
     this.inputTokens += input;
     this.outputTokens += output;
     this.totalTokens += usage.total_tokens ?? input + output;
+    this.reasoningTokens += usage.completion_tokens_details?.reasoning_tokens ?? 0;
   }
 
   /** Dipakai bila provider tidak mengirim usage sama sekali. */
@@ -38,7 +43,12 @@ export class UsageAccumulator {
   }
 
   snapshot(): UsageSnapshot {
-    return { inputTokens: this.inputTokens, outputTokens: this.outputTokens, totalTokens: this.totalTokens };
+    return {
+      inputTokens: this.inputTokens,
+      outputTokens: this.outputTokens,
+      totalTokens: this.totalTokens,
+      reasoningTokens: this.reasoningTokens,
+    };
   }
 }
 

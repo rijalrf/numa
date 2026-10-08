@@ -39,6 +39,15 @@ test('endpoint user tanpa sesi dibalas 401', async () => {
   }
 });
 
+test('POST /api/chat/finalize tanpa sesi dibalas 401, endpoint chat lama sudah dihapus', async () => {
+  const res = await request(app).post('/api/chat/finalize').send({ idea: 'Aplikasi kasir' });
+  assert.equal(res.status, 401);
+  for (const path of ['/api/chat/sessions', '/api/chat/sessions/s1/messages', '/api/chat/sessions/s1/finalize', '/api/chat/sessions/s1/retry']) {
+    const old = await request(app).post(path).send({});
+    assert.equal(old.status, 404, path);
+  }
+});
+
 test('endpoint admin usage tanpa sesi dibalas 401 (bukan 404, agar tidak membuka info)', async () => {
   for (const name of ['summary', 'timeseries', 'by-agent', 'by-user', 'by-plan']) {
     const res = await request(app).get(`/api/admin/usage/${name}`);
@@ -58,27 +67,85 @@ test('body JSON rusak dibalas 400 generik tanpa bocor detail internal', async ()
   assert.equal(res.body.stack, undefined);
 });
 
-test('webhook billing dibalas 503 bila kunci gateway belum diatur', async () => {
-  const lama = process.env.MIDTRANS_SERVER_KEY;
-  delete process.env.MIDTRANS_SERVER_KEY;
-  try {
+function withMayarEnv(vars: Record<string, string | undefined>, fn: () => Promise<void>) {
+  return async () => {
+    const lama: Record<string, string | undefined> = {};
+    for (const [k, v] of Object.entries(vars)) {
+      lama[k] = process.env[k];
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    try {
+      await fn();
+    } finally {
+      for (const [k, v] of Object.entries(lama)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  };
+}
+
+test(
+  'webhook billing dibalas 503 bila API key Mayar belum diatur',
+  withMayarEnv({ MAYAR_API_KEY: undefined, MAYAR_WEBHOOK_TOKEN: undefined }, async () => {
     const res = await request(app).post('/api/billing/webhook').send({});
     assert.equal(res.status, 503);
-  } finally {
-    if (lama !== undefined) process.env.MIDTRANS_SERVER_KEY = lama;
-  }
-});
+  }),
+);
 
-test('webhook billing dengan body tidak valid dibalas 400', async () => {
-  const lama = process.env.MIDTRANS_SERVER_KEY;
-  process.env.MIDTRANS_SERVER_KEY = 'kunci-uji';
-  try {
+test(
+  'webhook billing dibalas 503 bila token webhook belum diatur',
+  withMayarEnv({ MAYAR_API_KEY: 'kunci-uji', MAYAR_WEBHOOK_TOKEN: undefined }, async () => {
     const res = await request(app).post('/api/billing/webhook').send({});
+    assert.equal(res.status, 503);
+  }),
+);
+
+test(
+  'webhook billing dengan token salah dibalas 401',
+  withMayarEnv({ MAYAR_API_KEY: 'kunci-uji', MAYAR_WEBHOOK_TOKEN: 'token-uji' }, async () => {
+    const res = await request(app)
+      .post('/api/billing/webhook')
+      .set('X-Callback-Token', 'salah')
+      .send({ event: 'payment.received', data: { id: 'x' } });
+    assert.equal(res.status, 401);
+  }),
+);
+
+test(
+  'webhook billing tanpa token dibalas 401',
+  withMayarEnv({ MAYAR_API_KEY: 'kunci-uji', MAYAR_WEBHOOK_TOKEN: 'token-uji' }, async () => {
+    const res = await request(app).post('/api/billing/webhook').send({ event: 'payment.received', data: { id: 'x' } });
+    assert.equal(res.status, 401);
+  }),
+);
+
+test(
+  'webhook billing dengan body tidak valid dibalas 400',
+  withMayarEnv({ MAYAR_API_KEY: 'kunci-uji', MAYAR_WEBHOOK_TOKEN: 'token-uji' }, async () => {
+    const res = await request(app).post('/api/billing/webhook').set('X-Callback-Token', 'token-uji').send({});
     assert.equal(res.status, 400);
-  } finally {
-    if (lama === undefined) delete process.env.MIDTRANS_SERVER_KEY;
-    else process.env.MIDTRANS_SERVER_KEY = lama;
-  }
+  }),
+);
+
+test(
+  'webhook billing mengabaikan event selain payment.received',
+  withMayarEnv({ MAYAR_API_KEY: 'kunci-uji', MAYAR_WEBHOOK_TOKEN: 'token-uji' }, async () => {
+    const res = await request(app)
+      .post('/api/billing/webhook')
+      .set('X-Callback-Token', ' token-uji ')
+      .send({ event: 'payment.reminder', data: { id: 'x' } });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.ignored, true);
+  }),
+);
+
+test('checkout dan sync billing menolak permintaan tanpa login', async () => {
+  const checkout = await request(app).post('/api/billing/checkout').send({ plan: 'starter' });
+  assert.equal(checkout.status, 401);
+  const sync = await request(app).post('/api/billing/payments/abc/sync');
+  assert.equal(sync.status, 401);
 });
 
 test('body lebih dari 1 MB dibalas 413', async () => {

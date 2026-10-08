@@ -59,12 +59,6 @@ function getPageHeaderInfo(pathname: string): { title: string; subtitle?: string
       subtitle: 'Dokumen spesifikasi kebutuhan produk aplikasi Anda',
     };
   }
-  if (pathname.includes('/tree')) {
-    return {
-      title: 'Diagram Struktur Aplikasi',
-      subtitle: 'Peta hierarki fitur, sub-fitur, dan langkah implementasi teknis',
-    };
-  }
   if (pathname.includes('/guide')) {
     return {
       title: 'Panduan Eksekusi AI Agent',

@@ -35,12 +35,7 @@ async function run() {
       },
     });
 
-  console.log('\n=== 2. CHAT SESSION (Brainstorming & Penggalian Kebutuhan Lengkap) ===');
-  const chatInitRes = await authedFetch('/api/chat/sessions', { method: 'POST' });
-  if (!chatInitRes.ok) throw new Error('Buat chat session gagal');
-  const { sessionId } = await chatInitRes.json();
-  console.log('Chat session ID:', sessionId);
-
+  console.log('\n=== 2. IDE AWAL ===');
   const ideaText =
     'Saya ingin membuat aplikasi InvTrack: Sistem Manajemen Inventaris dan Peminjaman Barang Kantor sederhana. ' +
     'Target pengguna: Kantor perusahaan dengan 2 peran: ADMIN (pengelola gudang) dan EMPLOYEE (karyawan peminjam). ' +
@@ -56,16 +51,11 @@ async function run() {
     '4. Admin melihat daftar pengajuan pinjaman, lalu bisa menyetujui (tombol ApproveLoanButton) atau menolak (RejectLoanDialog). ' +
     '5. Karyawan/Admin memproses pengembalian barang via modal ReturnAssetModal.';
 
-  const msgRes = await authedFetch(`/api/chat/sessions/${sessionId}/messages`, {
-    method: 'POST',
-    body: JSON.stringify({ content: ideaText }),
-  });
-  if (!msgRes.ok) throw new Error('Kirim pesan ide gagal');
-  const msgJson = await msgRes.json();
-  console.log('Respons AI:', msgJson.kind);
-
   console.log('\n=== 3. FINALIZE CHAT KE TECH STACK (Langsung tanpa interview) ===');
-  const finalizeRes = await authedFetch(`/api/chat/sessions/${sessionId}/finalize`, { method: 'POST' });
+  const finalizeRes = await authedFetch('/api/chat/finalize', {
+    method: 'POST',
+    body: JSON.stringify({ idea: ideaText }),
+  });
   if (!finalizeRes.ok) throw new Error(`Finalisasi gagal: ${await finalizeRes.text()}`);
   const { projectId } = await finalizeRes.json();
   console.log('Project ID hasil finalize:', projectId);

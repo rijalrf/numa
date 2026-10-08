@@ -1,4 +1,4 @@
-// Real E2E Wizard Flow Test: Idea -> Survey (Free Gate) -> Upgrade -> TechStack -> PRD -> Tree -> Tasks -> Agent CLI
+// Real E2E Wizard Flow Test: Idea -> Survey (Free Gate) -> Upgrade -> TechStack -> PRD (+ journey) -> Tasks -> Agent CLI
 import assert from 'node:assert';
 import { prisma } from '../apps/api/src/lib/prisma.js';
 
@@ -68,23 +68,16 @@ async function runTest() {
   assert.strictEqual(userPlanJson.surveyRounds, 1, 'Survey rounds free harus 1');
   console.log('Verifikasi paket awal: Free Trial (surveyRounds=1)');
 
-  console.log('\n--- 2. TEST CHAT SESSION & DIRECT FINALIZE (IDEA ENTRY) ---');
-  // Buat chat session
-  const sessionRes = await authedFetch('/api/chat/sessions', { method: 'POST' });
-  assert.strictEqual(sessionRes.status, 201, 'Create session status harus 201');
-  const { sessionId } = await sessionRes.json();
-  assert(sessionId, 'SessionId harus ada');
-  console.log('Chat session dibuat:', sessionId);
-
+  console.log('\n--- 2. TEST FINALIZE IDE (SATU REQUEST) ---');
   const rawIdea = 'Saya ingin membuat aplikasi kasir warung kelontong berbasis web dengan inventaris barang, kasir POS cepat, dan rekap omzet harian.';
 
   // Finalize chat langsung dengan ide mentah user -> Buat draft project di tahap survey
   console.log('\n--- 3. TEST FINALIZE PROJECT -> DRAFT SURVEY ---');
-  const finalizeRes = await authedFetch(`/api/chat/sessions/${sessionId}/finalize`, {
+  const finalizeRes = await authedFetch('/api/chat/finalize', {
     method: 'POST',
     body: JSON.stringify({ idea: rawIdea }),
   });
-  assert.strictEqual(finalizeRes.status, 200, 'Finalize status harus 200');
+  assert.strictEqual(finalizeRes.status, 201, 'Finalize status harus 201');
   const { projectId } = await finalizeRes.json();
   assert(projectId, 'ProjectId harus ada setelah finalize');
   console.log('Project berhasil dibuat dengan tahap survey:', projectId);
@@ -251,38 +244,19 @@ async function runTest() {
   assert(prdMdText.includes('# Product Requirements Document'), 'Konten PRD.md harus valid');
   console.log('Download PRD .md OK.');
 
-  console.log('\n--- 9. TEST TREE DIAGRAM (DESAINER SISTEM) ---');
-  // Generate Tree (async job)
-  const treeGenRes = await authedFetch(`/api/projects/${projectId}/tree/generate`, { method: 'POST' });
-  assert.strictEqual(treeGenRes.status, 200, 'Tree generate status harus 200');
-  console.log('Tree generate dimulai, polling status...');
-  await pollJob(authedFetch, projectId, 'tree_generate', 'Tree generate');
-
-  // Ambil Tree
-  const treeGetRes = await authedFetch(`/api/projects/${projectId}/tree`);
-  const treeGetJson = await treeGetRes.json();
-  assert(treeGetJson.nodes.length > 0, 'Tree nodes harus ada');
-  console.log(`Tree check OK: ${treeGetJson.nodes.length} nodes ditemukan.`);
-
-  // Diagram alur bisnis swimlane tersimpan terpisah dari node tree
-  const flowRes = await authedFetch(`/api/projects/${projectId}/flow`);
-  assert(flowRes.ok, 'GET flow harus berhasil');
-  const flowJson = await flowRes.json();
-  assert(flowJson.flow, 'Diagram alur bisnis harus ada');
-  const { lanes, steps, edges } = flowJson.flow;
-  assert(lanes.length >= 2, 'Alur bisnis minimal punya 2 lane');
-  assert(lanes.some((l: { kind: string }) => l.kind === 'system'), 'Alur bisnis harus punya lane system');
-  const laneIds = new Set(lanes.map((l: { id: string }) => l.id));
-  assert(
-    steps.every((st: { laneId: string }) => laneIds.has(st.laneId)),
-    'Setiap step harus punya lane yang valid'
-  );
-  const FLOW_KINDS = ['start', 'process', 'decision', 'end'];
-  assert(
-    !treeGetJson.nodes.some((n: { kind: string }) => FLOW_KINDS.includes(n.kind)),
-    'Node tree tidak boleh berisi kind alur bisnis'
-  );
-  console.log(`Flow check OK: ${lanes.length} lane, ${steps.length} step, ${edges.length} edge.`);
+  console.log('\n--- 9. TEST JOURNEY DI SPEC PRD ---');
+  const journeys: Array<{ name: string; kind?: string; steps: string[]; branchFrom?: { journey: string; stepIndex: number } }> =
+    prdContent.spec?.journeys ?? [];
+  assert(journeys.length > 0, 'Spec PRD harus memiliki journey');
+  const mainJourneys = journeys.filter((j) => (j.kind ?? 'main') === 'main');
+  assert(mainJourneys.length > 0, 'Harus ada minimal satu journey utama');
+  const mainNames = new Set(mainJourneys.map((j) => j.name.trim().toLowerCase()));
+  const failureJourneys = journeys.filter((j) => j.kind === 'failure');
+  for (const f of failureJourneys) {
+    assert(f.branchFrom, `Journey gagal "${f.name}" harus memiliki branchFrom`);
+    assert(mainNames.has(f.branchFrom.journey.trim().toLowerCase()), `branchFrom "${f.branchFrom.journey}" harus merujuk journey utama`);
+  }
+  console.log(`Journey check OK: ${mainJourneys.length} utama, ${failureJourneys.length} gagal.`);
 
   console.log('\n--- 10. TEST BOARD TASKS (TECH LEAD) ---');
   // Generate Tasks (async job)
@@ -303,6 +277,11 @@ async function runTest() {
     assert(Array.isArray(t.aiContext?.requirement_ids), `Task #${t.order} harus memiliki requirement_ids`);
   }
   console.log(`Verifikasi semua ${tasksGetJson.tasks.length} task memiliki acceptance criteria, validation commands, dan requirement_ids OK.`);
+  assert(
+    tasksGetJson.tasks.some((t: { acceptanceCriteria: string[] }) => t.acceptanceCriteria.some((c) => c.includes('Skenario E2E S1'))),
+    'Skenario E2E dari journey harus disuntikkan ke task INTEGRATION'
+  );
+  console.log('Skenario E2E dari journey tersuntik ke task INTEGRATION OK.');
 
   console.log('\n--- 11. TEST EXPORT PAKET ZIP & WIZARD STEP UNLOCK ---');
   // 11a. Test bahwa paket Starter dilarang download export.zip (harus 403, fitur Pro)
@@ -327,12 +306,12 @@ async function runTest() {
   // Test Mundur Wizard Step
   const stepBackRes = await authedFetch(`/api/projects/${projectId}/wizard-step`, {
     method: 'POST',
-    body: JSON.stringify({ step: 'tree' }),
+    body: JSON.stringify({ step: 'prd' }),
   });
   assert.strictEqual(stepBackRes.status, 200, 'Step back status harus 200');
   const stepBackJson = await stepBackRes.json();
-  assert.strictEqual(stepBackJson.wizardStep, 'tree', 'Wizard step harus menjadi tree');
-  console.log('Unlock tahap sebelumnya (wizard-step: tree) OK.');
+  assert.strictEqual(stepBackJson.wizardStep, 'prd', 'Wizard step harus menjadi prd');
+  console.log('Unlock tahap sebelumnya (wizard-step: prd) OK.');
 
   // Kembalikan ke board via direct DB update (skip re-generate yang lambat)
   await prisma.project.update({

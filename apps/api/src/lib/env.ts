@@ -81,8 +81,10 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): EnvReport {
     }
   }
 
-  if (isProd && !filled(env.MIDTRANS_SERVER_KEY)) {
-    warnings.push('MIDTRANS_SERVER_KEY belum diisi: pembayaran dinonaktifkan.');
+  if (isProd && !filled(env.MAYAR_API_KEY)) {
+    warnings.push('MAYAR_API_KEY belum diisi: pembayaran dinonaktifkan.');
+  } else if (isProd && !filled(env.MAYAR_WEBHOOK_TOKEN)) {
+    warnings.push('MAYAR_WEBHOOK_TOKEN belum diisi: webhook pembayaran ditolak sehingga paket hanya aktif lewat sinkronisasi manual.');
   }
   if (!filled(env.PLATFORM_ADMIN_EMAILS)) {
     warnings.push('PLATFORM_ADMIN_EMAILS belum diisi: halaman admin tidak dapat diakses siapa pun.');

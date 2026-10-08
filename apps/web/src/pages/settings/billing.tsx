@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/http';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { CreditCard, Check, Loader2, AlertCircle, ArrowDown } from 'lucide-react';
+import { CreditCard, Check, Loader2, AlertCircle, ArrowDown, CheckCircle2, Clock, XCircle } from 'lucide-react';
 
 interface UserPlanData {
   plan: 'free' | 'starter' | 'pro';
@@ -76,9 +77,61 @@ const AVAILABLE_PLANS = [
   },
 ];
 
+type PaymentStatus = 'success' | 'pending' | 'expired';
+
+const PAYMENT_NOTICE: Record<PaymentStatus, { text: string; className: string }> = {
+  success: {
+    text: 'Pembayaran berhasil. Paket Anda sudah diperbarui.',
+    className: 'text-emerald-700 bg-emerald-500/10 border-emerald-500/30',
+  },
+  pending: {
+    text: 'Pembayaran belum terdeteksi. Jika sudah membayar, tunggu beberapa saat lalu cek ulang.',
+    className: 'text-amber-700 bg-amber-500/10 border-amber-500/30',
+  },
+  expired: {
+    text: 'Tagihan sudah kedaluwarsa atau ditutup. Silakan pilih paket lagi untuk membuat tagihan baru.',
+    className: 'text-destructive bg-destructive/10 border-destructive/20',
+  },
+};
+
 export function BillingPage() {
   const [loadingTier, setLoadingTier] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const queryClient = useQueryClient();
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [syncResult, setSyncResult] = useState<{ paymentId: string; status: PaymentStatus } | null>(null);
+  const handledPaymentRef = useRef<string | null>(null);
+
+  const syncPayment = useCallback(
+    async (paymentId: string) => {
+      setSyncingId(paymentId);
+      setErrorMsg(null);
+      try {
+        const res = await api<{ status: PaymentStatus }>(`/api/billing/payments/${encodeURIComponent(paymentId)}/sync`, {
+          method: 'POST',
+        });
+        setSyncResult({ paymentId, status: res.status });
+        if (res.status === 'success') await queryClient.invalidateQueries({ queryKey: ['user-plan'] });
+      } catch (err) {
+        setErrorMsg(err instanceof Error ? err.message : 'Gagal memeriksa status pembayaran.');
+      } finally {
+        setSyncingId(null);
+      }
+    },
+    [queryClient],
+  );
+
+  // Setelah kembali dari halaman bayar Mayar (?payment=<id>): periksa status, lalu bersihkan query dari URL.
+  useEffect(() => {
+    const paymentId = searchParams.get('payment');
+    if (!paymentId || handledPaymentRef.current === paymentId) return;
+    handledPaymentRef.current = paymentId;
+    void syncPayment(paymentId);
+    const next = new URLSearchParams(searchParams);
+    next.delete('payment');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, syncPayment]);
 
   const { data: planData, isLoading } = useQuery<UserPlanData>({
     queryKey: ['user-plan'],
@@ -122,6 +175,31 @@ export function BillingPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-10">
+      {syncingId && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground border rounded-md p-3">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Memeriksa status pembayaran...</span>
+        </div>
+      )}
+
+      {!syncingId && syncResult && (
+        <div className={`flex items-center gap-2 text-sm border rounded-md p-3 ${PAYMENT_NOTICE[syncResult.status].className}`}>
+          {syncResult.status === 'success' ? (
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+          ) : syncResult.status === 'pending' ? (
+            <Clock className="h-4 w-4 shrink-0" />
+          ) : (
+            <XCircle className="h-4 w-4 shrink-0" />
+          )}
+          <span className="flex-1">{PAYMENT_NOTICE[syncResult.status].text}</span>
+          {syncResult.status === 'pending' && (
+            <Button variant="outline" size="sm" className="text-xs" onClick={() => void syncPayment(syncResult.paymentId)}>
+              Cek ulang
+            </Button>
+          )}
+        </div>
+      )}
+
       {errorMsg && (
         <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-3">
           <AlertCircle className="h-4 w-4 shrink-0" />

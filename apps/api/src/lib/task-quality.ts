@@ -1,5 +1,5 @@
 // Quality gate untuk task hasil generate AI: normalisasi DAG, cakupan requirement/API, kebersihan,
-// kontrak flow, dan audit keamanan. Semua temuan dikumpulkan sebagai Finding dan disimpan sebagai laporan.
+// kontrak E2E (journey, atau flow legacy), dan audit keamanan. Semua temuan dikumpulkan sebagai Finding dan disimpan sebagai laporan.
 import type { TaskGen } from './ai/tasks.js';
 import type { PrdDoc } from './ai/prd.js';
 import type { BusinessFlow } from './ai/schemas.js';
@@ -7,6 +7,8 @@ import { validateAndNormalizeDAG } from './ai/dag-validator.js';
 import { validateApiCoverage } from './ai/api-coverage-validator.js';
 import { validateCleanup } from './ai/cleanup-validator.js';
 import { applyFlowContract } from './ai/flow-contract.js';
+import { applyJourneyContract } from './ai/journey-contract.js';
+import type { SpecJourney } from './ai/product-spec.js';
 import { auditTasksSecurity } from './ai/security-audit.js';
 import type { Finding } from './ai/validation-report.js';
 
@@ -21,6 +23,8 @@ export async function runTaskQualityGate(args: {
   generated: TaskGen[];
   prd: PrdDoc;
   flow?: BusinessFlow | null;
+  /** Journey dari spec PRD; dipakai sebagai kontrak E2E bila flow (legacy) tidak ada. */
+  journeys?: SpecJourney[];
   projectId: string;
   securityAudit?: boolean;
 }): Promise<{ tasks: TaskGen[]; findings: Finding[]; healed: boolean }> {
@@ -51,6 +55,10 @@ export async function runTaskQualityGate(args: {
 
   if (args.flow) {
     const contract = applyFlowContract(args.flow, tasks);
+    tasks = contract.tasks;
+    findings.push(...contract.findings);
+  } else if (args.journeys) {
+    const contract = applyJourneyContract(args.journeys, tasks);
     tasks = contract.tasks;
     findings.push(...contract.findings);
   }

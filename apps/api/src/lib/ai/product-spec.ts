@@ -29,6 +29,27 @@ export const SpecEndpointSchema = z.object({
   requirementIds: z.array(z.string()).default([]),
 });
 
+/**
+ * Journey pengguna. `main` adalah jalur utama sampai berhasil; `failure` adalah jalur gagal yang bercabang dari
+ * langkah ke-`stepIndex` (mulai dari 1) pada journey `main` bernama `journey`. Jalur gagal merujuk ID edge case (EC-xxx)
+ * dan requirement lewat `requirementIds`.
+ */
+export const SpecJourneySchema = z.object({
+  name: z.string().min(1),
+  steps: z.array(z.string().min(1)).min(1),
+  requirementIds: z.array(z.string()).default([]),
+  kind: z
+    .enum(['main', 'failure'])
+    .nullish()
+    .transform((v) => v ?? 'main'),
+  branchFrom: z
+    .object({ journey: z.string().min(1), stepIndex: z.number().int().min(1) })
+    .nullish()
+    .transform((v) => v ?? undefined),
+});
+
+export type SpecJourney = z.infer<typeof SpecJourneySchema>;
+
 export const ProductSpecSchema = z.object({
   personas: z
     .array(z.object({ name: z.string().min(1), description: z.string().default('') }))
@@ -36,15 +57,7 @@ export const ProductSpecSchema = z.object({
   entities: z.array(SpecEntitySchema).default([]),
   endpoints: z.array(SpecEndpointSchema).default([]),
   rules: z.array(z.object({ id: z.string().min(1), description: z.string().min(1) })).default([]),
-  journeys: z
-    .array(
-      z.object({
-        name: z.string().min(1),
-        steps: z.array(z.string().min(1)).min(1),
-        requirementIds: z.array(z.string()).default([]),
-      }),
-    )
-    .default([]),
+  journeys: z.array(SpecJourneySchema).default([]),
 });
 
 export type ProductSpec = z.infer<typeof ProductSpecSchema>;
@@ -72,17 +85,18 @@ export function checkSpecConsistency(spec: ProductSpec): string[] {
   return warnings;
 }
 
-/** Heading bagian PRD yang dipakai ekstraktor: persona, FR (journeys), aturan, model data, endpoint. */
+/** Heading bagian PRD yang dipakai ekstraktor: persona, FR dan edge case (journeys), aturan, model data, endpoint. */
 const SPEC_SECTION_PATTERNS = [
   /target pengguna|persona/i,
   /functional requirements/i,
+  /edge case/i,
   /aturan produk/i,
   /model data/i,
   /endpoint/i,
 ];
 
 /**
- * Memangkas PRD ke bagian yang dibaca ekstraktor spec (ringkasan, tujuan, non-fungsional, edge case, metrik dibuang).
+ * Memangkas PRD ke bagian yang dibaca ekstraktor spec (ringkasan, tujuan, non-fungsional, metrik dibuang; edge case dipertahankan untuk jalur gagal).
  * Bila bagian model data atau endpoint tidak ditemukan (PRD berformat lain), markdown dikembalikan utuh agar spec tidak kosong.
  */
 export function selectSpecSections(markdown: string): string {
@@ -112,7 +126,9 @@ Aturan:
 - endpoints: dari bagian Spesifikasi Endpoint API. method huruf besar, path persis seperti PRD. requirementIds berisi ID FR-xxx yang dilayani endpoint bila PRD menyebutkannya.
 - rules: dari bagian Aturan Produk & Bisnis (ID PR-xxx atau BR-xxx beserta deskripsinya).
 - personas: dari bagian Target Pengguna.
-- journeys: alur kritis pengguna (3-6 alur) berurutan dari langkah pertama sampai hasil akhir, disusun dari Functional Requirements. Setiap step berupa kalimat aksi singkat.
+- journeys: alur kritis pengguna berurutan dari langkah pertama sampai hasil akhir, disusun dari Functional Requirements. Setiap step berupa kalimat aksi singkat.
+  - kind "main": 3-6 jalur utama sampai berhasil.
+  - kind "failure": jalur gagal dari bagian Edge Cases (EC-xxx), maksimal 1-2 per journey utama. Wajib mengisi branchFrom { "journey": nama journey utama persis, "stepIndex": nomor langkah (mulai 1) pada journey utama tempat kegagalan terjadi }. Steps jalur gagal hanya memuat langkah setelah titik cabang sampai penanganan akhir. requirementIds memuat ID EC-xxx dan FR-xxx terkait.
 Kembalikan HANYA JSON valid sesuai skema.`;
 
   const user = `<<<DATA: DOKUMEN PRD>>>
@@ -126,7 +142,10 @@ Skema JSON (WAJIB):
   "entities": [{ "name": string, "description": string, "fields": [{ "name": string, "type": string, "required": boolean }], "relations": [string] }],
   "endpoints": [{ "method": "GET", "path": "/api/...", "description": string, "requestBody": string, "responseBody": string, "authRequired": boolean, "requirementIds": ["FR-001"] }],
   "rules": [{ "id": "PR-001", "description": string }],
-  "journeys": [{ "name": string, "steps": [string], "requirementIds": ["FR-001"] }]
+  "journeys": [
+    { "name": string, "kind": "main", "steps": [string], "requirementIds": ["FR-001"] },
+    { "name": string, "kind": "failure", "branchFrom": { "journey": string, "stepIndex": 3 }, "steps": [string], "requirementIds": ["EC-001", "FR-001"] }
+  ]
 }`;
 
   return generateJson({

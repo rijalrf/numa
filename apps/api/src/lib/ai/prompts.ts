@@ -4,32 +4,17 @@ import { GOLDEN_PACKS } from './golden-stack.js';
 // Katalog versi prompt. Naikkan versi setiap kali isi prompt berubah; nilainya dicatat di AiCallLog.promptVersion
 // agar token, latensi, dan kualitas dapat dibandingkan sebelum dan sesudah perubahan.
 export const PROMPT_VERSIONS = {
-  appName: 'app-name@2',
   techStack: 'tech-stack@2',
-  tree: 'tree@3',
   prd: 'prd@2',
-  tasks: 'tasks@2',
+  tasks: 'tasks@3',
   flow: 'flow@2',
   roadmap: 'roadmap@1',
   cycle: 'cycle@1',
-  productSpec: 'product-spec@2',
+  productSpec: 'product-spec@3',
   securityAudit: 'security-audit@1',
-  surveyRound: 'survey-round@3',
+  surveyRound: 'survey-round@4',
   surveySummary: 'survey-summary@2',
 } as const;
-
-// ============================================================
-// NAMA APLIKASI
-// ============================================================
-
-export const APP_NAME_PROMPT = `Anda adalah Brand Strategist produk software. Beri nama aplikasi berdasarkan ide pengguna.
-
-Aturan:
-- Nama ringkas (1-3 kata), mudah diingat dan dieja, relevan dengan fungsi utama aplikasi.
-- Boleh Bahasa Indonesia atau istilah umum industri software.
-- Tanpa emoji, tanda kutip, atau kata generik seperti "Aplikasi" dan "Sistem".
-
-Output JSON: {"name": "Nama Aplikasi"}`;
 
 // ============================================================
 // REKOMENDASI TECH STACK
@@ -50,52 +35,6 @@ Output JSON:
   "reasoning": "penjelasan singkat mengapa paket dan database ini dipilih",
   "techStack": ["frontend: ...", "backend: ...", "database: ...", "styling: Tailwind CSS", "testing: Playwright"]
 }`;
-
-// ============================================================
-// GENERATE TREE STRUCTURE
-// ============================================================
-
-export const GENERATE_TREE_PROMPT = `Anda adalah Desainer Sistem teknis. Pecah aplikasi menjadi struktur hierarki terstruktur App -> Fitur Utama -> Sub-fitur -> Task Implementasi -> Sub-task Teknis.
-
-Input (dikirim pada pesan user): nama aplikasi dan isi PRD.
-
-Panduan:
-1. Aplikasi punya 3-7 fitur utama. Setiap fitur punya 1-3 sub-fitur opsional.
-2. WAJIB include cross-cutting concerns fondasi sebagai fitur tersendiri:
-   - "Project Setup & Configuration": inisialisasi monorepo/folder, package.json, tsconfig, env vars.
-   - "Database Schema & ORM": Prisma schema, migrasi, model database, client connection export.
-   - "API Client & Integration Layer": fetch wrapper, base URL, wiring FE-BE.
-3. Setiap sub-fitur atau fitur langsung punya daftar task implementasi konkret (UI, API/Database, Testing, Wiring).
-4. Urutan logis: Setup Dasar -> Database/ORM -> API Backend -> UI Frontend -> Integrasi & Testing End-to-End.
-5. SINKRONISASI REQUIREMENT PRD (WAJIB):
-   - Rujuk requirement ID yang ada di PRD (format: FR-xxx untuk Functional Requirement, PR-xxx/BR-xxx untuk Product/Business Rules).
-   - Setiap feature, subfeature, dan task WAJIB menyertakan "requirementIds" yang relevan (array string, contoh: ["FR-001", "FR-002"]). Jika task fondasi teknis umum, gunakan array kosong [] atau requirement setup terkait.
-
-Output JSON strukturnya:
-{
-  "appName": "Nama Aplikasi",
-  "features": [
-    {
-      "label": "Fitur Utama 1",
-      "requirementIds": ["FR-001", "FR-002"],
-      "subfeatures": [
-        {
-          "label": "Sub-fitur A",
-          "requirementIds": ["FR-001"],
-          "tasks": [
-            { "label": "Task 1.1", "requirementIds": ["FR-001"], "subtasks": [{ "label": "Detail 1.1.1", "requirementIds": ["FR-001"] }] },
-            { "label": "Task 1.2", "requirementIds": ["FR-002"], "subtasks": [] }
-          ]
-        }
-      ],
-      "tasks": [
-        { "label": "Task Setup Dasar", "requirementIds": [], "subtasks": [{ "label": "Inisialisasi proyek", "requirementIds": [] }] }
-      ]
-    }
-  ]
-}
-
-Pastikan JSON valid dan lengkap.`;
 
 // ============================================================
 // GENERATE BUSINESS FLOW DIAGRAM (FLOWCHART SWIMLANE PER PERSONA)

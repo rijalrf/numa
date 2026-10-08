@@ -32,7 +32,7 @@ projectsRouter.get('/api/projects', requireUser, async (req: AuthedRequest, res)
       createdAt: true,
       updatedAt: true,
       prd: { select: { id: true } },
-      _count: { select: { stacks: true, treeNodes: true, tasks: true } },
+      _count: { select: { stacks: true, tasks: true } },
     },
   });
   res.json({

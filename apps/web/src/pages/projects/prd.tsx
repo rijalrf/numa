@@ -10,6 +10,7 @@ import { PricingDialog } from '@/components/billing/pricing-dialog';
 import { MarkdownView } from '@/components/ui/markdown-view';
 import { NumaLoader } from '@/components/ui/numa-loader';
 import { usePrdStream } from '@/hooks/use-prd-stream';
+import { JourneyList } from '@/components/prd/journey-list';
 
 export function PrdPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -22,7 +23,7 @@ export function PrdPage() {
   const [userPlan, setUserPlan] = useState<{ plan: string; planName: string } | null>(null);
   const [pricingOpen, setPricingOpen] = useState(false);
 
-  const { markdown, setMarkdown, generating, error, streamPrd } = usePrdStream(projectId, isLocked);
+  const { markdown, setMarkdown, journeys, setJourneys, generating, error, streamPrd } = usePrdStream(projectId, isLocked);
 
   // Load status project & PRD saat mount
   useEffect(() => {
@@ -46,6 +47,7 @@ export function PrdPage() {
         const content = json.prd?.content ?? json.brd?.content;
 
         if (content) {
+          setJourneys(content?.spec?.journeys ?? []);
           if (typeof content === 'string') {
             setMarkdown(content);
           } else if (content.markdown) {
@@ -84,7 +86,7 @@ export function PrdPage() {
       setPricingOpen(true);
       return;
     }
-    navigate(`/projects/${projectId}/tree`);
+    navigate(`/projects/${projectId}/board`);
   };
 
   const handleDownloadPrd = async () => {
@@ -176,7 +178,7 @@ export function PrdPage() {
               <span>Dokumen PRD Selesai (Batas Paket Free Trial)</span>
             </div>
             <p className="text-xs text-muted-foreground">
-              Paket Free Trial selesai pada penyusunan PRD. Upgrade ke paket Starter atau Pro untuk membuka Diagram Struktur, Board Task, dan eksekusi AI coding agent.
+              Paket Free Trial selesai pada penyusunan PRD. Upgrade ke paket Starter atau Pro untuk membuka Board Task dan eksekusi AI coding agent.
             </p>
           </div>
           <Button
@@ -219,8 +221,9 @@ export function PrdPage() {
           />
         </div>
       ) : markdown ? (
-        <div className="select-text pt-2">
+        <div className="select-text pt-2 space-y-8">
           <MarkdownView content={markdown} />
+          {!generating && <JourneyList journeys={journeys} />}
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">

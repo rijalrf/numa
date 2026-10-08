@@ -11,7 +11,7 @@
 
 Pipeline utama:
 
-**Numa Brief** (Chat & Survey) -> **Numa Blueprint** (Tech Stack & PRD) -> **Numa Flow** (Tree & Roadmap) -> **Numa Forge** (Kanban Tasks) -> **Numa Agent** (CLI Runner & Change Cycle).
+**Numa Brief** (Chat & Survey) -> **Numa Blueprint** (Tech Stack & PRD) -> **Numa Forge** (Kanban Tasks) -> **Numa Agent** (CLI Runner & Change Cycle).
 
 **Positioning**: *"Numa is the software planning and execution workspace that turns product ideas into structured, agent-ready work."*
 
@@ -21,7 +21,7 @@ Pipeline utama:
 
 | # | Sasaran | Ukuran keberhasilan |
 |---|---------|---------------------|
-| G1 | Ide mentah menjadi task atomic siap eksekusi dalam satu sesi wizard | User menyelesaikan 8 tahap tanpa intervensi manual di luar wizard |
+| G1 | Ide mentah menjadi task atomic siap eksekusi dalam satu sesi wizard | User menyelesaikan 7 tahap tanpa intervensi manual di luar wizard |
 | G2 | Task yang dihasilkan aman dieksekusi agent secara otonom | Setiap task punya `files_to_create`, `files_to_modify`, `forbidden`, `validation_commands`, dan acceptance criteria |
 | G3 | Eksekusi agent terisolasi per project | Token project A ditolak mengakses task project B (HTTP 404) |
 | G4 | Perubahan pasca-eksekusi terkelola | Change Cycle menghasilkan siklus task baru tanpa merusak task selesai |
@@ -47,7 +47,7 @@ Mengikuti [BRAND.md](BRAND.md):
 - **Dilarang**: klaim berlebihan ("bangun aplikasi apa saja secara instan"), bahasa AI generik ("magic happens here"), nada menggurui, dan **emoji** di semua teks, UI, label, commit, atau dokumen.
 - Semua komunikasi ke user, string UI, dan komentar publik dalam **Bahasa Indonesia** (identifier kode tetap Bahasa Inggris).
 
-## 5. Alur Utama — Wizard 8 Tahap
+## 5. Alur Utama — Wizard 7 Tahap
 
 Tahap yang sudah dilewati terkunci read-only (HTTP 403 via `isStageLocked`). Tahap sebelumnya bisa dibuka kembali via `POST /api/projects/:id/wizard-step`.
 
@@ -56,11 +56,10 @@ Tahap yang sudah dilewati terkunci read-only (HTTP 403 via `isStageLocked`). Tah
 | 1 | Numa Brief | `chat` | `/chat/:sessionId` | Brainstorming ide awal dengan AI |
 | 2 | Numa Brief | `survey` | `/projects/:id/survey` | Pertanyaan discovery; jawab sendiri atau pakai rekomendasi AI |
 | 3 | Numa Blueprint | `techstack` | `/projects/:id/techstack` | Golden Stack (default, langsung lanjut) atau pilih manual |
-| 4 | Numa Blueprint | `prd` | `/projects/:id/prd` | AI generate PRD/BRD terstruktur |
-| 5 | Numa Flow | `tree` | `/projects/:id/tree` | Hierarki dekomposisi App -> Fitur -> Sub-fitur |
-| 6 | Numa Forge | `board` | `/projects/:id/board` | Atomic tasks di kanban + roadmap DAG |
-| 7 | Numa Agent | `guide` | - | Master Prompt + PAT token |
-| 8 | Numa Agent | `done` | - | AI coding agent eksekusi via CLI; checkpoint gate antar layer |
+| 4 | Numa Blueprint | `prd` | `/projects/:id/prd` | AI generate PRD/BRD terstruktur beserta journey pengguna |
+| 5 | Numa Forge | `board` | `/projects/:id/board` | Atomic tasks di kanban + roadmap DAG |
+| 6 | Numa Agent | `guide` | - | Master Prompt + PAT token |
+| 7 | Numa Agent | `done` | - | AI coding agent eksekusi via CLI; checkpoint gate antar layer |
 
 ## 6. Kebutuhan Fungsional
 
@@ -80,12 +79,12 @@ Tahap yang sudah dilewati terkunci read-only (HTTP 403 via `isStageLocked`). Tah
 | FR-2.2 | Rekomendasi AI otomatis (default, langsung lanjut) atau pilih manual per kategori. `validateGoldenSelection` menolak kombinasi di luar kontrak (mis. MongoDB, Drizzle, TypeORM) | Wajib |
 | FR-2.3 | PRD/BRD terstruktur (functional requirements, product rules, constraints) dengan versioning, unduh Markdown, dan stream SSE saat generate | Wajib |
 
-### 6.3 Numa Flow — Dekomposisi & Roadmap
+### 6.3 Journey Pengguna (di Numa Blueprint)
 
 | ID | Kebutuhan | Prioritas |
 |----|-----------|-----------|
-| FR-3.1 | Tree dekomposisi hierarkis: App -> Fitur -> Sub-fitur, digenerate AI | Wajib |
-| FR-3.2 | Roadmap sebagai diagram DAG fase & fitur (xyflow + dagre) lengkap dengan dependency antar fitur | Wajib |
+| FR-3.1 | Spec PRD memuat journey pengguna: jalur `main` (sampai berhasil) dan jalur `failure` yang bercabang lewat `branchFrom` (journey dan langkah asal), merujuk edge case EC-xxx dan requirement. Ditampilkan di halaman PRD | Wajib |
+| FR-3.2 | Skenario E2E disusun dari journey dan disuntikkan ke task INTEGRATION; cakupan requirement per journey diperiksa (warning `JOURNEY_REQ_UNCOVERED`) tanpa panggilan AI tambahan | Wajib |
 
 ### 6.4 Numa Forge — Atomic Tasks
 
@@ -149,7 +148,7 @@ Tahap yang sudah dilewati terkunci read-only (HTTP 403 via `isStageLocked`). Tah
 | `Prd` | Dokumen kebutuhan produk JSON + versioning |
 | `RoadmapPhase`, `RoadmapFeature`, `RoadmapDependency` | Graph rencana pengembangan |
 | `Task`, `TaskDependency` | Atomic task: bounded context JSON, acceptance criteria, layer, relasi DAG |
-| `TreeNode` | Hierarki dekomposisi project |
+| `TreeNode`, `BusinessFlow` | Legacy, tidak lagi digenerate; dibuang di akhir rencana journey |
 | `Checkpoint` | Gate review antar layer arsitektur (human-in-the-loop) |
 | `AgentToken`, `AgentTokenScope` | PAT token CLI (hash sha256, multi-project scope) |
 | `AgentSession` | Tracking sesi kerja agent |
@@ -166,7 +165,7 @@ Tahap yang sudah dilewati terkunci read-only (HTTP 403 via `isStageLocked`). Tah
 | **AI** | Gateway OpenAI-compatible lokal `http://localhost:20128/v1` (model `ai-builder`); multi-provider via env |
 | **Runtime** | Docker Compose (`docker compose up -d --build`) |
 
-Modul AI engine (`apps/api/src/lib/ai/`): `ai-service` (client, auto-retry Zod, logging, model routing reasoning/cheap), `chat`, `prd`, `roadmap`, `tasks`, `cycle`, `product-spec`, `flow-contract`, `golden-stack`, `stack-contract`, `architecture-contract`, validator (`dag`, `cleanup`, `api-coverage`, `security-audit`), `schemas`, `prompts`.
+Modul AI engine (`apps/api/src/lib/ai/`): `ai-service` (client, auto-retry Zod, logging, model routing reasoning/cheap), `chat`, `prd`, `roadmap`, `tasks`, `cycle`, `product-spec`, `journey-contract`, `flow-contract` (legacy), `golden-stack`, `stack-contract`, `architecture-contract`, validator (`dag`, `cleanup`, `api-coverage`, `security-audit`), `schemas`, `prompts`.
 
 ## 11. Batasan & Kontrak
 
@@ -184,7 +183,7 @@ Detail lengkap di [README.md](README.md) bagian Endpoints API. Kelompok utama:
 | Kelompok | Endpoint inti | Auth |
 |----------|---------------|------|
 | Publik & Auth | `/health`, `/api/tools`, `/api/auth/*`, `/api/user/plan`, `/api/user/profile` | - / user |
-| Project & Wizard | CRUD `/api/projects`, `wizard-step`, `export.zip`, chat sessions, survey, techstack, prd, tree, roadmap, tasks, master-prompt | user |
+| Project & Wizard | CRUD `/api/projects`, `wizard-step`, `export.zip`, chat sessions, survey, techstack, prd, roadmap, tasks, master-prompt | user |
 | Change Cycle | `change-request`, `cycles`, `cycles/:id/generate` | user |
 | Token & Checkpoint | `agent-tokens`, `checkpoints`, `ai-metrics`, `billing/*` | user / - |
 | Agent (PAT) | `whoami`, `scopes`, `tasks/next`, `start`, `complete`, `fail`, `context`, `prd`, `architecture-contract`, `repo-summary` | PAT |

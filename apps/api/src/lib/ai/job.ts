@@ -13,10 +13,8 @@ export const AI_JOB_TYPES = [
   'roadmap_generate',
   'survey_round',
   'survey_summary',
-  'tree_generate',
   'flow_generate',
   'techstack_recommend',
-  'chat_finalize',
 ] as const;
 
 export type AiJobType = (typeof AI_JOB_TYPES)[number];

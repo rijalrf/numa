@@ -4,13 +4,13 @@
 
 Workspace perencanaan dan eksekusi software yang mengubah ide produk menjadi arsitektur terstruktur dan task atomic yang siap dieksekusi oleh AI coding agent di terminal lokal. Panduan brand, design tokens, dan sistem penamaan fitur tersedia di [BRAND.md](docs/BRAND.md). Panduan CLI lengkap di [CLI.md](docs/CLI.md).
 
-Pipeline: **Numa Brief** (Chat & Survey) -> **Numa Blueprint** (Tech Stack & PRD) -> **Numa Flow** (Tree & Roadmap) -> **Numa Forge** (Kanban Tasks) -> **Numa Agent** (CLI Runner & Change Cycle).
+Pipeline: **Numa Brief** (Chat & Survey) -> **Numa Blueprint** (Tech Stack & PRD) -> **Numa Forge** (Kanban Tasks) -> **Numa Agent** (CLI Runner & Change Cycle).
 
 ## Daftar Fitur
 
 ### 1. Numa Brief — Brainstorming & Discovery
 
-- **Chat onboarding** (`/chat/:sessionId`) — brainstorming ide awal dengan AI. Mendukung kirim pesan, `finalize` untuk mengunci ide, dan `retry` bila hasil AI belum tepat.
+- **Chat onboarding** (`/chat`) — user menulis ide awal; satu request `POST /api/chat/finalize` membuat project (tanpa panggilan AI) lalu user diarahkan ke survey. Nama aplikasi dihasilkan survey putaran 1.
 - **Survey kebutuhan** (`/projects/:id/survey`) — AI generate pertanyaan discovery, user menjawab sendiri atau memakai rekomendasi AI. Jumlah putaran survey mengikuti paket langganan. Route lama `/interview` tetap diarahkan ke halaman ini.
 - **Change Cycle** (`/projects/:id/board` sidebar) — setelah semua task selesai, user bisa mengajukan permintaan perubahan. Sistem membuat siklus baru (`ProjectCycle`: DRAFT/OPEN/DONE) berisi diff PRD, klarifikasi, dampak, lalu generate task siklus tersebut. Guard: semua task wajib DONE dan tidak boleh ada siklus aktif. Permintaan panjang bisa dipecah menjadi dua bagian (split `a`/`b`).
 
@@ -26,12 +26,7 @@ Pipeline: **Numa Brief** (Chat & Survey) -> **Numa Blueprint** (Tech Stack & PRD
 - **Rekomendasi AI** (`/projects/:id/techstack`) — rekomendasi otomatis (default, langsung lanjut) atau pilih manual per kategori. Validasi `validateGoldenSelection` menolak kombinasi di luar kontrak (mis. MongoDB, Drizzle, TypeORM).
 - **PRD / BRD** (`/projects/:id/prd`) — AI generate dokumen kebutuhan terstruktur (functional requirements, product rules, constraints) dengan versioning. Mendukung unduh Markdown dan stream SSE saat generate.
 
-### 3. Numa Flow — Dekomposisi & Roadmap
-
-- **Tree** (`/projects/:id/tree`) — AI generate hierarki dekomposisi aplikasi (App -> Fitur -> Sub-fitur).
-- **Roadmap** — diagram DAG fase & fitur (xyflow + dagre) lengkap dengan dependency antar fitur.
-
-### 4. Numa Forge — Atomic Tasks
+### 3. Numa Forge — Atomic Tasks
 
 - **Kanban board** (`/projects/:id/board`) — AI generate atomic tasks dengan bounded context ketat: `files_to_create`, `files_to_modify`, `forbidden`, `validation_commands`, acceptance criteria, layer, dan relasi DAG antar task. Polling otomatis 3 detik.
 - **Validator pasca-generate** (heuristik non-AI + AI):
@@ -41,7 +36,7 @@ Pipeline: **Numa Brief** (Chat & Survey) -> **Numa Blueprint** (Tech Stack & PRD
   - `security-audit` — audit AppSec pra-implementasi, kriteria keamanan disuntikkan ke task.
   - `essential-files-validator` — kelulusan task dinilai dari Acceptance Criteria + Validation Commands multi-stack.
 
-### 5. Numa Agent — Eksekusi via CLI
+### 4. Numa Agent — Eksekusi via CLI
 
 - **Master Prompt** (`/api/projects/:id/master-prompt`) — template prompt + instruksi setup yang disalin ke AI coding agent user.
 - **Skill pack** — `numa init` memasang 7 skill bundled (`numa-workflow`, `numa-incremental`, `numa-tdd`, `numa-api-design`, `numa-security`, `numa-production`, `numa-frontend`) ke `.agents/skills/` (salinan di `.claude/skills/`) plus kontrak arsitektur project (`numa-architecture`).
@@ -49,7 +44,7 @@ Pipeline: **Numa Brief** (Chat & Survey) -> **Numa Blueprint** (Tech Stack & PRD
 - **Checkpoint gate** — saat layer selesai, agent berhenti dan meminta approval user (`LAYER_TRANSITION`, `PRD_APPROVAL`, `ROADMAP_APPROVAL`, `APPS_READY_FOR_USE`).
 - **Repo summary** — `numa sync` mengirim file tree + manifest workspace ke server agar konteks agent selalu relevan.
 
-### 6. Lain-lain
+### 5. Lain-lain
 
 - **Auth** — Better Auth (cookie session), register/login.
 - **Billing** — paket Free Trial / Starter / Pro dengan batas jumlah project, putaran survey, dan panjang input. Endpoint checkout + webhook pembayaran. Ekspor paket `.zip` (PRD.md + TASKS.md) khusus paket Pro.
@@ -124,7 +119,7 @@ numa done
 
 `numa` saat dev dipanggil via wrapper script di `~/.local/bin/numa` yang menjalankan `tsx` ke `packages/cli/src/index.ts`. Untuk distribusi production, `packages/cli` dipublish ke npm.
 
-## Alur Aplikasi (Wizard 8 Tahap)
+## Alur Aplikasi (Wizard 7 Tahap)
 
 Tahap yang sudah dilewati terkunci read-only (HTTP 403 via `isStageLocked`). Tahap sebelumnya bisa dibuka kembali via `POST /api/projects/:id/wizard-step`.
 
@@ -133,11 +128,10 @@ Tahap yang sudah dilewati terkunci read-only (HTTP 403 via `isStageLocked`). Tah
 | 1 | Numa Brief | `chat` | `/chat/:sessionId` | Brainstorming ide awal dengan AI. |
 | 2 | Numa Brief | `survey` | `/projects/:id/survey` | Pertanyaan discovery; jawab sendiri atau pakai rekomendasi AI. |
 | 3 | Numa Blueprint | `techstack` | `/projects/:id/techstack` | Golden Stack (default, langsung lanjut) atau pilih manual. |
-| 4 | Numa Blueprint | `prd` | `/projects/:id/prd` | AI generate PRD/BRD terstruktur. |
-| 5 | Numa Flow | `tree` | `/projects/:id/tree` | Hierarki dekomposisi App -> Fitur -> Sub-fitur. |
-| 6 | Numa Forge | `board` | `/projects/:id/board` | Atomic tasks di kanban + roadmap DAG. |
-| 7 | Numa Agent | `guide` | - | Master Prompt + PAT token. |
-| 8 | Numa Agent | `done` | - | AI coding agent eksekusi via CLI; checkpoint gate antar layer. |
+| 4 | Numa Blueprint | `prd` | `/projects/:id/prd` | AI generate PRD/BRD terstruktur beserta journey pengguna. |
+| 5 | Numa Forge | `board` | `/projects/:id/board` | Atomic tasks di kanban + roadmap DAG. |
+| 6 | Numa Agent | `guide` | - | Master Prompt + PAT token. |
+| 7 | Numa Agent | `done` | - | AI coding agent eksekusi via CLI; checkpoint gate antar layer. |
 
 Alur eksekusi agent:
 
@@ -235,9 +229,7 @@ URL API tersimpan di `~/.numa/config.json` saat login, jadi perintah berikutnya 
 | GET | `/api/projects/:id` | user | detail project |
 | POST | `/api/projects/:id/wizard-step` | user | buka kembali tahap sebelumnya |
 | GET | `/api/projects/:id/export.zip` | user (Pro) | ekspor PRD.md + TASKS.md |
-| POST | `/api/chat/sessions` | user | mulai sesi chat |
-| GET/POST | `/api/chat/sessions/:id/messages` | user | riwayat & kirim pesan |
-| POST | `/api/chat/sessions/:id/finalize`, `/retry` | user | kunci ide / ulangi balasan |
+| POST | `/api/chat/finalize` | user | kirim ide awal, buat project (satu request) |
 | GET | `/api/projects/:id/survey` | user | daftar pertanyaan discovery |
 | POST | `/api/projects/:id/survey/submit`, `/complete` | user | jawab & selesaikan survey |
 | POST | `/api/projects/:id/techstack/recommend` | user | rekomendasi AI |
@@ -245,8 +237,6 @@ URL API tersimpan di `~/.numa/config.json` saat login, jadi perintah berikutnya 
 | POST | `/api/projects/:id/prd/generate` (`/brd/generate`) | user | AI generate PRD (SSE) |
 | GET | `/api/projects/:id/prd` (`/brd`) | user | PRD viewer |
 | GET | `/api/projects/:id/prd/download` (`/brd/download`) | user | unduh PRD Markdown |
-| POST | `/api/projects/:id/tree/generate` | user | AI generate tree |
-| GET | `/api/projects/:id/tree` | user | hierarki tree |
 | POST | `/api/projects/:id/roadmap/generate` | user | AI generate roadmap |
 | GET | `/api/projects/:id/roadmap` | user | roadmap + edges |
 | POST | `/api/projects/:id/tasks/generate` | user | AI generate atomic tasks |

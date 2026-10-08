@@ -7,6 +7,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireUser, type AuthedRequest } from '../middleware/require-user.js';
 import { getUserPlan, PLANS } from '../lib/billing.js';
 import { generateSurveyRound, generateSurveySummary } from '../lib/survey.js';
+import { draftProjectName } from '../lib/ai/chat.js';
 import { enqueueAiJob, getLatestJob, hasActiveJob, registerJobHandler, toClientStatus, NonRetryableJobError, rejectJobLimit } from '../lib/ai/job.js';
 
 export const surveyRouter = Router();
@@ -28,7 +29,7 @@ async function collectAnswers(projectId: string, roundBelow?: number) {
 registerJobHandler<SurveyRoundPayload>('survey_round', async ({ projectId, payload }) => {
   const round = payload?.round ?? 1;
   const totalRounds = payload?.totalRounds ?? 1;
-  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { idea: true } });
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { idea: true, name: true } });
   if (!project) throw new NonRetryableJobError('Project tidak ditemukan.');
 
   // Idempoten: percobaan ulang tidak menggandakan pertanyaan yang sudah tersimpan.
@@ -42,8 +43,15 @@ registerJobHandler<SurveyRoundPayload>('survey_round', async ({ projectId, paylo
     projectId,
   });
 
-  await prisma.$transaction(
-    generated.map((q, i) =>
+  // Putaran 1 membawa nama aplikasi dari AI. Hanya menimpa nama sementara (potongan ide), bukan nama pilihan user.
+  const renameProject =
+    round === 1 && generated.appName && project.name === draftProjectName(project.idea)
+      ? [prisma.project.update({ where: { id: projectId }, data: { name: generated.appName } })]
+      : [];
+
+  await prisma.$transaction([
+    ...renameProject,
+    ...generated.questions.map((q, i) =>
       prisma.discoveryQuestion.create({
         data: {
           projectId,
@@ -58,8 +66,8 @@ registerJobHandler<SurveyRoundPayload>('survey_round', async ({ projectId, paylo
           suggestionReason: q.suggestionReason,
         },
       })
-    )
-  );
+    ),
+  ]);
   return { round };
 });
 

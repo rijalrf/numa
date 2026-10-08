@@ -174,7 +174,7 @@ export type GenerateTasksArgs = {
   prd?: PrdTaskContext;
   brd?: PrdTaskContext; // Kompatibilitas ke belakang
   /** Kontrak flow bisnis: jalur menjadi skenario E2E untuk task INTEGRATION. */
-  flowScenarios?: string;
+  e2eScenarios?: string;
   projectId: string;
   feedback?: string;
   stack?: StackContract;
@@ -258,8 +258,8 @@ ${cycleSystemRules}`;
 
   const apiEndpointsText = markdownComplete ? '' : prdDoc?.apiEndpoints?.length ? fence('SPESIFIKASI ENDPOINT API TERSEDIA', prdDoc.apiEndpoints) : '';
 
-  const flowText = args.flowScenarios
-    ? fence('SKENARIO E2E DARI BUSINESS FLOW (KONTRAK UNTUK TASK INTEGRATION)', args.flowScenarios)
+  const e2eText = args.e2eScenarios
+    ? fence('SKENARIO E2E DARI JOURNEY PRD (KONTRAK UNTUK TASK INTEGRATION)', args.e2eScenarios)
     : '';
 
   const feedbackText = args.feedback ? fence('CATATAN PERBAIKAN DARI GENERASI SEBELUMNYA (WAJIB DIPENUHI)', args.feedback) : '';
@@ -290,7 +290,7 @@ ${rulesText}
 ${edgeCasesText}
 ${dataModelsText}
 ${apiEndpointsText}
-${flowText}
+${e2eText}
 ${feedbackText}
 
 NAMA PROJECT: ${args.projectName}

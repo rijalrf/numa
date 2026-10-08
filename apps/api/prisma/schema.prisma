@@ -466,6 +466,7 @@ model AiCallLog {
   inputTokens   Int      @default(0)
   outputTokens  Int      @default(0)
   totalTokens   Int      @default(0)
+  reasoningTokens Int    @default(0) // bagian outputTokens untuk reasoning (biaya tersembunyi)
   latencyMs     Int      @default(0)
   retryCount    Int      @default(0)
   success       Boolean  @default(true)
@@ -487,7 +488,7 @@ model AiCallLog {
 }
 
 // ============================================================
-// SaaS Monetisasi & Billing (Midtrans)
+// SaaS Monetisasi & Billing (gateway: Mayar.id)
 // ============================================================
 
 model Subscription {
@@ -508,16 +509,19 @@ model Payment {
   id            String    @id @default(cuid())
   userId        String
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  midtransId    String?   @unique
+  provider      String    @default("mayar")
+  providerRef   String?   @unique // id payment request di gateway
+  providerTxId  String?   @unique // id transaksi di gateway
+  checkoutUrl   String?
   amount        Int
   plan          String
   status        String    @default("pending") // pending | success | failed | expired
   paymentType   String?
+  expiresAt     DateTime?
   transactionAt DateTime?
   createdAt     DateTime  @default(now())
 
-  @@index([userId])
-  @@index([midtransId])
+  @@index([userId, status])
 }
 
 

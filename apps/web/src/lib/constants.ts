@@ -7,10 +7,9 @@ export const STAGE_ORDER: Record<string, number> = {
   techstack: 2,
   prd: 3,
   brd: 3, // backward compat
-  tree: 4,
-  board: 5,
-  guide: 6,
-  done: 7,
+  board: 4,
+  guide: 5,
+  done: 6,
 };
 
 export const STAGE_LABELS: Record<string, string> = {
@@ -20,7 +19,6 @@ export const STAGE_LABELS: Record<string, string> = {
   techstack: 'Pilih Teknologi',
   prd: 'Dokumen PRD',
   brd: 'Dokumen PRD', // backward compat
-  tree: 'Diagram Struktur',
   board: 'Board Task',
   guide: 'Panduan Eksekusi',
   done: 'Selesai',

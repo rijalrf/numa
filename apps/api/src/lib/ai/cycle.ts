@@ -86,7 +86,6 @@ export async function analyzeChangeRequest(args: {
   projectId: string;
   request: string;
   prd?: PrdTaskContext | null;
-  tree?: Array<{ label: string; kind: string }>;
   repoSummary?: unknown;
   completedTasks?: Array<{ title: string; layer: string; files: string[] }>;
   clarifyAnswers?: Array<{ question: string; answer: string }>;
@@ -133,7 +132,6 @@ Bahasa Indonesia baku, istilah teknis pemrograman dalam bahasa Inggris, TANPA EM
 "${args.request}"
 ${clarifyText}
 ${fence('DOKUMEN PRD EKSISTING', args.prd)}
-${fence('STRUKTUR FITUR (TREE)', args.tree)}
 ${fence('RINGKASAN WORKSPACE REPO (numa sync)', args.repoSummary)}
 ${fence('TASK YANG SUDAH SELESAI SEBELUMNYA', args.completedTasks)}
 

@@ -32,13 +32,7 @@ async function run() {
       },
     });
 
-  console.log('\n--- 2. CHAT SESSION (Brainstorming & Penggalian Kebutuhan) ---');
-  const chatInitRes = await authedFetch('/api/chat/sessions', { method: 'POST' });
-  assert(chatInitRes.ok, 'Buat chat session gagal');
-  const chatInitJson = await chatInitRes.json();
-  const sessionId = chatInitJson.sessionId;
-  console.log('Chat session ID:', sessionId);
-
+  console.log('\n--- 2. IDE AWAL ---');
   // User menjelaskan ide aplikasi minitask secara lengkap (aktor, auth, entitas, fitur)
   const initialIdea =
     'Saya ingin membuat aplikasi MiniTask: aplikasi manajemen tugas tim kecil sederhana. ' +
@@ -52,16 +46,11 @@ async function run() {
     '4. Dialog edit tugas untuk memperbarui judul dan deskripsi tugas. ' +
     '5. Konfirmasi dialog untuk menghapus tugas.';
 
-  const msgRes = await authedFetch(`/api/chat/sessions/${sessionId}/messages`, {
-    method: 'POST',
-    body: JSON.stringify({ content: initialIdea }),
-  });
-  assert(msgRes.ok, 'Kirim pesan awal gagal');
-  const msgJson = await msgRes.json();
-  console.log('Respons AI (kind):', msgJson.kind);
-
   console.log('\n--- 3. FINALIZE CHAT (Langsung ke Tech Stack) ---');
-  const finalizeRes = await authedFetch(`/api/chat/sessions/${sessionId}/finalize`, { method: 'POST' });
+  const finalizeRes = await authedFetch('/api/chat/finalize', {
+    method: 'POST',
+    body: JSON.stringify({ idea: initialIdea }),
+  });
   if (!finalizeRes.ok) {
     throw new Error(`Finalisasi chat gagal: ${await finalizeRes.text()}`);
   }

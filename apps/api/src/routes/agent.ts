@@ -12,6 +12,15 @@ import { requireAgentSimple } from '../middleware/require-agent-simple.js';
 import { readPrdContent } from '../lib/ai/prd.js';
 import { findBlockingCheckpoint, checkpointBlockedBody } from '../lib/checkpoint-gate.js';
 import { PREVIEW_PORT } from '../lib/config.js';
+import {
+  buildRequirementContext,
+  buildTaskHaystack,
+  selectEndpoints,
+  selectEntities,
+  selectProjectFiles,
+  summarizeArchitecture,
+  type ContextEndpoint,
+} from '../lib/task-context.js';
 
 export const agentRouter = Router();
 
@@ -419,6 +428,7 @@ agentRouter.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentR
     advisory_commands?: string[];
     definition_of_done?: string[];
     out_of_scope?: string[];
+    consumesApis?: ContextEndpoint[];
   };
 
   const prdDoc = readPrdContent(task.project.prd?.content);
@@ -438,9 +448,27 @@ agentRouter.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentR
     orderBy: { order: 'asc' },
   });
 
-  // Filter requirement yang bersangkutan untuk hemat token dan cegah distorsi context
-  const reqIds = new Set(ctx.requirement_ids ?? []);
-  const relevantReqs = prdDoc.requirementIndex.filter((r) => reqIds.has(r.id));
+  // Konteks dipersempit ke requirement milik task ini: deskripsi penuh, edge case, dan journey terkait.
+  const reqContext = buildRequirementContext({
+    ids: ctx.requirement_ids ?? [],
+    markdown: prdDoc.markdown,
+    requirementIndex: prdDoc.requirementIndex,
+    rules: [...(prdDoc.productRules ?? []), ...(prdDoc.businessRules ?? [])],
+    journeys: prdDoc.spec?.journeys ?? [],
+  });
+  const taskFiles = [
+    ...(ctx.files_to_create ?? []),
+    ...(ctx.files_to_modify ?? []),
+    ...(ctx.files_readonly ?? []),
+  ];
+  const haystack = buildTaskHaystack([
+    task.title,
+    task.description,
+    ctx.implementation_steps,
+    task.acceptanceCriteria as string[],
+    taskFiles,
+    reqContext.requirements.map((r) => r.text),
+  ]);
 
   const mdParts: string[] = [
     `### [TASK ${task.order}] ${task.title}`,
@@ -471,58 +499,80 @@ agentRouter.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentR
     }
   }
 
-  // Struktur file yang sudah dibuat oleh task sebelumnya
-  const allCreatedFiles = completedTasks.flatMap((t) => {
-    const c = (t.aiContext ?? {}) as { files_to_create?: string[] };
-    return c.files_to_create ?? [];
+  // File proyek nyata: dari laporan guard task selesai (changedFiles), bukan dari rencana.
+  const projectFiles = selectProjectFiles({
+    completed: completedTasks.map((t) => {
+      const c = (t.aiContext ?? {}) as {
+        files_to_create?: string[];
+        completion?: { guardReport?: { changedFiles?: string[] } | null };
+      };
+      return { changedFiles: c.completion?.guardReport?.changedFiles, plannedFiles: c.files_to_create };
+    }),
+    taskFiles,
   });
-  if (allCreatedFiles.length > 0) {
-    const uniqueFiles = [...new Set(allCreatedFiles)].slice(0, 30);
-    mdParts.push(``, `#### Struktur File Proyek Saat Ini (Dibuat oleh task sebelumnya)`, '```');
-    for (const f of uniqueFiles) {
-      mdParts.push(f);
+  if (projectFiles.files.length > 0) {
+    const label = projectFiles.planned
+      ? 'Struktur File Proyek (RENCANA task sebelumnya; belum diverifikasi, cek repo dengan ls/git status)'
+      : 'Struktur File Proyek Saat Ini (file yang benar-benar berubah di task sebelumnya)';
+    mdParts.push(``, `#### ${label}`, '```');
+    mdParts.push(...projectFiles.files);
+    if (projectFiles.total > projectFiles.files.length) {
+      mdParts.push(`... dan ${projectFiles.total - projectFiles.files.length} file lain`);
     }
     mdParts.push('```');
   }
 
-  // API Registry dari backend tasks yang sudah selesai atau dari spesifikasi PRD
+  // Endpoint relevan: kontrak milik task, yang dipanggil, dan yang melayani requirement task.
+  // Kontrak aktual dari task selesai menggantikan kontrak rencana PRD untuk method+path yang sama.
+  const asContracts = (v: unknown): ContextEndpoint[] => (Array.isArray(v) ? (v as ContextEndpoint[]) : []);
   const completedContracts = completedTasks
     .filter((t) => t.layer === 'BACKEND' || t.layer === 'INTEGRATION')
-    .flatMap((t) => {
-      const contracts = t.apiContracts as Array<{
-        method?: string;
-        path?: string;
-        description?: string;
-        requestBody?: string;
-        responseBody?: string;
-      }>;
-      return Array.isArray(contracts) ? contracts : [];
-    })
+    .flatMap((t) => asContracts(t.apiContracts))
     .filter((c) => c.method && c.path);
 
-  const displayEndpoints = completedContracts.length > 0
-    ? completedContracts
-    : ((prdDoc as any)?.apiEndpoints ?? []);
+  const endpointSel = selectEndpoints({
+    requirementIds: ctx.requirement_ids ?? [],
+    haystack,
+    own: asContracts(task.apiContracts),
+    consumes: asContracts(ctx.consumesApis),
+    completed: completedContracts,
+    spec: asContracts(prdDoc.apiEndpoints),
+  });
+  const displayEndpoints = endpointSel.endpoints;
 
   if (displayEndpoints.length > 0) {
-    mdParts.push(``, `#### API Endpoints Tersedia (Kontrak Integrasi)`);
-    for (const c of displayEndpoints.slice(0, 20)) {
+    mdParts.push(``, `#### API Endpoints Terkait Task Ini (Kontrak Integrasi)`);
+    for (const c of displayEndpoints) {
       mdParts.push(`- \`${c.method} ${c.path}\`${c.description ? ` — ${c.description}` : ''}`);
       if (c.requestBody) mdParts.push(`  - Request Body: \`${c.requestBody}\``);
       if (c.responseBody) mdParts.push(`  - Response Body: \`${c.responseBody}\``);
     }
+    if (endpointSel.total > displayEndpoints.length) {
+      mdParts.push(`- _(${endpointSel.total - displayEndpoints.length} endpoint lain tidak terkait task ini; lihat \`numa prd\` bila perlu)_`);
+    }
   }
 
-  // Referensi Model Data / Schema untuk task DATABASE dan BACKEND jika tersedia
-  const dataModels = (prdDoc as any)?.dataModels;
-  if (Array.isArray(dataModels) && dataModels.length > 0) {
+  // Model data yang dipakai task ini (disebut di teks task/requirement atau menjadi resource endpoint terpilih).
+  const entitySel = selectEntities({
+    layer: task.layer,
+    entities: prdDoc.dataModels ?? [],
+    haystack,
+    endpoints: displayEndpoints,
+  });
+  if (entitySel.entities.length > 0) {
     mdParts.push(``, `#### Kontrak Model Data (Database Schema)`);
-    for (const m of dataModels.slice(0, 8)) {
-      const fieldsStr = m.fields?.map((f: any) => `${f.name}: ${f.type}${f.required === false ? '?' : ''}`).join(', ') ?? '';
+    if (entitySel.fallback) {
+      mdParts.push(`_Tidak ada model yang jelas terkait task ini; menampilkan model awal dari PRD._`);
+    }
+    for (const m of entitySel.entities) {
+      const fieldsStr = m.fields.map((f) => `${f.name}: ${f.type}${f.required === false ? '?' : ''}`).join(', ');
       mdParts.push(`- **${m.name}**${m.description ? ` (${m.description})` : ''}: \`{ ${fieldsStr} }\``);
-      if (m.relations?.length) {
+      if (m.relations.length) {
         mdParts.push(`  - Relasi: ${m.relations.join(', ')}`);
       }
+    }
+    if (entitySel.total > entitySel.entities.length) {
+      mdParts.push(`- _(${entitySel.total - entitySel.entities.length} model lain tidak ditampilkan; lihat \`numa prd\` bila perlu)_`);
     }
   }
 
@@ -533,13 +583,34 @@ agentRouter.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentR
     ``
   );
 
-  if (relevantReqs.length > 0) {
-    mdParts.push(`#### Kebutuhan Terkait PRD`);
-    for (const r of relevantReqs) {
-      mdParts.push(`- [${r.id}] **${r.title}**`);
+  if (reqContext.requirements.length > 0) {
+    mdParts.push(`#### Kebutuhan Terkait PRD (Detail)`);
+    for (const r of reqContext.requirements) {
+      mdParts.push(`- ${r.text.startsWith(r.id) ? r.text : `[${r.id}] ${r.text}`}`);
     }
     mdParts.push(``);
   }
+
+  if (reqContext.edgeCases.length > 0) {
+    mdParts.push(`#### Edge Case Terkait (WAJIB ditangani)`);
+    for (const e of reqContext.edgeCases) {
+      mdParts.push(`- ${e.text}`);
+    }
+    mdParts.push(``);
+  }
+
+  if (reqContext.journeys.length > 0) {
+    mdParts.push(`#### Alur Pengguna Terkait`);
+    for (const j of reqContext.journeys) {
+      mdParts.push(`- **${j.name}**: ${j.steps.join(' -> ')}`);
+    }
+    mdParts.push(``);
+  }
+
+  // Ringkasan kontrak arsitektur agar agent tidak perlu mengambilnya terpisah (versi lengkap: /api/agent/architecture-contract).
+  const stacks = await prisma.stack.findMany({ where: { projectId: req.agent.projectId } });
+  const arch = resolveArchitectureContract(resolveStackContract(stacks));
+  mdParts.push(`#### Ringkasan Kontrak Arsitektur`, ...summarizeArchitecture(arch).map((l) => `- ${l}`), ``);
 
   // Failure Context jika task pernah gagal sebelumnya (Bab 38)
   const lastFailure = (ctx as any).lastFailure;

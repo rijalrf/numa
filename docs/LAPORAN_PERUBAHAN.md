@@ -20,13 +20,26 @@ Status (2026-10-06): seluruh perubahan sudah di `main` (commit `6426bdc` dan `87
 
 ## 2. Keamanan dan tagihan (Fase 1)
 
-- Webhook Midtrans idempoten: hanya memproses pembayaran berstatus `pending`, mencocokkan `gross_amount` dengan nominal pembayaran, membandingkan signature secara constant-time, dan memperbarui `payment` serta `subscription` dalam satu transaksi. Sebelumnya, notifikasi yang dikirim ulang bisa mereset kuota dan memperpanjang langganan berulang.
+- Webhook pembayaran idempoten: hanya memproses pembayaran berstatus `pending`, mencocokkan nominal dengan nominal pembayaran, memverifikasi keaslian secara constant-time, dan memperbarui `payment` serta `subscription` dalam satu transaksi. Gateway kini Mayar.id (lihat bagian 2b). Sebelumnya, notifikasi yang dikirim ulang bisa mereset kuota dan memperpanjang langganan berulang.
 - Semua panggilan AI kini membawa `projectId` dan `agentName` sehingga budget token bulanan benar-benar ditegakkan (sebelumnya sekitar 25% token tidak terikat tenant).
 - `trust proxy` tidak lagi `true` (rate limit bisa dipalsukan lewat `X-Forwarded-For`); jumlah hop diatur lewat `TRUST_PROXY_HOPS`.
 - Validasi Zod ditambahkan di route agent, agent-tokens, techstack, tree, dan checkpoints.
 - Validasi env saat startup (`env.ts`, `env-check.ts`): gagal cepat bila env wajib kosong.
 - Pesan error internal tidak lagi bocor ke klien (`HttpError`, `toClientError`).
 - Dependensi rentan diperbarui (`express`/`qs`, `react-router-dom`).
+
+## 2b. Migrasi pembayaran ke Mayar.id
+
+Midtrans diganti Mayar.id (API V2). Rencana lengkap dan hasil riset dokumentasi ada di [MAYAR_MIGRATION_PLAN.md](MAYAR_MIGRATION_PLAN.md).
+
+- `lib/mayar.ts` (baru): klien Mayar (`createPaymentRequest`, `getTransaction`), konfigurasi dari env, verifikasi token webhook constant-time, dan klasifikasi status. `lib/midtrans.ts` dihapus.
+- Checkout membuat Single Payment Request (`POST /hl/v2/payments/create`), masa berlaku tagihan 24 jam. Klik ganda memakai ulang tagihan yang masih berlaku. Respons tetap `{ redirectUrl }`, ditambah `paymentId`.
+- Webhook (`POST /api/billing/webhook`) memeriksa header `X-Callback-Token`, lalu **tidak memercayai isi payload**: status dan nominal selalu diambil ulang dari `GET /hl/v2/transactions/{id}`. Tanpa `MAYAR_API_KEY` atau `MAYAR_WEBHOOK_TOKEN`, webhook menjawab 503. Gagal konfirmasi ke Mayar dijawab 502 agar Mayar mengirim ulang.
+- Endpoint baru `POST /api/billing/payments/:id/sync` (login): rekonsiliasi saat pengguna kembali dari halaman bayar, untuk kasus webhook terlambat atau hilang. Halaman `/settings/billing` membaca `?payment=<id>` dan menampilkan status (berhasil, menunggu dengan tombol "Cek ulang", kedaluwarsa).
+- Model `Payment` netral terhadap gateway: `midtransId` menjadi `providerRef`, ditambah `provider`, `providerTxId`, `checkoutUrl`, `expiresAt` (migrasi `20261006000000_payment_provider_neutral`; baris lama berlabel `midtrans`).
+- Env baru: `MAYAR_API_KEY`, `MAYAR_WEBHOOK_TOKEN`, `MAYAR_IS_PRODUCTION` (diteruskan di `docker-compose.prod.yml`, opsional agar deploy tidak gagal sebelum akun siap).
+- Tes: 11 unit test `lib/mayar` dan 7 tes HTTP billing. Alur webhook diverifikasi ke DB lokal dengan Mayar dimock: belum bayar tetap `pending`, nominal salah ditolak 400, bayar sah mengaktifkan paket sekali, kiriman ulang dan paralel aman.
+- Belum diverifikasi ke Mayar sungguhan (dokumentasi resmi tidak menjelaskan): nama header token webhook (diasumsikan `X-Callback-Token`), field id di payload webhook (kode mencocokkan `data.transactionId`, `data.id`, dan `data.paymentLinkId`), dan penerimaan `redirectUrl` pada payment request (bila ditolak 400, kode mengulang tanpa `redirectUrl`). Wajib dicek di sandbox UAT sebelum go-live.
 
 ## 3. Akurasi token (Fase 2)
 
@@ -85,6 +98,49 @@ Catatan: PRD run 2 dan run 3 berbeda, jadi perbandingan tidak sepenuhnya setara.
 - Temuan tes manual (project `cmuwbsnu2000513hebdzhrl0p`): pertanyaan memakai istilah "sirkulasi" yang diambil mentah dari ide pengguna dan menggabungkan dua topik. Prompt putaran survey kini mewajibkan bahasa sehari-hari (istilah khusus diganti atau diberi arti), satu pertanyaan satu hal, dan pilihan konkret untuk cara kerja saat ini (`survey-round@3`).
 - Belum diuji dengan AI nyata; hanya typecheck, test, dan lint yang lolos. Proyek lama tidak berubah karena pertanyaannya sudah tersimpan.
 
+## 7c. Konteks task untuk agent (`numa context`)
+
+Endpoint `GET /api/agent/tasks/:id/context` kini menyusun konteks yang dipersempit per task lewat `apps/api/src/lib/task-context.ts` (fungsi murni, diuji di `lib/__tests__/task-context.test.ts`):
+
+- Requirement: bukan lagi sekadar ID dan judul. Deskripsi penuh blok FR/PR/BR dari markdown PRD (beserta sub-butir) ikut dikirim, ditambah edge case (EC) yang menyebut requirement task dan journey terkait dari spec.
+- Endpoint dan model data difilter per task: kontrak milik task, `consumesApis`, endpoint PRD yang melayani requirement task, lalu kecocokan nama resource. Kontrak aktual dari task selesai menggantikan kontrak rencana PRD (requirementIds tetap dipertahankan). Model data dipilih dari kecocokan nama pada teks task dan endpoint terpilih, plus relasi satu langkah. Task DATABASE/BACKEND tanpa kecocokan jatuh ke model awal dengan penanda; layer lain tidak menampilkan model.
+- Struktur file proyek berasal dari `changedFiles` laporan guard task DONE (kondisi repo nyata), bukan dari `files_to_create` rencana. Lockfile dan `node_modules/dist` disaring. File yang disebut task didahulukan. Bila belum ada laporan guard sama sekali, daftar rencana ditampilkan dengan label belum terverifikasi.
+- Ringkasan kontrak arsitektur (lapisan, larangan, format error) selalu ikut di konteks; versi lengkap tetap di `/api/agent/architecture-contract`.
+- Batas yang masih ada: pencocokan model dan endpoint berbasis kata (heuristik), jadi PRD dengan penamaan campur bahasa Indonesia/Inggris bisa meleset; edge case hanya muncul bila teksnya menyebut ID requirement. Belum diuji dengan database dan task nyata; yang lolos hanya typecheck, test (121), lint, dan deadcode.
+
+## 7d. Tree dihapus, journey di PRD diperluas (2026-10-06)
+
+Rencana dan keputusan: [JOURNEY_MIGRATION_PLAN.md](JOURNEY_MIGRATION_PLAN.md). Tahap yang sudah dikerjakan di kode:
+
+- Tree dihapus dari wizard, API, dan web. Wizard menjadi 7 tahap (chat, survey, techstack, prd, board, guide, done). Setelah PRD selesai, `wizardStep` langsung `board`. `tree` dihapus dari `STAGE_ORDER` (tanpa alias; data lama akan di-truncate pemilik). Job `tree_generate`, route `/tree`, `generateTreeFromPrd`, prompt `tree@3`, `TreeDataSchema`, halaman web beserta komponen dan hook tree, serta layout swimlane dihapus. Dependensi `dagre` dan `@types/dagre` ikut dicabut dari `apps/web`.
+- Flow tidak lagi digenerate di wizard dan UI-nya dihapus. Endpoint `POST /api/projects/:id/flow/generate` dan `GET /api/projects/:id/flow` dipindah ke `routes/flow.ts` dan dipertahankan hanya untuk uji pembanding. Bila project punya `BusinessFlow`, kontrak flow lama tetap dipakai; bila tidak, skenario E2E disusun dari journey.
+- Journey di spec PRD diperluas: `kind` (`main` atau `failure`) dan `branchFrom` (`{ journey, stepIndex }`). Prompt ekstraksi naik ke `product-spec@3` dan kini ikut membaca bagian Edge Cases. Tidak ada panggilan AI baru.
+- `lib/ai/journey-contract.ts` (baru): menyusun skenario dari journey (jalur gagal = langkah utama sampai titik cabang + langkah jalur gagal), menyuntiknya ke task INTEGRATION, dan memeriksa cakupan requirement per journey (warning `JOURNEY_REQ_UNCOVERED`, tidak memblokir). Prompt task naik ke `tasks@3` (label blok skenario kini generik).
+- Halaman PRD menampilkan daftar journey (utama beserta jalur gagal yang bercabang) lewat `components/prd/journey-list.tsx`.
+- Temuan koreksi: parameter `tree` di `analyzeChangeRequest` (cycle) tidak pernah diisi pemanggil; parameter mati itu dihapus tanpa perubahan perilaku.
+- Skrip e2e (`scripts/test-e2e-wizard.ts`): langkah tree diganti pengecekan journey dan skenario E2E pada task INTEGRATION.
+- Verifikasi lokal: typecheck, lint, deadcode, build semua workspace, dan test API (126) serta web (10) lolos. E2E dengan AI nyata (`scripts/test-e2e-wizard.ts`) lulus penuh pada 2026-10-06: 3 journey utama dan 3 journey gagal dengan `branchFrom` valid, 14 task, skenario E2E (S1-S6) tersuntik ke task INTEGRATION, tanpa temuan `JOURNEY_*`. Satu run: 14 panggilan AI, 140,6 rb token. Ekstraksi spec (`product-spec@3`) tercatat 27,7 rb token karena 1 retry Zod (sekitar 13,9 rb per percobaan, setara `product-spec@2`); tingkat retry perlu dipantau di beberapa run. Temuan 7 error di laporan validasi seluruhnya `SEC_*` dari audit keamanan task (perilaku lama, bukan dari journey). Perbandingan dengan dan tanpa flow (langkah 3) belum dilakukan.
+- Belum dikerjakan: uji pembanding task INTEGRATION dengan dan tanpa flow, penghapusan flow (kode, tabel `TreeNode` dan `BusinessFlow` lewat migrasi), serta bagian landing page yang masih menyebut tahap Flow.
+
+### Total token satu project (dari log e2e 2026-10-06)
+
+Sisi Numa, dari idea sampai semua task siap (9 panggilan AI, 1 putaran survey): sekitar **108 rb token**.
+
+| Tahap | Token |
+|---|---|
+| Nama app, survey 1 putaran, ringkasan survey | 15,4 rb |
+| Tech stack | 4,1 rb |
+| PRD | 11,3 rb |
+| Ekstraksi spec (journey) | 27,7 rb (13,9 rb per percobaan, ditambah 1 retry) |
+| Roadmap | 10,9 rb |
+| Generate task | 25,3 rb |
+| Audit keamanan task | 13,6 rb |
+
+- Tiap putaran survey tambahan sekitar 5,4 sampai 7,3 rb. Dengan 6 putaran, total sekitar 138 rb (perkiraan). Run sebelum tree dan flow dihapus: sekitar 171 rb dengan 6 putaran.
+- Change request di akhir e2e (opsional, bukan pipeline dasar): 5 panggilan, sekitar 32 rb.
+- Token eksekusi oleh AI coding agent (14 task) tidak terukur: dipakai di sisi agent user dan tidak tercatat di `AiCallLog`. Untuk mengetahuinya, jalankan satu project sampai selesai dan catat pemakaian dari sisi agent.
+- Basis angka: satu run, jadi taksiran kasar. Tingkat retry ekstraksi spec masih perlu dipantau.
+
 ## 8. Uji end-to-end nyata
 
 - Migrasi dev diterapkan (7 migrasi, data 13 project dev tidak disentuh).
@@ -141,7 +197,7 @@ Batas paket (dari `billing.ts`):
 | 2 | Di `/projects/:id/survey`, tunggu putaran 1 | Muncul 3 pertanyaan dengan saran Numa. Jawab atau pakai saran. |
 | 3 | Selesaikan putaran 1 | Ringkasan produk tampil. Pada Free Trial tidak ada putaran lanjutan. |
 | 4 | Coba lanjut ke PRD saat masih Free Trial | Ditolak dengan dialog upgrade (HTTP 403 `plan_upgrade_required`). Ini perilaku yang benar. |
-| 5 | Upgrade ke Starter lewat `/settings/billing` | Pembayaran Midtrans (atau ubah paket langsung di DB untuk uji lokal). Tahap berpindah ke tech stack. |
+| 5 | Upgrade ke Starter lewat `/settings/billing` | Diarahkan ke halaman bayar Mayar (sandbox), bayar lewat simulasi, lalu kembali ke `/settings/billing` dengan status "Pembayaran berhasil" (atau ubah paket langsung di DB untuk uji lokal). Tahap berpindah ke tech stack. |
 | 6 | Di `/techstack`, tunggu rekomendasi AI | Rekomendasi hanya dari golden pack (frontend, backend, database, styling, testing). Pilihan manual di luar daftar ditolak (400). |
 | 7 | Di `/prd`, generate PRD | PRD mengalir (SSE) dan memuat ID `FR-xxx` dan `PR-xxx`. Ekspor `.md` bisa diunduh. |
 | 8 | Di `/tree`, generate tree | Job berjalan sekitar 1-2 menit (tree lalu flow). UI tidak timeout (batas 6 menit). Hasil: hierarki App, Fitur, Sub-fitur, dan diagram alur swimlane. |
@@ -191,7 +247,19 @@ Batas paket (dari `billing.ts`):
 
 - Deploy: workflow `Deploy Numa to VPS` pada `main` memverifikasi (audit, lint, dead code, typecheck, test), membangun image, lalu deploy dan migrasi. Run pertama gagal di langkah 4 karena `POSTGRES_PASSWORD` kosong di `.env` VPS; setelah diisi, run ulang berhasil.
 - Audit dependensi menangkap advisory kritis baru di `proxy-addr`; diperbaiki dengan memperbarui ke 2.0.8.
-- Belum diteruskan ke container: `MIDTRANS_SERVER_KEY` dan `MIDTRANS_IS_PRODUCTION` (compose produksi dan `.env.example`). Selama itu belum ada, pembayaran dan webhook menjawab 503.
+- Gateway pembayaran sudah diganti ke Mayar.id (bagian 2b), kode siap tetapi belum di-deploy dan belum diuji ke Mayar sungguhan. Sampai `MAYAR_API_KEY` dan `MAYAR_WEBHOOK_TOKEN` diisi di `.env` VPS dan URL webhook `https://numa.opendv.xyz/api/billing/webhook` didaftarkan di dashboard Mayar, checkout dan webhook menjawab 503. Langkah uji sandbox ada di [MAYAR_MIGRATION_PLAN.md](MAYAR_MIGRATION_PLAN.md) bagian 6.
 - `.mcp.json` sengaja tidak di-commit.
 - Password lama database tetap ada di riwayat git; rotasi masih diperlukan.
 - Domain server UAT: `https://numa.opendv.xyz` (domain lama `numa.mrijal.my.id` sudah dihapus dari README, AGENTS.md, docs, dan `.env.example`). Di `.env` VPS, `FE_URL`, `BETTER_AUTH_URL`, dan `VITE_API_URL` harus memakai domain ini. Teks README paket CLI ikut berubah, jadi baru tampil di npm setelah CLI dipublish ulang.
+
+## 13. Wizard 1 (Chat): issue #51, #52, #53 (2026-10-08)
+
+Induk: #54. Belum di-commit pada saat catatan ini ditulis.
+
+- **#53 Submit ide satu request.** `POST /api/chat/finalize` (body `{ idea }`) membuat `ChatSession` (langsung `finalized`), pesan arsip, dan `Project` dalam satu transaksi, membalas 201 `{ projectId }`. Kuota project dicek sekali di route; panjang ide kini divalidasi terhadap `charLimit` paket (sebelumnya hanya dicek di endpoint pesan yang dihapus). Endpoint dihapus: `POST /api/chat/sessions`, `GET|POST /api/chat/sessions/:id/messages`, `POST /api/chat/sessions/:id/retry`, `POST /api/chat/sessions/:id/finalize`. `aiRateLimiter` tidak lagi di `/api/chat/sessions`; kini dipasang di `survey/generate` dan `survey/submit` yang memicu job AI. Halaman `chat.tsx`, `scripts/test-e2e-wizard.ts`, `real-test-invtrack.ts`, `real-test-minitask.ts`, dan tes HTTP disesuaikan.
+- **#52 Nama aplikasi tanpa panggilan AI terpisah (opsi A).** Survey putaran 1 menghasilkan `appName` di output yang sama; job `chat_finalize`, `postFinalizeProject`, `APP_NAME_PROMPT`, dan `PROMPT_VERSIONS.appName` dihapus. Nama project hanya diganti bila masih sama dengan nama sementara (`draftProjectName`, potongan ide). Versi prompt `survey-round@3` naik ke `survey-round@4`. Uji nyata ke gateway: nama "Kasir Kelontong" dari ide warung kelontong, satu panggilan AI per project baru berkurang.
+- **#51 Pemantauan reasoning token.** Kolom baru `AiCallLog.reasoningTokens` (migrasi `20261008000000_ai_call_log_reasoning_tokens`) diisi dari `completion_tokens_details.reasoning_tokens`. Env opsional `OPENAI_REASONING_EFFORT_CHEAP` dan `OPENAI_REASONING_EFFORT_REASONING` (low|medium|high); kosong berarti parameter tidak dikirim.
+  - Temuan uji gateway lokal (9router, alias `ai-builder` -> `gemini-3.8-flash-n`): `reasoning_effort` (none sampai high), `reasoning: {effort}`, dan `thinking` tidak mengubah hasil (reasoning tetap sekitar 120-480 token). Di 9router level reasoning dipilih lewat nama model, bukan parameter.
+  - Penyelesaian di konfigurasi, bukan kode: `OPENAI_MODEL_CHEAP=ag/gemini-3.8-flash-low` (di `.env` lokal; `.env.example` dan `.env` VPS belum diubah). Uji ekstraksi spec PRD (tier cheap) pada PRD 30.030 karakter: 38,6 dtk dan 0 reasoning token, dibanding 81,5 dtk dan 7.647 reasoning token di `ai-builder`; jumlah persona, entitas, endpoint, dan aturan sama, journey 7 lawan 8 (satu sampel). Kualitas journey perlu dibandingkan di lebih banyak PRD sebelum menjadi default.
+  - Sisa: `prompt_tokens` tetap 2.009 untuk pesan sepele di semua model, jadi sisipan prompt ada di lapisan 9router dan perlu dicek di dashboard 9router.
+  - Gateway juga melaporkan `reasoning_tokens` yang bisa lebih besar dari `completion_tokens` (contoh uji: 1.553 vs 651), jadi angka itu indikasi, bukan hitungan akurat.

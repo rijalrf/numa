@@ -10,38 +10,37 @@ Numa adalah **AI Software Factory** — platform SaaS yang mengubah ide aplikasi
 
 ## Alur Wizard & Keluarga Fitur Numa
 
-Setiap project melewati 8 tahap berurutan di bawah keluarga fitur Numa (lihat panduan lengkap di [BRAND.md](docs/BRAND.md)). Tahap yang sudah dilewati terkunci read-only (HTTP 403 via `isStageLocked`).
+Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat panduan lengkap di [BRAND.md](docs/BRAND.md)). Tahap yang sudah dilewati terkunci read-only (HTTP 403 via `isStageLocked`).
 
 | # | Fitur | Tahap | Halaman | Fungsi |
 |---|-------|-------|---------|--------|
-| 1 | Numa Brief | `chat` | `/chat/:sessionId` | Brainstorming ide awal dengan AI. |
+| 1 | Numa Brief | `chat` | `/chat` | Input ide awal. Satu request `POST /api/chat/finalize` membuat project (tanpa panggilan AI); nama aplikasi dihasilkan survey putaran 1. |
 | 2 | Numa Brief | `interview` | `/projects/:id/interview` | AI generate pertanyaan survey per putaran (jumlah putaran sesuai paket). Putaran 1 dimulai dari proses existing (cara kerja sebelum ada aplikasi), lalu fitur, aturan bisnis, dan batasan. User jawab atau pakai saran Numa. Ringkasan survey memuat bagian Proses Saat Ini (As-Is). |
 | 3 | Numa Blueprint | `techstack` | `/projects/:id/techstack` | Rekomendasi AI (default, langsung lanjut) atau pilih manual per kategori. |
-| 4 | Numa Blueprint | `prd` | `/projects/:id/prd` | AI generate PRD terstruktur (functional requirements, product rules, constraints). |
-| 5 | Numa Flow | `tree` | `/projects/:id/tree` | AI generate hierarki dekomposisi aplikasi (App -> Fitur -> Sub-fitur). |
-| 6 | Numa Forge | `board` | `/projects/:id/board` | AI generate atomic tasks dengan bounded context. Kanban board. |
-| 7 | Numa Agent | `guide` | `/projects/:id/guide` | Generate Master Prompt + PAT token. User copy ke AI coding agent. |
-| 8 | Numa Agent | `done` | - | AI coding agent eksekusi via CLI `numa next/start/context/done`. |
+| 4 | Numa Blueprint | `prd` | `/projects/:id/prd` | AI generate PRD terstruktur (functional requirements, product rules, constraints, edge case). Spec hasil ekstraksi memuat journey pengguna (utama dan gagal) yang ditampilkan di halaman PRD dan menjadi skenario E2E task. |
+| 5 | Numa Forge | `board` | `/projects/:id/board` | AI generate atomic tasks dengan bounded context. Kanban board. |
+| 6 | Numa Agent | `guide` | `/projects/:id/guide` | Generate Master Prompt + PAT token. User copy ke AI coding agent. |
+| 7 | Numa Agent | `done` | - | AI coding agent eksekusi via CLI `numa next/start/context/done`. |
 
 ## Arsitektur AI Engine (`apps/api/src/lib/ai/`)
 
 | Module | Fungsi |
 |--------|--------|
-| `ai-service.ts` | Client OpenAI SDK. Auto-retry Zod, logging token/latensi ke `AiCallLog`, model routing (`reasoning` vs `cheap`). |
-| `chat.ts` | Orchestrator chat onboarding: reply, finalize, generate interview, recommend answer/techstack, generate tree. |
+| `ai-service.ts` | Client OpenAI SDK. Auto-retry Zod, logging token/latensi ke `AiCallLog`, model routing (`reasoning` vs `cheap`), `reasoning_effort` opsional lewat `OPENAI_REASONING_EFFORT_CHEAP|REASONING`. |
+| `chat.ts` | `finalizeChatSession` (buat session + project dalam satu transaksi, tanpa AI), `draftProjectName`, rekomendasi techstack, generate flow (legacy, backend saja). |
 | `job.ts` | Async AI job runner: fire-and-forget via `startAiJob`, state machine `running/done/failed`, auto-fail stale job >10 menit. |
 | `prd.ts` | Generator PRD terstruktur dari hasil wawancara. |
 | `roadmap.ts` | Generator pembagian fase dan fitur dari PRD. |
 | `tasks.ts` | Generator atomic tasks dari roadmap dengan bounded context (`files_to_create`, `files_to_modify`, `forbidden`, `validation_commands`). |
 | `cycle.ts` | Analisis change request dan merge delta PRD untuk change cycle. |
 | `security-audit.ts` | Audit keamanan hasil generate. |
-| `product-spec.ts`, `golden-stack.ts`, `stack-contract.ts`, `architecture-contract.ts`, `flow-contract.ts` | Kontrak produk, golden stack, stack, arsitektur, dan alur yang menjadi acuan prompt dan validator. |
+| `product-spec.ts`, `golden-stack.ts`, `stack-contract.ts`, `architecture-contract.ts`, `journey-contract.ts`, `flow-contract.ts` (legacy) | Kontrak produk, golden stack, stack, arsitektur, dan alur yang menjadi acuan prompt dan validator. `journey-contract.ts` menyusun skenario E2E (jalur utama dan jalur gagal bercabang lewat `branchFrom`) dari `ProductSpec.journeys`, menyuntiknya ke task INTEGRATION, dan memeriksa cakupan requirement per journey (warning `JOURNEY_REQ_UNCOVERED`). `flow-contract.ts` dipakai hanya bila project masih punya `BusinessFlow` (akan dihapus, lihat `docs/JOURNEY_MIGRATION_PLAN.md`). |
 | `api-coverage-validator.ts`, `cleanup-validator.ts`, `validation-report.ts` | Validator hasil generate tasks dan laporan validasi. |
-| `usage.ts` | Pencatatan dan taksiran token per panggilan AI. |
+| `usage.ts` | Pencatatan dan taksiran token per panggilan AI, termasuk `reasoningTokens` (`AiCallLog.reasoningTokens`). |
 | `dag-validator.ts` | Validasi DAG task: deteksi siklus, hapus invalid dependency, topological sort. |
 | `schemas.ts` | Kontrak data Zod untuk semua interaksi AI. |
 | `../survey.ts` | Generator pertanyaan survey per putaran dan ringkasan survey (`generateSurveyRound`, `generateSurveySummary`). Tema putaran 1: Proses Saat Ini & Masalah Utama. |
-| `prompts.ts` | Katalog system prompt bersama dan `PROMPT_VERSIONS` (versi prompt semua tahap, dicatat di `AiCallLog.promptVersion`; naikkan versi saat isi prompt berubah). Versi saat ini: app-name@2, tech-stack@2, tree@3, prd@2, tasks@2, flow@2, roadmap@1, cycle@1, product-spec@2, security-audit@1, survey-round@3, survey-summary@2. |
+| `prompts.ts` | Katalog system prompt bersama dan `PROMPT_VERSIONS` (versi prompt semua tahap, dicatat di `AiCallLog.promptVersion`; naikkan versi saat isi prompt berubah). Versi saat ini: tech-stack@2, prd@2, tasks@3, flow@2, roadmap@1, cycle@1, product-spec@3, security-audit@1, survey-round@4, survey-summary@2. |
 
 ## Shared Lib (`apps/api/src/lib/`)
 
@@ -50,6 +49,7 @@ Setiap project melewati 8 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 | `stage.ts` | Konstanta `STAGE_ORDER`, helper `isStageLocked`, `furthestStage`. |
 | `markdown-export.ts` | Builder markdown untuk ekspor PRD dan tasks. |
 | `task-persist.ts` | `persistGeneratedTasks` — simpan hasil AI ke DB (dipakai oleh routes/tasks dan routes/cycles). |
+| `task-context.ts` | Penyusun konteks per task untuk `numa context`: detail requirement/edge case/journey, filter endpoint dan model data, file nyata dari laporan guard, ringkasan kontrak arsitektur. Fungsi murni. |
 | `access.ts` | RBAC org: `projectWhere`, `getProjectRole`, `hasRole`, `agentProjectWhere`. Wajib dipakai untuk query project (jangan `{ id, userId }`). |
 | `audit.ts` | `recordAudit` — jejak aksi sensitif ke `AuditLog` (tidak pernah melempar error). |
 | `ai-budget.ts` | Budget token AI bulanan per pemilik tagihan; `assertAiBudget` dipanggil di ai-service. |
@@ -57,6 +57,7 @@ Setiap project melewati 8 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 | `account-data.ts` | Ekspor dan penghapusan data akun. |
 | `logger.ts` | Logger terstruktur (JSON di produksi) + request id lewat `middleware/request-context.ts`. Dilarang memakai `console.*` di API. |
 | `http-error.ts` | `HttpError` dan `toClientError`: pemetaan error ke respons klien (tanpa bocor detail internal di produksi). |
+| `mayar.ts` | Klien Mayar.id API V2 (`createPaymentRequest`, `getTransaction`), `getMayarConfig`, `verifyWebhookToken`, klasifikasi status. Dipakai `routes/billing.ts`. |
 | `env.ts`, `env-check.ts` | Validasi env saat startup (gagal cepat bila env wajib hilang). |
 | `request-schemas.ts` | Skema Zod body request yang dipakai lintas route. |
 | `pricing.ts` | Harga token per tier (`AI_PRICE_*`, rupiah per 1 juta token) dan `estimateCost`. |
@@ -74,7 +75,7 @@ Setiap project melewati 8 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 | `Prd` | Dokumen kebutuhan produk JSON + versioning. |
 | `RoadmapPhase`, `RoadmapFeature`, `RoadmapDependency` | Graph rencana pengembangan. |
 | `Task`, `TaskDependency` | Atomic task: bounded context JSON, acceptance criteria, layer, relasi DAG. |
-| `TreeNode` | Hierarki dekomposisi project. |
+| `TreeNode`, `BusinessFlow` | Legacy: tidak lagi digenerate di wizard (tree dihapus, flow hanya via API backend). Tabel dibuang di langkah akhir `docs/JOURNEY_MIGRATION_PLAN.md`. |
 | `Checkpoint` | Gate review antar layer arsitektur (human-in-the-loop). |
 | `AgentToken`, `AgentTokenScope` | PAT token CLI (hash sha256, multi-project scope). |
 | `AgentSession` | Tracking sesi kerja agent. |
@@ -83,6 +84,7 @@ Setiap project melewati 8 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 | `AuditLog` | Jejak aksi sensitif (tanpa FK). |
 | `AiJob` | Antrean job AI tahan restart (queued/running/done/failed/cancelled). |
 | `ArtifactVersion` | Snapshot versi lama PRD dan business flow. |
+| `Subscription`, `Payment` | Paket langganan per user dan riwayat pembayaran. `Payment` netral gateway (`provider`, `providerRef`, `providerTxId`, `checkoutUrl`, `expiresAt`). |
 
 ## Struktur Monorepo
 
@@ -95,16 +97,16 @@ Setiap project melewati 8 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 │   │       ├── app.ts                # createApp(): middleware + mount 19 router (tanpa listen, dipakai tes supertest)
 │   │       ├── index.ts              # bootstrap: env, listen, worker antrean, shutdown rapi
 │   │       ├── routes/               # 19 domain router (health, projects, agent, tasks, cycles, survey, dll.)
-│   │       ├── lib/{prisma,auth,stage,markdown-export,task-persist}.ts
+│   │       ├── lib/{prisma,auth,stage,markdown-export,task-persist,task-context}.ts
 │   │       ├── lib/ai/{ai-service,chat,job,prd,roadmap,tasks,...}.ts
 │   │       ├── middleware/{require-user,require-agent,require-agent-simple}.ts
 │   │       └── tools/registry.ts
 │   └── web/          # Vite + React + Tailwind + shadcn (port 3455)
 │       └── src/
 │           ├── main.tsx, App.tsx
-│           ├── components/{ui,layout,chat,wizard,kanban,tree,cycle,execution,billing}/
-│           ├── hooks/{use-project-tasks,use-tree-pan-zoom,...}.ts
-│           ├── lib/{utils,http,auth-client,ai-job,tree-layout,constants}.ts
+│           ├── components/{ui,layout,chat,wizard,prd,kanban,cycle,execution,billing}/
+│           ├── hooks/{use-project-tasks,use-prd-stream,...}.ts
+│           ├── lib/{utils,http,auth-client,ai-job,constants}.ts
 │           └── pages/{login,home,profile,chat,projects/*}.tsx
 ├── packages/cli/     # numa (commander)
 │   └── src/
@@ -125,9 +127,10 @@ Setiap project melewati 8 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 - **Akses publik**: tunnel Cloudflare di `https://numa.opendv.xyz` (ingress `/api/*` -> 6655, sisanya -> 3455).
 - **CLI remote**: `npm i -g numa-cli`, set `NUMA_API_URL`.
 - **Route** dikelompokkan per domain di `apps/api/src/routes/*.ts` (19 router). `app.ts` hanya merakit middleware + mount, `index.ts` hanya bootstrap. Pakai `requireUser` (cookie) atau `requireAgent` (PAT). Validasi body dengan Zod.
-- **AI async**: semua pemanggilan AI berat (generate tasks, tree, techstack, survey) lewat antrean `enqueueAiJob` + handler `registerJobHandler` (`lib/ai/job.ts`). Worker mengklaim job secara atomik, heartbeat, retry, dan tahan restart. Frontend polling via `pollAiJob()` (interval 3s, max 120 attempts atau 6 menit, karena job `tree_generate` menjalankan tree lalu flow berurutan). PRD tetap SSE synchronous dengan heartbeat 15s.
+- **AI async**: semua pemanggilan AI berat (generate tasks, techstack, survey) lewat antrean `enqueueAiJob` + handler `registerJobHandler` (`lib/ai/job.ts`). Worker mengklaim job secara atomik, heartbeat, retry, dan tahan restart. Frontend polling via `pollAiJob()` (interval 3s, max 120 attempts atau 6 menit). PRD tetap SSE synchronous dengan heartbeat 15s.
 - **Multi-tenant**: akses project selalu lewat `projectWhere` dan guard `requireProjectRole` (GET viewer, mutasi member, DELETE admin). Aksi sensitif dicatat dengan `recordAudit`.
-- **Env baru**: `TRUST_PROXY_HOPS`, `PLATFORM_ADMIN_EMAILS`, `AI_PRICE_INPUT_PER_MTOK_REASONING|CHEAP`, `AI_PRICE_OUTPUT_PER_MTOK_REASONING|CHEAP`, `AI_JOB_CONCURRENCY`, `AI_MAX_ACTIVE_JOBS_PER_USER`, `AI_TOKEN_BUDGET_FREE|STARTER|PRO`, `LOG_LEVEL`, `LOG_FORMAT`, `OIDC_*` (lihat `.env.example`).
+- **Env baru**: `TRUST_PROXY_HOPS`, `PLATFORM_ADMIN_EMAILS`, `AI_PRICE_INPUT_PER_MTOK_REASONING|CHEAP`, `AI_PRICE_OUTPUT_PER_MTOK_REASONING|CHEAP`, `AI_JOB_CONCURRENCY`, `AI_MAX_ACTIVE_JOBS_PER_USER`, `AI_TOKEN_BUDGET_FREE|STARTER|PRO`, `OPENAI_REASONING_EFFORT_CHEAP|REASONING`, `LOG_LEVEL`, `LOG_FORMAT`, `OIDC_*` (lihat `.env.example`).
+- **Pembayaran (Mayar.id)**: `routes/billing.ts` memakai Mayar API V2 (V1 sudah deprecated). Env: `MAYAR_API_KEY`, `MAYAR_WEBHOOK_TOKEN` (dicocokkan dengan header `X-Callback-Token`), `MAYAR_IS_PRODUCTION` (true = api.mayar.id, selain itu sandbox api.mayar.io). Webhook tidak memercayai payload: status dan nominal selalu dikonfirmasi ke `GET /transactions/{id}`; `POST /api/billing/payments/:id/sync` merekonsiliasi saat user kembali dari halaman bayar. Tanpa key, checkout dan webhook menjawab 503. URL webhook didaftarkan di dashboard Mayar: `<domain>/api/billing/webhook`. Rencana dan hasil riset: `docs/MAYAR_MIGRATION_PLAN.md`.
 - **Health**: `/health` (liveness) dan `/ready` (database + worker antrean; 503 bila gagal), dipakai healthcheck produksi.
 - **Admin**: endpoint `/api/admin/usage/*` hanya untuk email di `PLATFORM_ADMIN_EMAILS`; halaman web `/admin/usage`.
 - **Build API**: produksi menjalankan `node dist/index.js` (tsc), impor relatif wajib berekstensi `.js`. Dev memakai `tsx watch`.

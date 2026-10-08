@@ -109,7 +109,7 @@ prdRouter.post(['/api/projects/:id/prd/generate', '/api/projects/:id/brd/generat
         create: { projectId: project.id, content: JSON.parse(JSON.stringify(content)), version: 1 },
         update: { content: JSON.parse(JSON.stringify(content)), version: { increment: 1 } },
       });
-      await prisma.project.update({ where: { id: project.id }, data: { wizardStep: 'tree' } });
+      await prisma.project.update({ where: { id: project.id }, data: { wizardStep: 'board' } });
 
       res.write(`data: ${JSON.stringify({ done: true, prd: savedPrd, brd: savedPrd, specWarning })}\n\n`);
       res.end();

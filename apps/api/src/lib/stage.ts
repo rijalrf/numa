@@ -1,5 +1,5 @@
-// Urutan tahapan wizard proyek (chat -> survey -> techstack -> prd -> tree -> board).
-// Dipakai lintas route: projects, wizard-step, prd, tasks, techstack, tree.
+// Urutan tahapan wizard proyek (chat -> survey -> techstack -> prd -> board).
+// Dipakai lintas route: projects, wizard-step, prd, tasks, techstack.
 
 export const STAGE_ORDER: Record<string, number> = {
   chat: 0,
@@ -8,10 +8,9 @@ export const STAGE_ORDER: Record<string, number> = {
   techstack: 2,
   prd: 3,
   brd: 3, // backward compat
-  tree: 4,
-  board: 5,
-  guide: 6, // Kompatibilitas data lama
-  done: 7,
+  board: 4,
+  guide: 5, // Kompatibilitas data lama
+  done: 6,
 };
 
 export function isStageLocked(currentStep: string | undefined | null, targetStage: string): boolean {
@@ -27,16 +26,14 @@ export function isStageLocked(currentStep: string | undefined | null, targetStag
 export function furthestStage(p: {
   wizardStep: string | null;
   prd: { id: string } | null;
-  _count: { stacks: number; treeNodes: number; tasks: number };
+  _count: { stacks: number; tasks: number };
 }): string {
   let rank = STAGE_ORDER[p.wizardStep ?? 'techstack'] ?? 1;
   if (p._count.stacks > 0) rank = Math.max(rank, STAGE_ORDER.techstack);
   if (p.prd) rank = Math.max(rank, STAGE_ORDER.prd);
-  if (p._count.treeNodes > 0) rank = Math.max(rank, STAGE_ORDER.tree);
   if (p._count.tasks > 0) rank = Math.max(rank, STAGE_ORDER.board);
   if (rank <= STAGE_ORDER.survey) return 'survey';
   if (rank === STAGE_ORDER.techstack) return 'techstack';
   if (rank === STAGE_ORDER.prd) return 'prd';
-  if (rank === STAGE_ORDER.tree) return 'tree';
   return 'board'; // board | guide | done -> papan
 }

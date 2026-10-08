@@ -54,23 +54,11 @@ export function ChatPage() {
     setErrorMessage(null);
 
     try {
-      // 1. Buat sesi chat baru
-      const sessionRes = await api<{ sessionId: string }>('/api/chat/sessions', {
+      // Satu request: buat draft project dari ide mentah user, lalu redirect ke survey
+      const finalizeRes = await api<{ projectId: string }>('/api/chat/finalize', {
         method: 'POST',
+        body: JSON.stringify({ idea: trimmed }),
       });
-
-      if (!sessionRes.sessionId) {
-        throw new Error('Gagal menginisialisasi sesi.');
-      }
-
-      // 2. Langsung finalisasi sesi dengan ide mentah user -> buat draft project & redirect ke survey
-      const finalizeRes = await api<{ projectId: string }>(
-        `/api/chat/sessions/${sessionRes.sessionId}/finalize`,
-        {
-          method: 'POST',
-          body: JSON.stringify({ idea: trimmed }),
-        }
-      );
 
       if (finalizeRes.projectId) {
         navigate(`/projects/${finalizeRes.projectId}/survey`);

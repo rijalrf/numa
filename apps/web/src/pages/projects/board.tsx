@@ -80,16 +80,16 @@ export function BoardPage() {
       .catch(() => {});
   }, [projectId]);
 
-  const handleBackToTree = async () => {
+  const handleBackToPrd = async () => {
     if (!projectId) return;
     try {
       await api(`/api/projects/${projectId}/wizard-step`, {
         method: 'POST',
-        body: JSON.stringify({ step: 'tree' }),
+        body: JSON.stringify({ step: 'prd' }),
       });
-      navigate(`/projects/${projectId}/tree`);
+      navigate(`/projects/${projectId}/prd`);
     } catch {
-      navigate(`/projects/${projectId}/tree`);
+      navigate(`/projects/${projectId}/prd`);
     }
   };
 
@@ -145,7 +145,7 @@ export function BoardPage() {
       : {
           back: {
             label: 'Kembali',
-            onClick: handleBackToTree,
+            onClick: handleBackToPrd,
           },
           next:
             tasks.length > 0

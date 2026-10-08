@@ -66,41 +66,6 @@ export const ChatMessageSchema = z.discriminatedUnion('kind', [
 export type ChatMessage = z.infer<typeof ChatMessageSchema>;
 
 // ===============================================
-// Tree Data Schema — hierarki App → Fitur → Sub-fitur → Task → Sub-task
-// ===============================================
-
-const SubTaskSchema = z.object({
-  label: z.string(),
-  requirementIds: z.array(z.string()).default([]),
-});
-
-const TreeTaskSchema = z.object({
-  label: z.string(),
-  requirementIds: z.array(z.string()).default([]),
-  subtasks: z.array(SubTaskSchema).default([]),
-});
-
-const SubFeatureSchema = z.object({
-  label: z.string(),
-  requirementIds: z.array(z.string()).default([]),
-  tasks: z.array(TreeTaskSchema).default([]),
-});
-
-const FeatureSchema = z.object({
-  label: z.string(),
-  requirementIds: z.array(z.string()).default([]),
-  subfeatures: z.array(SubFeatureSchema).default([]),
-  tasks: z.array(TreeTaskSchema).default([]),
-});
-
-export const TreeDataSchema = z.object({
-  appName: z.string(),
-  features: z.array(FeatureSchema).min(1),
-});
-
-export type TreeData = z.infer<typeof TreeDataSchema>;
-
-// ===============================================
 // Business Flow Diagram (swimlane per persona)
 // ===============================================
 
@@ -225,9 +190,3 @@ export const RecommendationResponseBase = z.object({
 export const RecommendTechStackSchema = RecommendationResponseBase.extend({
   techStack: z.array(z.string()),
 });
-
-// Export semua schema yang mungkin dipakai di berbagai tempat
-export { FeatureSchema as Feature };
-export { SubFeatureSchema as SubFeature };
-export { TreeTaskSchema as Task };
-export { SubTaskSchema as SubTask };
