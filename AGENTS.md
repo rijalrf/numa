@@ -28,7 +28,7 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 |--------|--------|
 | `ai-service.ts` | Client OpenAI SDK. Auto-retry Zod, logging token/latensi ke `AiCallLog`, model routing (`reasoning` vs `cheap`), `reasoning_effort` opsional lewat `OPENAI_REASONING_EFFORT_CHEAP|REASONING`. |
 | `chat.ts` | `finalizeChatSession` (buat session + project dalam satu transaksi, tanpa AI), `draftProjectName`, rekomendasi techstack, generate flow (legacy, backend saja). |
-| `job.ts` | Async AI job runner: fire-and-forget via `startAiJob`, state machine `running/done/failed`, auto-fail stale job >10 menit. |
+| `job.ts` | Async AI job runner: fire-and-forget via `startAiJob`, state machine `running/done/failed`, auto-fail stale job >10 menit. `enqueueAiJobOnce` idempoten untuk `survey_round`/`survey_summary` (partial unique index `AiJob_survey_active_key`: satu job aktif per project+type). |
 | `prd.ts` | Generator PRD terstruktur dari hasil wawancara. |
 | `roadmap.ts` | Generator pembagian fase dan fitur dari PRD. |
 | `tasks.ts` | Generator atomic tasks dari roadmap dengan bounded context (`files_to_create`, `files_to_modify`, `forbidden`, `validation_commands`). |
@@ -39,7 +39,7 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 | `usage.ts` | Pencatatan dan taksiran token per panggilan AI, termasuk `reasoningTokens` (`AiCallLog.reasoningTokens`). |
 | `dag-validator.ts` | Validasi DAG task: deteksi siklus, hapus invalid dependency, topological sort. |
 | `schemas.ts` | Kontrak data Zod untuk semua interaksi AI. |
-| `../survey.ts` | Generator pertanyaan survey per putaran dan ringkasan survey (`generateSurveyRound`, `generateSurveySummary`). Tema putaran 1: Proses Saat Ini & Masalah Utama. |
+| `../survey.ts` | Generator pertanyaan survey per putaran dan ringkasan survey (`generateSurveyRound`, `generateSurveySummary`). Tema putaran 1: Proses Saat Ini & Masalah Utama; putaran 1 juga memberi `appName`. Putaran memakai tier `cheap`, ringkasan tetap `reasoning`. |
 | `prompts.ts` | Katalog system prompt bersama dan `PROMPT_VERSIONS` (versi prompt semua tahap, dicatat di `AiCallLog.promptVersion`; naikkan versi saat isi prompt berubah). Versi saat ini: tech-stack@2, prd@2, tasks@3, flow@2, roadmap@1, cycle@1, product-spec@3, security-audit@1, survey-round@4, survey-summary@2. |
 
 ## Shared Lib (`apps/api/src/lib/`)
@@ -48,6 +48,7 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 |--------|--------|
 | `stage.ts` | Konstanta `STAGE_ORDER`, helper `isStageLocked`, `furthestStage`. |
 | `markdown-export.ts` | Builder markdown untuk ekspor PRD dan tasks. |
+| `survey-store.ts` | Penyimpanan survey: `resolveTotalRounds` (putaran dikunci di `Project.surveyTotalRounds` saat survey dimulai), `saveRoundAnswers` (upsert atomik, tolak pertanyaan di luar project/putaran), `saveRoundQuestions` (`createMany skipDuplicates`). |
 | `task-persist.ts` | `persistGeneratedTasks` — simpan hasil AI ke DB (dipakai oleh routes/tasks dan routes/cycles). |
 | `task-context.ts` | Penyusun konteks per task untuk `numa context`: detail requirement/edge case/journey, filter endpoint dan model data, file nyata dari laporan guard, ringkasan kontrak arsitektur. Fungsi murni. |
 | `access.ts` | RBAC org: `projectWhere`, `getProjectRole`, `hasRole`, `agentProjectWhere`. Wajib dipakai untuk query project (jangan `{ id, userId }`). |
@@ -71,7 +72,7 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 | `User`, `Session`, `Account` | Autentikasi (Better Auth). |
 | `Project` | Entitas root: nama, deskripsi, ide mentah, `wizardStep`, `uiSpec` JSON. |
 | `Stack` | Tech stack per kategori (frontend, backend, database, deployment). |
-| `DiscoveryQuestion`, `DiscoveryAnswer` | Pertanyaan dan jawaban fase interview. |
+| `DiscoveryQuestion`, `DiscoveryAnswer` | Pertanyaan dan jawaban fase interview. Unique `(projectId, round, order)` dan `(questionId)`. |
 | `Prd` | Dokumen kebutuhan produk JSON + versioning. |
 | `RoadmapPhase`, `RoadmapFeature`, `RoadmapDependency` | Graph rencana pengembangan. |
 | `Task`, `TaskDependency` | Atomic task: bounded context JSON, acceptance criteria, layer, relasi DAG. |
@@ -127,7 +128,7 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 - **Akses publik**: tunnel Cloudflare di `https://numa.opendv.xyz` (ingress `/api/*` -> 6655, sisanya -> 3455).
 - **CLI remote**: `npm i -g numa-cli`, set `NUMA_API_URL`.
 - **Route** dikelompokkan per domain di `apps/api/src/routes/*.ts` (19 router). `app.ts` hanya merakit middleware + mount, `index.ts` hanya bootstrap. Pakai `requireUser` (cookie) atau `requireAgent` (PAT). Validasi body dengan Zod.
-- **AI async**: semua pemanggilan AI berat (generate tasks, techstack, survey) lewat antrean `enqueueAiJob` + handler `registerJobHandler` (`lib/ai/job.ts`). Worker mengklaim job secara atomik, heartbeat, retry, dan tahan restart. Frontend polling via `pollAiJob()` (interval 3s, max 120 attempts atau 6 menit). PRD tetap SSE synchronous dengan heartbeat 15s.
+- **AI async**: semua pemanggilan AI berat (generate tasks, techstack, survey) lewat antrean `enqueueAiJob` + handler `registerJobHandler` (`lib/ai/job.ts`). Worker mengklaim job secara atomik, heartbeat, retry, dan tahan restart. Frontend polling via `pollAiJob()` (default interval 3s, max 120 attempts atau 6 menit; halaman survey memakai 1,5s dan 240 attempts). PRD tetap SSE synchronous dengan heartbeat 15s.
 - **Multi-tenant**: akses project selalu lewat `projectWhere` dan guard `requireProjectRole` (GET viewer, mutasi member, DELETE admin). Aksi sensitif dicatat dengan `recordAudit`.
 - **Env baru**: `TRUST_PROXY_HOPS`, `PLATFORM_ADMIN_EMAILS`, `AI_PRICE_INPUT_PER_MTOK_REASONING|CHEAP`, `AI_PRICE_OUTPUT_PER_MTOK_REASONING|CHEAP`, `AI_JOB_CONCURRENCY`, `AI_MAX_ACTIVE_JOBS_PER_USER`, `AI_TOKEN_BUDGET_FREE|STARTER|PRO`, `OPENAI_REASONING_EFFORT_CHEAP|REASONING`, `LOG_LEVEL`, `LOG_FORMAT`, `OIDC_*` (lihat `.env.example`).
 - **Pembayaran (Mayar.id)**: `routes/billing.ts` memakai Mayar API V2 (V1 sudah deprecated). Env: `MAYAR_API_KEY`, `MAYAR_WEBHOOK_TOKEN` (dicocokkan dengan header `X-Callback-Token`), `MAYAR_IS_PRODUCTION` (true = api.mayar.id, selain itu sandbox api.mayar.io). Webhook tidak memercayai payload: status dan nominal selalu dikonfirmasi ke `GET /transactions/{id}`; `POST /api/billing/payments/:id/sync` merekonsiliasi saat user kembali dari halaman bayar. Tanpa key, checkout dan webhook menjawab 503. URL webhook didaftarkan di dashboard Mayar: `<domain>/api/billing/webhook`. Rencana dan hasil riset: `docs/MAYAR_MIGRATION_PLAN.md`.

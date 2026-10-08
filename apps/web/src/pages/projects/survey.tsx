@@ -1,5 +1,5 @@
 // Halaman Survey Wizard: wawancara kebutuhan adaptif terstruktur per putaran
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@/lib/http';
 import { pollAiJob } from '@/lib/ai-job';
@@ -41,6 +41,10 @@ interface SurveyData {
   questions: SurveyQuestion[];
 }
 
+// Survey polling lebih rapat dari default (3 dtk): job pendek, jadi rata-rata menunggu ikut berkurang.
+const SURVEY_POLL_INTERVAL_MS = 1500;
+const SURVEY_POLL_MAX_ATTEMPTS = 240; // 6 menit, sama dengan batas default
+
 export function SurveyPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
@@ -52,6 +56,9 @@ export function SurveyPage() {
   const [pricingOpen, setPricingOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  // Penjaga StrictMode dan efek ganda: satu POST generate per project, satu poller aktif.
+  const generateRequestedFor = useRef<string | null>(null);
+  const stopPolling = useRef<(() => void) | null>(null);
 
   const {
     answers,
@@ -91,10 +98,13 @@ export function SurveyPage() {
         if (data.generationStatus !== 'generating') {
           setGenerating(true);
           setLoading(false);
-          try {
-            await api(`/api/projects/${projectId}/survey/generate`, { method: 'POST' });
-          } catch {
-            // fallback: polling akan tetap mencoba membaca status
+          if (generateRequestedFor.current !== projectId) {
+            generateRequestedFor.current = projectId;
+            try {
+              await api(`/api/projects/${projectId}/survey/generate`, { method: 'POST' });
+            } catch {
+              // fallback: polling akan tetap mencoba membaca status
+            }
           }
           pollSurveyJob('survey_round');
           return;
@@ -121,7 +131,10 @@ export function SurveyPage() {
     (type: 'survey_round' | 'survey_summary') => {
       if (!projectId) return;
       setGenerating(true);
-      pollAiJob(projectId, type, {
+      stopPolling.current?.();
+      stopPolling.current = pollAiJob(projectId, type, {
+        intervalMs: SURVEY_POLL_INTERVAL_MS,
+        maxAttempts: SURVEY_POLL_MAX_ATTEMPTS,
         onDone: async () => {
           setGenerating(false);
           setSubmitting(false);
@@ -144,6 +157,7 @@ export function SurveyPage() {
 
   useEffect(() => {
     loadSurvey();
+    return () => stopPolling.current?.();
   }, [loadSurvey]);
 
   const handleSubmitRound = async () => {

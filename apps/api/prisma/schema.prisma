@@ -95,6 +95,7 @@ model Project {
   description String?
   status      String   @default("DRAFT") // DRAFT | ACTIVE | ARCHIVED
   reviewFlow  Boolean  @default(false)   // bila true, complete -> REVIEW dulu
+  surveyTotalRounds Int?                 // jumlah putaran survey, dikunci saat survey dimulai (null = ikut paket)
   wizardStep  String   @default("done")  // chat | techstack | prd | tree | board | guide | done
   uiSpec      Json?                      // spesifikasi desain UI/UX terstruktur (Bab 14)
   repoSummary Json?                      // ringkasan workspace dari numa sync
@@ -150,6 +151,7 @@ model DiscoveryQuestion {
   project Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   answers DiscoveryAnswer[]
 
+  @@unique([projectId, round, order])
   @@index([projectId])
 }
 
@@ -162,7 +164,7 @@ model DiscoveryAnswer {
 
   question DiscoveryQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
-  @@index([questionId])
+  @@unique([questionId]) // satu jawaban per pertanyaan; submit memakai upsert
 }
 
 model Prd {
@@ -440,6 +442,8 @@ model AiJob {
 
   @@index([projectId, type, status])
   @@index([status, runAfter])
+  // Catatan: migrasi 20261008010000 menambah partial unique index "AiJob_survey_active_key" di SQL
+  // (satu job survey_round/survey_summary aktif per project). Prisma tidak dapat menyatakannya di schema.
 }
 
 // Laporan quality gate hasil generate artefak (mis. tasks). Sumber data banner kualitas di web.

@@ -133,6 +133,25 @@ export async function enqueueAiJob(args: EnqueueArgs) {
   return job;
 }
 
+/**
+ * Seperti enqueueAiJob, tetapi idempoten untuk tipe yang dijaga partial unique index
+ * "AiJob_survey_active_key" (survey_round, survey_summary): bila sudah ada job aktif untuk project+type,
+ * job itu dikembalikan (created=false). Aman terhadap request bersamaan karena penjaganya di level DB.
+ */
+export async function enqueueAiJobOnce(args: EnqueueArgs): Promise<{ job: { id: string }; created: boolean }> {
+  try {
+    return { job: await enqueueAiJob(args), created: true };
+  } catch (err) {
+    if ((err as { code?: string })?.code !== 'P2002') throw err;
+    const existing = await prisma.aiJob.findFirst({
+      where: { projectId: args.projectId, type: args.type, status: { in: ACTIVE_STATUSES } },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!existing) throw err;
+    return { job: existing, created: false };
+  }
+}
+
 /** Batalkan job aktif project+type. Job running dihentikan secara kooperatif (hasil dibuang). */
 export async function cancelAiJob(projectId: string, type: AiJobType): Promise<number> {
   const result = await prisma.aiJob.updateMany({

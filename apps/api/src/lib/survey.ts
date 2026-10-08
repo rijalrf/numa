@@ -120,7 +120,7 @@ Buat 2-3 pertanyaan untuk Putaran ${args.round} (${roundInfo.theme}).`;
     agentName: 'SurveyRoundConsultant',
     promptVersion: PROMPT_VERSIONS.surveyRound,
     projectId: args.projectId,
-    tier: 'reasoning',
+    tier: 'cheap',
   });
 
   return { questions: res.questions, appName: res.appName?.trim() || undefined };

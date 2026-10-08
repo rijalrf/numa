@@ -5,10 +5,11 @@ import { projectWhere } from '../lib/access.js';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireUser, type AuthedRequest } from '../middleware/require-user.js';
-import { getUserPlan, PLANS } from '../lib/billing.js';
+import { getUserPlan } from '../lib/billing.js';
 import { generateSurveyRound, generateSurveySummary } from '../lib/survey.js';
 import { draftProjectName } from '../lib/ai/chat.js';
-import { enqueueAiJob, getLatestJob, hasActiveJob, registerJobHandler, toClientStatus, NonRetryableJobError, rejectJobLimit } from '../lib/ai/job.js';
+import { resolveTotalRounds, saveRoundAnswers, saveRoundQuestions } from '../lib/survey-store.js';
+import { enqueueAiJobOnce, getLatestJob, registerJobHandler, toClientStatus, NonRetryableJobError, rejectJobLimit } from '../lib/ai/job.js';
 
 export const surveyRouter = Router();
 
@@ -44,30 +45,10 @@ registerJobHandler<SurveyRoundPayload>('survey_round', async ({ projectId, paylo
   });
 
   // Putaran 1 membawa nama aplikasi dari AI. Hanya menimpa nama sementara (potongan ide), bukan nama pilihan user.
-  const renameProject =
-    round === 1 && generated.appName && project.name === draftProjectName(project.idea)
-      ? [prisma.project.update({ where: { id: projectId }, data: { name: generated.appName } })]
-      : [];
+  const rename =
+    round === 1 && generated.appName && project.name === draftProjectName(project.idea) ? generated.appName : undefined;
 
-  await prisma.$transaction([
-    ...renameProject,
-    ...generated.questions.map((q, i) =>
-      prisma.discoveryQuestion.create({
-        data: {
-          projectId,
-          round,
-          order: i + 1,
-          question: q.label,
-          context: q.id,
-          kind: q.kind,
-          options: q.options,
-          required: q.required,
-          suggestion: q.suggestion,
-          suggestionReason: q.suggestionReason,
-        },
-      })
-    ),
-  ]);
+  await saveRoundQuestions(projectId, round, generated.questions, rename);
   return { round };
 });
 
@@ -105,7 +86,7 @@ surveyRouter.get('/api/projects/:id/survey', requireUser, async (req: AuthedRequ
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
 
   const { plan } = await getUserPlan(req.userId);
-  const totalRounds = PLANS[plan]?.surveyRounds ?? 1;
+  const totalRounds = await resolveTotalRounds(project, req.userId);
 
   const existingQuestions = await prisma.discoveryQuestion.findMany({
     where: { projectId: project.id },
@@ -183,16 +164,13 @@ surveyRouter.post('/api/projects/:id/survey/generate', requireUser, async (req: 
     return res.json({ ok: true, status: 'done' });
   }
 
-  if (await hasActiveJob(project.id, 'survey_round')) {
-    return res.json({ ok: true, status: 'generating' });
-  }
-
-  const { plan } = await getUserPlan(req.userId);
-  const totalRounds = PLANS[plan]?.surveyRounds ?? 1;
+  // Jumlah putaran dikunci saat survey dimulai.
+  const totalRounds = await resolveTotalRounds(project, req.userId, { lock: true });
   const projectId = project.id;
 
   try {
-    await enqueueAiJob({ projectId, type: 'survey_round', userId: req.userId, payload: { round: 1, totalRounds } });
+    // Idempoten di level DB: request bersamaan hanya menghasilkan satu job.
+    await enqueueAiJobOnce({ projectId, type: 'survey_round', userId: req.userId, payload: { round: 1, totalRounds } });
 
     res.json({ ok: true, status: 'generating' });
   } catch (err) {
@@ -211,31 +189,11 @@ surveyRouter.post('/api/projects/:id/survey/submit', requireUser, async (req: Au
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
 
-  const { plan } = await getUserPlan(req.userId);
-  const totalRounds = PLANS[plan]?.surveyRounds ?? 1;
+  const totalRounds = await resolveTotalRounds(project, req.userId, { lock: true });
   const currentRound = parsed.data.round;
 
-  // 1. Simpan/update jawaban setiap pertanyaan
-  for (const item of parsed.data.answers) {
-    const strAnswer = Array.isArray(item.value) ? item.value.join(', ') : String(item.value);
-    const existing = await prisma.discoveryAnswer.findFirst({
-      where: { questionId: item.questionId },
-    });
-    if (existing) {
-      await prisma.discoveryAnswer.update({
-        where: { id: existing.id },
-        data: { answer: strAnswer, value: item.value as any },
-      });
-    } else {
-      await prisma.discoveryAnswer.create({
-        data: {
-          questionId: item.questionId,
-          answer: strAnswer,
-          value: item.value as any,
-        },
-      });
-    }
-  }
+  // 1. Simpan semua jawaban dalam satu transaksi (atomik, upsert per pertanyaan)
+  await saveRoundAnswers(project.id, currentRound, parsed.data.answers);
 
   // 2. Jika masih ada putaran berikutnya: generate pertanyaan round berikutnya secara async
   if (currentRound < totalRounds) {
@@ -252,13 +210,9 @@ surveyRouter.post('/api/projects/:id/survey/submit', requireUser, async (req: Au
       await prisma.discoveryQuestion.deleteMany({ where: { id: { in: qIds } } });
     }
 
-    if (await hasActiveJob(project.id, 'survey_round')) {
-      return res.json({ done: false, nextRound, totalRounds, status: 'generating' });
-    }
-
     const projectId = project.id;
     try {
-      await enqueueAiJob({ projectId, type: 'survey_round', userId: req.userId, payload: { round: nextRound, totalRounds } });
+      await enqueueAiJobOnce({ projectId, type: 'survey_round', userId: req.userId, payload: { round: nextRound, totalRounds } });
 
       return res.json({ done: false, nextRound, totalRounds, status: 'generating' });
     } catch (err) {
@@ -268,14 +222,10 @@ surveyRouter.post('/api/projects/:id/survey/submit', requireUser, async (req: Au
     }
   }
 
-  // 3. Putaran terakhir telah selesai -> Susun Ringkasan Produk Terstruktur (async)
-  if (await hasActiveJob(project.id, 'survey_summary')) {
-    return res.json({ done: true, totalRounds, status: 'generating' });
-  }
-
+  // 3. Putaran terakhir telah selesai -> Susun Ringkasan Produk Terstruktur (async, satu job aktif)
   const projectId = project.id;
   try {
-    await enqueueAiJob({ projectId, type: 'survey_summary', userId: req.userId });
+    await enqueueAiJobOnce({ projectId, type: 'survey_summary', userId: req.userId });
 
     return res.json({ done: true, totalRounds, status: 'generating' });
   } catch (err) {
