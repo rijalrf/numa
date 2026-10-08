@@ -1,6 +1,6 @@
 # numa-cli
 
-CLI agent loop untuk autonomous AI coding agent. Execute tasks via bounded context isolation. Universal PAT support — satu token bisa akses multiple projects.
+CLI agent loop untuk autonomous AI coding agent. Execute tasks via bounded context isolation. Login lewat browser — satu login bisa akses multiple projects.
 
 ## Installation
 
@@ -11,22 +11,21 @@ npm install -g numa-cli
 Atau jalankan langsung tanpa instalasi:
 
 ```bash
-npx numa-cli@latest login
+npx numa-cli@latest switch <project-id>   # login lewat browser otomatis di pemakaian pertama
 ```
 
 ## Commands
 
-### `login [token]`
-Login dengan Personal Access Token (PAT) yang dibuat di halaman profil web. Token berlaku 90 hari secara default.
+### Login (otomatis, tanpa perintah `login`)
+Tidak ada perintah `numa login` dan tidak ada token yang disalin. Di pemakaian pertama, perintah apa pun yang butuh sesi menampilkan alamat dan kode persetujuan, membuka browser, lalu menunggu Anda menekan **Setujui** di web. Token berlingkup semua project (90 hari) tersimpan otomatis di `~/.numa/config.json`.
 
-**Cara yang dianjurkan** (token tidak masuk riwayat shell):
 ```bash
-numa login --api-url https://numa.opendv.xyz   # token diminta lewat prompt tersembunyi
-# atau non-interaktif (CI):
-NUMA_TOKEN=... numa login --api-url https://numa.opendv.xyz
+numa --api-url https://numa.opendv.xyz switch <project-id>   # --api-url disimpan untuk perintah berikutnya
 ```
 
-Memberikan token sebagai argumen (`numa login <token>`) masih berjalan tetapi tampil peringatan karena terekam di riwayat shell.
+- Sesi tanpa TTY (mis. AI agent): CLI menunggu ~90 detik lalu keluar kode 2; setelah Anda menyetujui, jalankan ulang perintah yang sama.
+- CI / tanpa browser: set `NUMA_TOKEN` dengan PAT dari halaman profil web.
+- Token kedaluwarsa atau dicabut (HTTP 401) dihapus lokal; perintah berikutnya meminta login lagi. `numa logout` menghapus sesi.
 
 Konfigurasi berlapis: env (`NUMA_TOKEN`, `NUMA_API_URL`, `NUMA_PROJECT_ID`) > `.numa/workspace.json` > `~/.numa/config.json`.
 
@@ -91,7 +90,7 @@ numa context
 ```
 
 ### `done [id]`
-Jalankan runtime scope guard lalu tandai task selesai. Trigger checkpoint gate jika layer selesai.
+Jalankan runtime scope guard lalu tandai task selesai. Mencetak info netral bila layer selesai (mode eksekusi di Master Prompt menentukan berhenti atau lanjut).
 
 Guard menilai file yang berubah **sejak `numa start`**: file `forbidden` memblokir, file di luar lingkup hanya diperingatkan. `validation_commands` dijalankan dengan kebijakan keamanan (pipe, `;`, backtick, `$(...)`, redirect ditolak; program di luar allowlist butuh konfirmasi atau `--allow-unlisted`). `--force` melewati guard tetapi tercatat di server.
 
@@ -99,19 +98,18 @@ Guard menilai file yang berubah **sejak `numa start`**: file `forbidden` memblok
 ```
 Task abc-123 -> DONE
 
-!!! CHECKPOINT PENDING !!!
-Layer FRONTEND selesai. Berhenti dan minta approval user sebelum lanjut ke layer berikutnya.
+Layer FRONTEND selesai (tidak ada task tersisa di layer ini).
+-> Ikuti mode eksekusi di Master Prompt: konfirmasi per layer = berhenti dan minta konfirmasi user; otomatis penuh = lanjut dengan: numa next
 ```
 
-**Jika tidak ada checkpoint:**
+**Jika layer belum selesai:**
 ```
 -> Lanjut: numa next
 ```
 
-### `retry [id]`, `block [id] --reason <teks>`, `checkpoint`
+### `retry [id]`, `block [id] --reason <teks>`
 - `retry`: kembalikan task BLOCKED/IN_PROGRESS ke TODO.
 - `block`: tandai task BLOCKED dengan alasan lalu berhenti dan lapor ke user.
-- `checkpoint`: tampilkan checkpoint yang menunggu approval user (approval hanya lewat web).
 
 ### `init [--update] [--target agents|claude|all]`
 Pasang skill pack dan kontrak arsitektur ke workspace, tulis `.numa/workspace.json` dan `.numa/skills.version`. Gunakan `--update` setelah memperbarui CLI.
@@ -150,21 +148,21 @@ Setiap task punya **bounded context** yang ketat:
 
 Ini mencegah AI agent merusak file yang bukan tugasnya!
 
-## Checkpoint Gates
+## Mode Eksekusi
 
-Sistem auto-trigger checkpoint saat layer selesai:
-- DATABASE -> BACKEND -> FRONTEND -> INTEGRATION
-- Setiap checkpoint butuh **user approval** via web UI sebelum lanjut
+Dipilih user di dialog Master Prompt (web), bukan lewat CLI:
+- **Dengan konfirmasi per layer** (default): agent mengerjakan satu layer (BOOTSTRAP, DATABASE, BACKEND, FRONTEND, INTEGRATION) sampai selesai, berhenti, menampilkan ringkasan, dan meminta konfirmasi di percakapan sebelum lanjut.
+- **Otomatis penuh**: agent menjalankan loop sampai semua task DONE tanpa konfirmasi, kecuali macet (`numa block`).
 
-Plus: **APPS_READY_FOR_USE** checkpoint setelah FRONTEND selesai untuk verifikasi aplikasi jalan lokal di `http://localhost:$PREVIEW_PORT` (default 9999, dapat diubah lewat env `PREVIEW_PORT` di server).
+Aplikasi hasil generate diverifikasi lokal di `http://localhost:$PREVIEW_PORT` (default 9999, dapat diubah lewat env `PREVIEW_PORT` di server).
 
 ## Usage Pattern
 
 Loop eksekusi standar:
 
 ```bash
-# 1. Login (sekali saja)
-numa login numa_your_token_here
+# 1. Pilih project (login lewat browser otomatis di pemakaian pertama)
+numa --api-url https://numa.opendv.xyz switch <project-id>
 
 # 2. Loop setiap task
 numa next      # Ambil task berikutnya

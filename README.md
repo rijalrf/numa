@@ -40,8 +40,9 @@ Pipeline: **Numa Brief** (Chat & Survey) -> **Numa Blueprint** (Tech Stack & PRD
 
 - **Master Prompt** (`/api/projects/:id/master-prompt`) — template prompt + instruksi setup yang disalin ke AI coding agent user.
 - **Skill pack** — `numa init` memasang 7 skill bundled (`numa-workflow`, `numa-incremental`, `numa-tdd`, `numa-api-design`, `numa-security`, `numa-production`, `numa-frontend`) ke `.agents/skills/` (salinan di `.claude/skills/`) plus kontrak arsitektur project (`numa-architecture`).
-- **CLI `numa`** — loop eksekusi task di terminal: `login`, `switch`, `whoami`, `next`, `start`, `context`, `done` (dengan guard verifikasi file + `validation_commands`, flag `--force`/`--dir`), `prd`, `status`, `init`, `sync`, `logout`. Tanpa mock fallback — error AI selalu eksplisit.
-- **Checkpoint gate** — saat layer selesai, agent berhenti dan meminta approval user (`LAYER_TRANSITION`, `PRD_APPROVAL`, `ROADMAP_APPROVAL`, `APPS_READY_FOR_USE`).
+- **CLI `numa`** — loop eksekusi task di terminal: `switch`, `whoami`, `next`, `start`, `context`, `done` (dengan guard verifikasi file + `validation_commands`, flag `--force`/`--dir`), `prd`, `status`, `init`, `sync`, `logout`. Tanpa mock fallback — error AI selalu eksplisit.
+- **Mode eksekusi agent** — di dialog Master Prompt pilih "dengan konfirmasi per layer" (default: agent berhenti di akhir tiap layer dan meminta konfirmasi di percakapan) atau "otomatis penuh". Tidak ada persetujuan di web.
+- **Login CLI lewat browser** — CLI menampilkan alamat dan kode, user menyetujui di web, token semua project diterima otomatis. Tanpa menyalin token.
 - **Repo summary** — `numa sync` mengirim file tree + manifest workspace ke server agar konteks agent selalu relevan.
 
 ### 5. Lain-lain
@@ -110,7 +111,7 @@ npx vite --port 3455
 
 ```bash
 # Terminal 3 — coba CLI
-numa login numa_demo_seed_token_replace_in_app
+numa --api-url http://localhost:6655 switch <project-id>   # login lewat browser otomatis di pemakaian pertama
 numa next
 numa start
 numa context
@@ -130,13 +131,13 @@ Tahap yang sudah dilewati terkunci read-only (HTTP 403 via `isStageLocked`). Tah
 | 3 | Numa Blueprint | `techstack` | `/projects/:id/techstack` | Golden Stack (default, langsung lanjut) atau pilih manual. |
 | 4 | Numa Blueprint | `prd` | `/projects/:id/prd` | AI generate PRD/BRD terstruktur beserta journey pengguna. |
 | 5 | Numa Forge | `board` | `/projects/:id/board` | Atomic tasks di kanban + roadmap DAG. |
-| 6 | Numa Agent | `guide` | - | Master Prompt + PAT token. |
-| 7 | Numa Agent | `done` | - | AI coding agent eksekusi via CLI; checkpoint gate antar layer. |
+| 6 | Numa Agent | - | dialog di Board | Master Prompt dengan pilihan mode eksekusi (konfirmasi per layer / otomatis penuh). |
+| 7 | Numa Agent | - | - | AI coding agent eksekusi via CLI; login CLI lewat browser. |
 
 Alur eksekusi agent:
 
 ```
-npx numa login            # token diminta lewat prompt tersembunyi
+npx numa switch <project-id>   # login lewat browser otomatis di pemakaian pertama
 npx numa init            # pasang skill pack + kontrak arsitektur
 npx numa next
 npx numa start
@@ -204,11 +205,11 @@ CLI dipublish ke npm registry:
 
 ```bash
 npm install -g numa-cli
-numa login <token PAT dari web UI> --api-url https://numa.opendv.xyz
+numa --api-url https://numa.opendv.xyz switch <project-id>   # login lewat browser sekali
 numa next && numa start && numa context && numa done
 ```
 
-URL API tersimpan di `~/.numa/config.json` saat login, jadi perintah berikutnya tidak perlu flag lagi. Alternatif: set env `NUMA_API_URL` atau edit `~/.numa/config.json` manual.
+URL API tersimpan di `~/.numa/config.json` lewat opsi `--api-url`, jadi perintah berikutnya tidak perlu flag lagi. Alternatif: set env `NUMA_API_URL` atau edit `~/.numa/config.json` manual.
 
 ## Endpoints API
 
@@ -254,15 +255,16 @@ URL API tersimpan di `~/.numa/config.json` saat login, jadi perintah berikutnya 
 | GET | `/api/projects/:id/cycles/:cycleId` | user | detail siklus |
 | POST | `/api/projects/:id/cycles/:cycleId/generate` | user | generate task siklus (split a/b) |
 
-### Token, Checkpoint & Observabilitas
+### Token, Login CLI & Observabilitas
 
 | Method | Path | Auth | Fungsi |
 |---|---|---|---|
 | POST | `/api/projects/:id/agent-tokens` | user | generate PAT |
 | GET | `/api/projects/:id/agent-tokens`, `/api/agent-tokens` | user | list token |
 | DELETE | `/api/agent-tokens/:tokenId` | user | revoke token |
-| GET/POST | `/api/projects/:id/checkpoints` | user | daftar & buat checkpoint |
-| POST | `/api/checkpoints/:id/approve` | user | approve/reject checkpoint |
+| POST | `/api/cli-auth/start`, `/api/cli-auth/poll` | - | login CLI lewat browser (device code); poll mengembalikan token sekali |
+| GET/POST | `/api/cli-auth/request`, `/api/cli-auth/approve`, `/api/cli-auth/deny` | user | halaman persetujuan `/cli-login` |
+| GET | `/api/projects/:id/master-prompt?mode=confirm\|auto` | user | Master Prompt sesuai mode eksekusi |
 | GET | `/api/ai-metrics`, `/api/projects/:id/ai-metrics` | user | metrik pemanggilan AI |
 | POST | `/api/billing/checkout`, `/api/billing/webhook` | user/- | pembayaran langganan |
 
@@ -274,7 +276,7 @@ URL API tersimpan di `~/.numa/config.json` saat login, jadi perintah berikutnya 
 | GET | `/api/agent/scopes` | daftar project yang diakses token |
 | GET | `/api/agent/tasks/next` | task berikutnya |
 | POST | `/api/agent/tasks/:id/start` | tandai IN_PROGRESS |
-| POST | `/api/agent/tasks/:id/complete` | DONE/REVIEW + auto checkpoint |
+| POST | `/api/agent/tasks/:id/complete` | DONE; membalas `layerCompleted` dan `allTasksDone` |
 | POST | `/api/agent/tasks/:id/fail` | laporkan kegagalan task |
 | GET | `/api/agent/tasks/:id/context` | Markdown bounded context |
 | GET | `/api/agent/prd` (`/brd`) | PRD project |

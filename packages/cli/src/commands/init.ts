@@ -1,7 +1,8 @@
 // Logic command `init` — pasang skill pack numa + kontrak arsitektur ke workspace.
 import fs from 'node:fs';
 import path from 'node:path';
-import { loadConfig, findWorkspaceRoot, saveWorkspace } from '../config.js';
+import { findWorkspaceRoot, saveWorkspace } from '../config.js';
+import { ensureLoggedIn } from '../session.js';
 import { api, ApiError } from '../api-client.js';
 import { CLI_VERSION } from '../version.js';
 import { installSkillPack, isSkillTarget, type SkillTarget } from '../skill-pack.js';
@@ -32,7 +33,6 @@ export function readSkillsVersion(dir: string): string | null {
 
 export async function runInit(opts: InitOptions): Promise<void> {
   try {
-    const cfg = loadConfig();
     const targetDir = path.resolve(opts.dir || process.cwd());
     const targetRaw = opts.target ?? 'all';
     if (!isSkillTarget(targetRaw)) {
@@ -41,10 +41,8 @@ export async function runInit(opts: InitOptions): Promise<void> {
     }
     const target: SkillTarget = targetRaw;
 
-    if (!cfg.token) {
-      console.error('Belum login. Jalankan: numa login');
-      process.exit(1);
-    }
+    // Login otomatis lewat browser bila belum login (kontrak arsitektur diambil dari server).
+    const cfg = await ensureLoggedIn();
 
     const installed = readSkillsVersion(targetDir);
     if (installed === CLI_VERSION && !opts.update && !opts.force) {

@@ -58,8 +58,8 @@ Tahap yang sudah dilewati terkunci read-only (HTTP 403 via `isStageLocked`). Tah
 | 3 | Numa Blueprint | `techstack` | `/projects/:id/techstack` | Golden Stack (default, langsung lanjut) atau pilih manual |
 | 4 | Numa Blueprint | `prd` | `/projects/:id/prd` | AI generate PRD/BRD terstruktur beserta journey pengguna |
 | 5 | Numa Forge | `board` | `/projects/:id/board` | Atomic tasks di kanban + roadmap DAG |
-| 6 | Numa Agent | `guide` | - | Master Prompt + PAT token |
-| 7 | Numa Agent | `done` | - | AI coding agent eksekusi via CLI; checkpoint gate antar layer |
+| 6 | Numa Agent | - | dialog di Board | Master Prompt dengan pilihan mode eksekusi (konfirmasi per layer / otomatis penuh) |
+| 7 | Numa Agent | - | - | AI coding agent eksekusi via CLI; login CLI lewat browser |
 
 ## 6. Kebutuhan Fungsional
 
@@ -97,10 +97,11 @@ Tahap yang sudah dilewati terkunci read-only (HTTP 403 via `isStageLocked`). Tah
 
 | ID | Kebutuhan | Prioritas |
 |----|-----------|-----------|
-| FR-5.1 | Master Prompt (`/api/projects/:id/master-prompt`): template prompt + instruksi setup, disalin ke AI coding agent user | Wajib |
+| FR-5.1 | Master Prompt (`GET /api/projects/:id/master-prompt?mode=confirm\|auto`): satu sumber untuk dialog web; memuat setup CLI, skill pack, kontrak arsitektur, checklist kualitas, dan aturan mode eksekusi; tanpa token | Wajib |
 | FR-5.2 | Skill pack: `numa init` memasang 7 skill bundled (`numa-workflow`, `numa-incremental`, `numa-tdd`, `numa-api-design`, `numa-security`, `numa-production`, `numa-frontend`) ke `.agents/skills/` (salinan di `.claude/skills/`) plus kontrak arsitektur project | Wajib |
-| FR-5.3 | CLI `numa` — loop eksekusi task: `login`, `switch`, `whoami`, `next`, `start`, `context`, `done` (guard verifikasi file + `validation_commands`, flag `--force`/`--dir`), `prd`, `status`, `init`, `sync`, `logout`. **Tanpa mock fallback** — error AI selalu eksplisit (HTTP 502 + pesan) | Wajib |
-| FR-5.4 | Checkpoint gate: saat layer selesai, agent berhenti dan meminta approval user (`LAYER_TRANSITION`, `PRD_APPROVAL`, `ROADMAP_APPROVAL`, `APPS_READY_FOR_USE`) | Wajib |
+| FR-5.3 | CLI `numa` — loop eksekusi task: `switch`, `whoami`, `next`, `start`, `context`, `done` (guard verifikasi file + `validation_commands`, flag `--force`/`--dir`), `prd`, `status`, `init`, `sync`, `logout`. **Tanpa mock fallback** — error AI selalu eksplisit (HTTP 502 + pesan) | Wajib |
+| FR-5.4 | Mode eksekusi agent: "dengan konfirmasi per layer" (default; agent berhenti di akhir tiap layer dan meminta konfirmasi user di percakapan) atau "otomatis penuh". `numa done` hanya memberi info netral `layerCompleted` / `allTasksDone`; tidak ada gate atau persetujuan di web | Wajib |
+| FR-5.6 | Login CLI lewat browser (device code): CLI menampilkan alamat dan kode, user menyetujui di web, token semua project diterima otomatis tanpa disalin; `NUMA_TOKEN` untuk CI | Wajib |
 | FR-5.5 | Repo summary: `numa sync` mengirim file tree + manifest workspace ke server agar konteks agent selalu relevan | Wajib |
 
 ### 6.6 Platform & Lain-lain
@@ -149,8 +150,8 @@ Tahap yang sudah dilewati terkunci read-only (HTTP 403 via `isStageLocked`). Tah
 | `RoadmapPhase`, `RoadmapFeature`, `RoadmapDependency` | Graph rencana pengembangan |
 | `Task`, `TaskDependency` | Atomic task: bounded context JSON, acceptance criteria, layer, relasi DAG |
 | `TreeNode`, `BusinessFlow` | Legacy, tidak lagi digenerate; dibuang di akhir rencana journey |
-| `Checkpoint` | Gate review antar layer arsitektur (human-in-the-loop) |
 | `AgentToken`, `AgentTokenScope` | PAT token CLI (hash sha256, multi-project scope) |
+| `CliAuthRequest` | Permintaan login CLI lewat browser (device code, TTL 10 menit) |
 | `AgentSession` | Tracking sesi kerja agent |
 | `AiCallLog` | Observabilitas: model, tokens, latensi, retry, success |
 
@@ -185,7 +186,7 @@ Detail lengkap di [README.md](README.md) bagian Endpoints API. Kelompok utama:
 | Publik & Auth | `/health`, `/api/tools`, `/api/auth/*`, `/api/user/plan`, `/api/user/profile` | - / user |
 | Project & Wizard | CRUD `/api/projects`, `wizard-step`, `export.zip`, chat sessions, survey, techstack, prd, roadmap, tasks, master-prompt | user |
 | Change Cycle | `change-request`, `cycles`, `cycles/:id/generate` | user |
-| Token & Checkpoint | `agent-tokens`, `checkpoints`, `ai-metrics`, `billing/*` | user / - |
+| Token & Login CLI | `agent-tokens`, `cli-auth/*`, `ai-metrics`, `billing/*` | user / - |
 | Agent (PAT) | `whoami`, `scopes`, `tasks/next`, `start`, `complete`, `fail`, `context`, `prd`, `architecture-contract`, `repo-summary` | PAT |
 
 ## 13. Di Luar Cakupan (Saat Ini)

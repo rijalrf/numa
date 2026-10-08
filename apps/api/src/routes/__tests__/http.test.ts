@@ -48,6 +48,16 @@ test('POST /api/chat/finalize tanpa sesi dibalas 401, endpoint chat lama sudah d
   }
 });
 
+test('login CLI: request, approve, deny butuh sesi; poll memvalidasi body; endpoint checkpoint sudah tidak ada', async () => {
+  assert.equal((await request(app).get('/api/cli-auth/request?code=ABCD-EF23')).status, 401);
+  for (const path of ['/api/cli-auth/approve', '/api/cli-auth/deny']) {
+    assert.equal((await request(app).post(path).send({ code: 'ABCD-EF23' })).status, 401, path);
+  }
+  assert.equal((await request(app).post('/api/cli-auth/poll').send({})).status, 400);
+  assert.equal((await request(app).get('/api/agent/checkpoints')).status, 404);
+  assert.equal((await request(app).post('/api/checkpoints/x/approve')).status, 404);
+});
+
 test('endpoint admin usage tanpa sesi dibalas 401 (bukan 404, agar tidak membuka info)', async () => {
   for (const name of ['summary', 'timeseries', 'by-agent', 'by-user', 'by-plan']) {
     const res = await request(app).get(`/api/admin/usage/${name}`);

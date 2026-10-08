@@ -60,8 +60,8 @@ File: `packages/cli/package.json`
 File: `packages/cli/README.md`
 
 **Pastikan mencakup:**
-- [x] Installasi instruction (`npx numa login <token>`)
-- [x] Semua available commands (`login`, `switch`, `whoami`, `next`, `start`, `context`, `done`, `brd`, `logout`, `status`)
+- [x] Installasi instruction (`npx numa-cli@latest switch <project-id>`; login lewat browser otomatis)
+- [x] Semua available commands (`switch`, `whoami`, `next`, `start`, `context`, `done`, `prd`, `logout`, `status`)
 - [x] Contoh penggunaan
 - [x] Security notes (PAT hashing)
 - [x] License information

@@ -4,35 +4,19 @@ import { CreateTokenBodySchema } from '../lib/request-schemas.js';
 import { Router } from 'express';
 import { recordAudit } from '../lib/audit.js';
 import { projectWhere } from '../lib/access.js';
-import crypto from 'node:crypto';
 import { prisma } from '../lib/prisma.js';
+import { issueAgentToken } from '../lib/agent-token.js';
 import { requireUser, type AuthedRequest } from '../middleware/require-user.js';
 
 export const agentTokensRouter = Router();
 
-const DEFAULT_TOKEN_TTL_DAYS = 90;
-const MAX_TOKEN_TTL_DAYS = 365;
-
-/** Masa berlaku token dalam hari: default 90, dibatasi 1..365. */
-function resolveExpiry(body: unknown): Date {
-  const raw = Number((body as { expiresInDays?: unknown } | undefined)?.expiresInDays);
-  const days = Number.isFinite(raw) && raw >= 1 ? Math.min(Math.floor(raw), MAX_TOKEN_TTL_DAYS) : DEFAULT_TOKEN_TTL_DAYS;
-  return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-}
-
 agentTokensRouter.post('/api/agent-tokens', requireUser, async (req: AuthedRequest, res) => {
   const name = CreateTokenBodySchema.parse(req.body ?? {}).name || 'Token CLI';
-  const token = 'numa_' + crypto.randomBytes(24).toString('hex');
-  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-
-  const tokenRecord = await prisma.agentToken.create({
-    data: {
-      userId: req.userId,
-      name,
-      tokenHash,
-      allProjects: true,
-      expiresAt: resolveExpiry(req.body),
-    },
+  const { token, record: tokenRecord } = await issueAgentToken({
+    userId: req.userId,
+    name,
+    allProjects: true,
+    expiresInDays: (req.body as { expiresInDays?: unknown } | undefined)?.expiresInDays,
   });
 
   await recordAudit({
@@ -58,19 +42,12 @@ agentTokensRouter.post('/api/projects/:id/agent-tokens', requireUser, async (req
   });
   if (!project) return res.status(404).json({ error: 'Project tidak ditemukan.' });
 
-  const token = 'numa_' + crypto.randomBytes(24).toString('hex');
-  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-
-  const tokenRecord = await prisma.agentToken.create({
-    data: {
-      userId: req.userId,
-      name: CreateTokenBodySchema.parse(req.body ?? {}).name || 'Token CLI',
-      tokenHash,
-      expiresAt: resolveExpiry(req.body),
-      agentTokenScopes: {
-        create: { projectId: project.id },
-      },
-    },
+  const { token, record: tokenRecord } = await issueAgentToken({
+    userId: req.userId,
+    name: CreateTokenBodySchema.parse(req.body ?? {}).name || 'Token CLI',
+    allProjects: false,
+    projectId: project.id,
+    expiresInDays: (req.body as { expiresInDays?: unknown } | undefined)?.expiresInDays,
   });
 
   await recordAudit({

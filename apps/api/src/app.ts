@@ -26,11 +26,11 @@ import { roadmapRouter } from './routes/roadmap.js';
 import { userRouter } from './routes/user.js';
 import { tasksRouter } from './routes/tasks.js';
 import { cyclesRouter } from './routes/cycles.js';
-import { checkpointsRouter } from './routes/checkpoints.js';
 import { aiMetricsRouter } from './routes/ai-metrics.js';
 import { adminUsageRouter } from './routes/admin-usage.js';
 import { chatRouter } from './routes/chat.js';
 import { surveyRouter } from './routes/survey.js';
+import { cliAuthRouter } from './routes/cli-auth.js';
 import { techstackRouter } from './routes/techstack.js';
 import { flowRouter } from './routes/flow.js';
 import { billingRouter } from './routes/billing.js';
@@ -80,6 +80,15 @@ export function createApp() {
     message: { error: 'Terlalu banyak permintaan AI. Silakan tunggu beberapa saat.' },
   });
 
+  // Rate limiter untuk pembuatan kode login CLI dan percobaan persetujuan (kode pendek: cegah tebakan)
+  const cliAuthLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Terlalu banyak percobaan login CLI. Silakan tunggu beberapa saat.' },
+  });
+
   // Rate limiter untuk pembuatan token PAT (obs-3.1)
   const tokenRateLimiter = rateLimit({
     windowMs: 60 * 1000,
@@ -110,6 +119,7 @@ export function createApp() {
   // Terapkan rate limiters ke endpoint AI dan token
   app.use('/api', apiRateLimiter);
   app.use(['/api/projects/:id/survey/generate', '/api/projects/:id/survey/submit'], aiRateLimiter);
+  app.use(['/api/cli-auth/start', '/api/cli-auth/approve', '/api/cli-auth/deny', '/api/cli-auth/request'], cliAuthLimiter);
   app.use('/api/agent-tokens', tokenRateLimiter);
   app.use('/api/projects/:id/agent-tokens', tokenRateLimiter);
 
@@ -129,10 +139,10 @@ export function createApp() {
   app.use(userRouter);
   app.use(tasksRouter);
   app.use(cyclesRouter);
-  app.use(checkpointsRouter);
   app.use(aiMetricsRouter);
   app.use(adminUsageRouter);
   app.use(chatRouter);
+  app.use(cliAuthRouter);
   app.use(surveyRouter);
   app.use(techstackRouter);
   app.use(flowRouter);

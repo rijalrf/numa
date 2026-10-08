@@ -25,7 +25,7 @@ const steps = [
   {
     num: '05',
     title: 'Agent',
-    desc: 'Jalankan task dengan coding agent di komputermu. Tinjau hasilnya dan setujui checkpoint sebelum lanjut.',
+    desc: 'Jalankan task dengan coding agent di komputermu. Pilih mode: konfirmasi di setiap akhir layer, atau otomatis sampai semua task selesai.',
   },
 ];
 

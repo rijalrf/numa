@@ -16,6 +16,7 @@ const PrdPage = lazy(() => import('@/pages/projects/prd').then((m) => ({ default
 const BoardPage = lazy(() => import('@/pages/projects/board').then((m) => ({ default: m.BoardPage })));
 const SettingsPage = lazy(() => import('@/pages/projects/settings').then((m) => ({ default: m.SettingsPage })));
 const BillingPage = lazy(() => import('@/pages/settings/billing').then((m) => ({ default: m.BillingPage })));
+const CliLoginPage = lazy(() => import('@/pages/cli-login').then((m) => ({ default: m.CliLoginPage })));
 const AdminUsagePage = lazy(() => import('@/pages/admin/usage').then((m) => ({ default: m.AdminUsagePage })));
 import WizardLayout from '@/components/layout/wizard-layout';
 
@@ -23,8 +24,10 @@ import WizardLayout from '@/components/layout/wizard-layout';
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { data, isPending } = useSession();
+  const location = useLocation();
   if (isPending) return <div className="p-8 text-muted-foreground">Memuat...</div>;
-  if (!data?.user) return <Navigate to="/login" replace />;
+  // `next` mengembalikan user ke halaman tujuan (mis. persetujuan login CLI) setelah masuk.
+  if (!data?.user) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
   return <>{children}</>;
 }
 
@@ -95,6 +98,7 @@ export function App() {
         <Route path="/dashboard" element={<Navigate to="/chat" replace />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/cli-login" element={<CliLoginPage />} />
         <Route path="/orgs" element={<OrgsPage />} />
         <Route path="/settings/billing" element={<BillingPage />} />
         <Route

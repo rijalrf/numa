@@ -6,8 +6,8 @@ import { Command } from 'commander';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ApiError } from './api-client.js';
+import { updateGlobalConfig } from './config.js';
 import {
-  runLogin,
   runSwitch,
   runWhoami,
   runNext,
@@ -19,7 +19,7 @@ import {
 } from './commands/basic.js';
 import { runDone } from './commands/done.js';
 import { runInit } from './commands/init.js';
-import { runRetry, runBlock, runCheckpoint } from './commands/task-control.js';
+import { runRetry, runBlock } from './commands/task-control.js';
 import { CLI_VERSION } from './version.js';
 import { runSync } from './commands/sync.js';
 
@@ -32,14 +32,14 @@ const program = new Command();
 program
   .name('numa')
   .description('CLI agent loop untuk numa (AI Planner). Dipakai oleh AI coding agent.')
-  .version(CLI_VERSION);
+  .version(CLI_VERSION)
+  .option('--api-url <url>', 'URL server API numa; disimpan untuk perintah berikutnya (default: http://localhost:6655)');
 
-program
-  .command('login [token]')
-  .description('Simpan Personal Access Token (PAT) dan verifikasi ke server. Tanpa argumen: baca NUMA_TOKEN atau prompt tersembunyi.')
-  .option('--api-url <url>', 'URL server API numa (default: http://localhost:6655)')
-  .option('-u, --url <url>', 'Alias untuk --api-url')
-  .action(runLogin);
+// --api-url disimpan sebelum perintah apa pun berjalan, sehingga login otomatis memakai server yang benar.
+program.hook('preAction', (thisCommand) => {
+  const url = thisCommand.opts<{ apiUrl?: string }>().apiUrl;
+  if (url) updateGlobalConfig({ apiUrl: url.replace(/\/$/, '') });
+});
 
 program
   .command('switch [projectId]')
@@ -89,11 +89,6 @@ program
   .action(runBlock);
 
 program
-  .command('checkpoint')
-  .description('Tampilkan checkpoint yang menunggu approval user.')
-  .action(runCheckpoint);
-
-program
   .command('prd')
   .description('Tampilkan PRD project dalam format Markdown.')
   .action(runPrd);
@@ -128,9 +123,6 @@ program
 program.parseAsync(process.argv).catch((e) => {
   if (e instanceof ApiError) {
     console.error(`Error [${e.status}]: ${e.message}`);
-    if (e.status === 401) {
-      console.error('Token ditolak atau kedaluwarsa. Buat token baru di halaman profil, lalu jalankan: numa login');
-    }
   } else {
     console.error('Error:', e instanceof Error ? e.message : e);
   }

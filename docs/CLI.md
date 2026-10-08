@@ -32,16 +32,18 @@ Perintah dipasang secara global (`-g`), sehingga langsung tersedia di semua dire
 
 ## 3. Daftar Lengkap Perintah CLI
 
-### 1. `numa login [token]`
-- **Deskripsi**: Menyimpan Personal Access Token (PAT) dan menghubungkan CLI ke server API.
-- **Sumber token** (urutan): argumen `token` (deprecated, tampil peringatan karena terekam di riwayat shell), variabel `NUMA_TOKEN`, lalu prompt tersembunyi. Cara yang dianjurkan: jalankan `numa login` tanpa argumen.
-- **Opsi**: `--api-url <url>` (menentukan URL server target, mis. `https://numa.opendv.xyz`).
+### 1. Login otomatis (tidak ada perintah `numa login`)
+- **Deskripsi**: Login dilakukan lewat browser (device code) secara otomatis di pemakaian pertama. Perintah apa pun yang butuh sesi (mis. `numa switch`, `numa next`, `numa init`) yang menemukan CLI belum login menjalankan alur ini sekali, lalu melanjutkan. Tidak ada token yang disalin.
+- **Opsi global**: `--api-url <url>` (mis. `numa --api-url https://numa.opendv.xyz switch <project-id>`). URL disimpan di `~/.numa/config.json` untuk perintah berikutnya.
 - **Alur Eksekusi**:
-  1. Melakukan uji koneksi server ke endpoint `GET /health`.
-  2. Menyimpan nilai `token` dan `apiUrl` ke dalam file `~/.numa/config.json` (izin 0600).
-  3. Mengirim request ke `GET /api/agent/scopes` untuk membaca proyek yang dapat diakses token ini. Token yang ditolak (dicabut/kedaluwarsa) tidak disimpan.
-  4. Jika hanya ada satu proyek, otomatis menetapkan `projectId` aktif.
-- **Masa berlaku token**: token baru berlaku 90 hari (maks 365). Token kedaluwarsa ditolak server (HTTP 401); buat token baru di halaman profil.
+  1. CLI memanggil `POST /api/cli-auth/start` dan menerima `deviceCode` (hanya dipegang CLI), `userCode` (`XXXX-XXXX`), dan alamat persetujuan `/cli-login?code=...`.
+  2. CLI mencetak alamat dan kode, lalu mencoba membuka browser (nonaktifkan dengan `NUMA_NO_BROWSER=1`).
+  3. User membuka alamat itu (login ke web bila perlu), mencocokkan kode, lalu menekan **Setujui** (atau **Tolak**).
+  4. CLI melakukan polling `POST /api/cli-auth/poll` sampai disetujui. Token berlingkup **semua project** dibuat sekali saat polling pertama setelah persetujuan, berlaku 90 hari, lalu disimpan di `~/.numa/config.json` (izin 0600). Bila hanya ada satu proyek, otomatis menjadi proyek aktif.
+- **Sesi non-interaktif** (mis. dijalankan AI agent tanpa TTY): CLI menunggu maksimal ~90 detik (`NUMA_LOGIN_WAIT_SECONDS`), lalu keluar dengan kode 2 dan menyimpan permintaan di `~/.numa/pending-login.json`. Setelah user menyetujui, menjalankan ulang perintah yang sama melanjutkan permintaan itu tanpa meminta kode baru.
+- **Kedaluwarsa**: kode login berlaku 10 menit. Token yang kedaluwarsa atau dicabut (HTTP 401) dihapus dari konfigurasi lokal; perintah berikutnya otomatis meminta login lagi.
+- **CI / tanpa browser**: set `NUMA_TOKEN` dengan PAT yang dibuat di halaman profil web; login interaktif tidak dijalankan.
+- **Logout**: `numa logout` menghapus sesi lokal. Token bisa dicabut kapan saja di halaman profil.
 
 #### Konfigurasi berlapis
 Prioritas dari tertinggi: environment (`NUMA_TOKEN`, `NUMA_API_URL`, `NUMA_PROJECT_ID`), lalu `.numa/workspace.json` (`{projectId, apiUrl}`, dicari naik dari direktori kerja, aman di-commit karena tanpa token), lalu `~/.numa/config.json`. `numa init` dan `numa switch` menulis `workspace.json` sehingga satu mesin dapat mengerjakan beberapa project paralel tanpa saling menimpa.
@@ -49,7 +51,7 @@ Prioritas dari tertinggi: environment (`NUMA_TOKEN`, `NUMA_API_URL`, `NUMA_PROJE
 ---
 
 ### 2. `numa switch [projectId]`
-- **Deskripsi**: Berpindah konteks proyek aktif tanpa perlu login ulang. Akses diverifikasi dulu; project yang tidak boleh diakses tidak disimpan. Di dalam workspace Numa, `.numa/workspace.json` ikut diperbarui.
+- **Deskripsi**: Berpindah konteks proyek aktif tanpa perlu login ulang (login otomatis dijalankan bila belum login). Akses diverifikasi dulu; project yang tidak boleh diakses tidak disimpan. Di dalam workspace Numa, `.numa/workspace.json` ikut diperbarui.
 - **Argumen**: `projectId` (opsional).
 - **Alur Eksekusi**:
   1. Jika dipanggil tanpa argumen: menampilkan panduan cara penggunaan.
@@ -79,8 +81,7 @@ Prioritas dari tertinggi: environment (`NUMA_TOKEN`, `NUMA_API_URL`, `NUMA_PROJE
 - **Deskripsi**: Mengunci status task menjadi `IN_PROGRESS`.
 - **Argumen**: `id` (opsional, default memakai `activeTaskId` dari konfigurasi lokal).
 - **Alur Eksekusi**:
-  - Mengirim request ke `POST /api/agent/tasks/:id/start`. Server menolak (HTTP 409) bila ada checkpoint pemblokir yang belum disetujui user.
-  - Server memperbarui status task di database menjadi `IN_PROGRESS`.
+  - Mengirim request ke `POST /api/agent/tasks/:id/start`.   - Server memperbarui status task di database menjadi `IN_PROGRESS`.
   - CLI mencatat **baseline** ke `.numa/state.json`: SHA `HEAD` dan hash file yang sudah berubah sebelum task. Guard saat `done` hanya menilai perubahan sejak titik ini.
 - **Opsi**: `--dir <path>` (default: direktori saat ini).
 
@@ -109,7 +110,7 @@ Prioritas dari tertinggi: environment (`NUMA_TOKEN`, `NUMA_API_URL`, `NUMA_PROJE
   3. **File di luar lingkup**: file di luar `files_to_create` + `files_to_modify` hanya diperingatkan.
   4. **validation_commands**: dijalankan di workspace, tunduk pada kebijakan keamanan di bawah.
   5. Mengirim `POST /api/agent/tasks/:id/complete` beserta `guardReport` (file berubah, file di luar lingkup, hasil perintah, versi CLI). Server menyimpannya di `aiContext.completion`.
-  6. Bila layer selesai, server mengembalikan `checkpointPending: true`; AI agent wajib berhenti sampai user menyetujui di web.
+  6. Server membalas `layerCompleted` (task terakhir di layernya) dan `allTasksDone`. CLI mencetak info netral; berhenti atau lanjut ditentukan mode eksekusi di Master Prompt (konfirmasi per layer atau otomatis penuh). Tidak ada gate atau persetujuan di web.
 - **`--force`**: melewati guard, tetapi `forced: true` dicatat di server sebagai jejak audit.
 
 #### Kebijakan validation_commands
@@ -154,12 +155,7 @@ Perintah berasal dari data task hasil AI sehingga tidak dipercaya begitu saja:
 
 ---
 
-### 13. `numa checkpoint`
-- **Deskripsi**: Menampilkan checkpoint yang menunggu approval (`GET /api/agent/checkpoints`) dan menandai yang sedang memblokir agent. Approval hanya bisa dilakukan user lewat web (halaman Board).
-
----
-
-### 14. `numa init [--update] [--target agents|claude|all]`
+### 13. `numa init [--update] [--target agents|claude|all]`
 - **Deskripsi**: Memasang skill pack dan kontrak arsitektur ke workspace, menulis `.numa/workspace.json` dan `.numa/skills.version`.
 - **Lokasi pasang**: `.agents/skills/<skill>/SKILL.md` (sumber utama, netral agent) dan salinan `.claude/skills/<skill>/SKILL.md` (default `--target all`). Blok Numa ditulis ke `AGENTS.md`; `CLAUDE.md` dibuat berisi `@AGENTS.md` bila belum ada. Isi milik user tidak ditimpa.
 - **Skill (8)**: `numa-workflow`, `numa-incremental`, `numa-tdd`, `numa-api-design`, `numa-security`, `numa-production`, `numa-frontend`, `numa-architecture`.
@@ -176,4 +172,4 @@ AI Coding Agent mengeksekusi siklus 4 tahap secara berulang:
 2. `numa start` -> Mengunci task menjadi IN_PROGRESS.
 3. `numa context` -> Membaca batasan file dan kriteria keberhasilan.
 4. Tulis & uji kode secara lokal sesuai kriteria.
-5. `numa done` -> Menandai task selesai dan mengecek checkpoint gate.
+5. `numa done` -> Menandai task selesai; bila layer selesai, ikuti mode eksekusi di Master Prompt (konfirmasi per layer = berhenti dan tanya user).

@@ -1,6 +1,6 @@
 ---
 name: numa-workflow
-description: Alur kerja wajib agent Numa - loop CLI next/start/context/done, aturan guard dan --force, checkpoint, block/retry, dan tindakan bila macet.
+description: Alur kerja wajib agent Numa - loop CLI next/start/context/done, mode eksekusi (konfirmasi per layer atau otomatis penuh), aturan guard dan --force, block/retry, dan tindakan bila macet.
 ---
 
 # Alur Kerja Agent Numa
@@ -38,10 +38,12 @@ Jangan melompat urutan. Jangan mengerjakan dua task sekaligus. Jangan mengerjaka
 - Setelah user menyelesaikan masalah: `numa retry` mengembalikan task ke `TODO`, lalu ulangi dari `numa start`.
 - Jangan menebak kebutuhan, jangan menambah fitur di luar task, jangan diam-diam mengganti pendekatan.
 
-## 6. Checkpoint dan Transisi Layer
-- Setelah `numa done`, bila muncul `checkpointPending` atau pesan checkpoint: BERHENTI. Persetujuan hanya bisa diberikan user lewat web (halaman Board).
-- `numa checkpoint` menampilkan checkpoint yang menunggu. `numa start` ditolak (409) selama ada checkpoint pemblokir.
-- Jangan mencoba menyetujui checkpoint sendiri dan jangan menyentuh data checkpoint.
+## 6. Mode Eksekusi dan Akhir Layer
+Mode aktif ditentukan oleh Master Prompt yang diberikan user. Setelah `numa done`, CLI menampilkan `Layer X selesai` bila task tadi yang terakhir di layernya (BOOTSTRAP, DATABASE, BACKEND, FRONTEND, INTEGRATION).
+- **Dengan konfirmasi per layer** (default): kerjakan seluruh task satu layer tanpa berhenti. Saat layer selesai, BERHENTI, tampilkan ringkasan hasil layer (task selesai, berkas utama, hasil verifikasi), dan minta konfirmasi user di percakapan sebelum `numa next` untuk layer berikutnya. Jangan lanjut tanpa jawaban setuju.
+- **Otomatis penuh**: jangan meminta konfirmasi di akhir layer maupun per task. Lanjutkan `numa next` sampai semua task DONE; berhenti hanya bila macet (`numa block`) atau gagal tanpa jalan keluar. Laporkan ringkasan sekaligus di akhir.
+- Bila Master Prompt tidak menyebut mode, perlakukan sebagai "dengan konfirmasi per layer".
+- Tidak ada persetujuan di web: konfirmasi hanya terjadi di percakapan dengan user.
 
 ## 7. Kejujuran Laporan
 - Laporkan error apa adanya. Dilarang membuat mock fallback yang menyembunyikan kegagalan, dan dilarang mengklaim test lulus bila tidak dijalankan.
@@ -49,8 +51,8 @@ Jangan melompat urutan. Jangan mengerjakan dua task sekaligus. Jangan mengerjaka
 - Gunakan `--commit` bila user menginginkan conventional commit otomatis per task; jangan melakukan commit atau push di luar itu tanpa diminta.
 
 ## 8. Keamanan Operasional
-- Login dilakukan user. Jangan meminta, menampilkan, atau menyalin token PAT; jangan menulisnya ke berkas atau log.
-- Token hanya berlaku untuk project yang ditetapkan. Jangan mengakses project lain dan jangan mengubah `.numa/workspace.json` secara manual.
+- Login terjadi otomatis di pemakaian pertama lewat browser: CLI menampilkan alamat dan kode, dan USER menyetujuinya di browser. Jangan meminta, menampilkan, atau menyalin token; jangan menulisnya ke berkas atau log. Bila CLI berhenti menunggu persetujuan, minta user menyetujui lalu jalankan ulang perintah yang sama.
+- Kerjakan hanya project aktif (`numa switch <id>`). Jangan mengakses project lain dan jangan mengubah `.numa/workspace.json` secara manual.
 - Setelah semua task selesai, jalankan `numa sync` agar server mencatat ringkasan workspace untuk siklus perubahan berikutnya.
 
 ## 9. Checklist Sebelum `numa done`

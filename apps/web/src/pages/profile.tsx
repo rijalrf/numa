@@ -62,11 +62,6 @@ export function ProfilePage() {
     } catch {
       // abaikan bila storage tidak tersedia
     }
-    const unshownDefaultPat = sessionStorage.getItem('numa_new_default_pat');
-    if (unshownDefaultPat) {
-      setNewToken(unshownDefaultPat);
-      sessionStorage.removeItem('numa_new_default_pat');
-    }
   }, []);
 
   const tokensQ = useQuery({
@@ -82,7 +77,6 @@ export function ProfilePage() {
       }),
     onSuccess: (res) => {
       setNewToken(res.token);
-      sessionStorage.setItem('numa_active_pat', res.token);
       setTokenName('Token Default');
       qc.invalidateQueries({ queryKey: ['agent-tokens'] });
     },
@@ -175,7 +169,7 @@ export function ProfilePage() {
             Token Akses Pribadi (PAT)
           </CardTitle>
           <CardDescription>
-            Token digunakan untuk autentikasi CLI di terminal (<code>numa login &lt;token&gt;</code>).
+            Login CLI biasa dilakukan lewat browser (otomatis di pemakaian pertama), jadi token ini hanya diperlukan untuk CI atau lingkungan tanpa browser (variabel <code>NUMA_TOKEN</code>).
             Satu token mewakili identitas Anda dan dapat mengakses semua proyek Anda. Token plaintext hanya ditampilkan sekali saat dibuat.
           </CardDescription>
         </CardHeader>
@@ -228,7 +222,7 @@ export function ProfilePage() {
             <h3 className="text-sm font-semibold text-foreground">Daftar Token Anda</h3>
             {tokensQ.isLoading && <p className="text-sm text-muted-foreground">Memuat token...</p>}
             {tokensQ.data?.tokens.length === 0 && (
-              <p className="text-sm text-muted-foreground">Belum ada token aktif. Buat token pertama Anda di atas.</p>
+              <p className="text-sm text-muted-foreground">Belum ada token aktif. Token baru dibuat otomatis saat CLI login lewat browser, atau buat sendiri di atas untuk CI.</p>
             )}
             {tokensQ.data?.tokens.map((t) => (
               <div key={t.id} className="border border-border rounded-md p-3.5 flex items-center justify-between gap-3 bg-card">

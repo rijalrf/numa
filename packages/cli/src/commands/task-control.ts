@@ -1,4 +1,4 @@
-// Kontrol task di luar alur normal: retry, block, dan daftar checkpoint.
+// Kontrol task di luar alur normal: retry dan block.
 import { api } from '../api-client.js';
 import { requireSession, resolveTaskId } from '../session.js';
 
@@ -28,27 +28,6 @@ export async function runBlock(id: string | undefined, opts: { reason?: string }
     console.log(`Task ${r.taskId} -> ${r.status}`);
     console.log(`Alasan : ${r.blockedReason}`);
     console.log('Berhenti dan laporkan hambatan ini ke user. Task dapat diulang dengan: numa retry');
-  } catch (e: any) {
-    console.error(`Error: ${e?.message || e}`);
-    process.exit(1);
-  }
-}
-
-export async function runCheckpoint(): Promise<void> {
-  const cfg = await requireSession();
-  try {
-    const r = await api.checkpoints(cfg);
-    if (r.checkpoints.length === 0) {
-      console.log('Tidak ada checkpoint yang menunggu approval.');
-      return;
-    }
-    console.log(`${r.checkpoints.length} checkpoint menunggu approval:\n`);
-    for (const c of r.checkpoints) {
-      const mark = c.id === r.blockingId ? ' [MEMBLOKIR AGENT]' : '';
-      console.log(`- ${c.type}${c.layer ? ` (layer ${c.layer})` : ''}${mark}`);
-      if (c.message) console.log(`  ${c.message}`);
-    }
-    console.log('\nApproval hanya bisa dilakukan user lewat web Numa (halaman Board). Berhenti sampai disetujui.');
   } catch (e: any) {
     console.error(`Error: ${e?.message || e}`);
     process.exit(1);

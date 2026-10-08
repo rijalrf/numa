@@ -84,12 +84,11 @@ async function testCliE2E() {
 
     console.log(`   Token dibuat untuk project: ${project.name} (${project.id})`);
 
-    // 4. Uji login dengan PAT token
-    console.log('4. Uji "numa login <token>"...');
-    const loginOut = runCli(['login', testTokenPlain, '--api-url', API_URL]);
-    assert(loginOut.includes('Login berhasil!'), 'Login harus berhasil');
-    assert(loginOut.includes(project.name), 'Nama project harus terdaftar');
-    console.log('   Login berhasil OK');
+    // 4. Simulasikan hasil login lewat browser: konfigurasi berisi token (alur device code diuji di tes terpisah)
+    console.log('4. Menyiapkan sesi login (token tersimpan di konfigurasi CLI)...');
+    fs.mkdirSync(path.dirname(CONFIG_FILE), { recursive: true });
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify({ apiUrl: API_URL, token: testTokenPlain, projectId: project.id }, null, 2));
+    console.log('   Sesi login siap OK');
 
     // 5. Uji whoami
     console.log('5. Uji "numa whoami"...');

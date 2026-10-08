@@ -19,8 +19,8 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 | 3 | Numa Blueprint | `techstack` | `/projects/:id/techstack` | Rekomendasi AI (default) atau pilih Golden Stack manual. Rekomendasi di-prefetch begitu ringkasan survey selesai (bukan paket Free); hasil beserta alasannya ditampilkan untuk dikonfirmasi user sebelum disimpan dan lanjut ke PRD. |
 | 4 | Numa Blueprint | `prd` | `/projects/:id/prd` | AI generate PRD terstruktur (functional requirements, product rules, constraints, edge case). Generate lewat antrean job `prd_generate` (teks tersusun terbaca bertahap lewat polling 1,5 dtk); setelah PRD tersimpan, spec (journey utama dan gagal, entitas, endpoint) disusun di background oleh job `prd_spec` dan menjadi skenario E2E task. Pembuatan task menunggu job spec bila masih berjalan. |
 | 5 | Numa Forge | `board` | `/projects/:id/board` | AI generate atomic tasks dengan bounded context. Kanban board. Job `tasks_generate`: spec PRD, roadmap (bila belum ada), task per fase secara paralel, quality gate, simpan; langkah berjalan terbaca lewat polling dan ditampilkan di Board. Audit keamanan AI berjalan di background (`security_audit`) dan hanya menambah temuan ke laporan validasi. |
-| 6 | Numa Agent | `guide` | `/projects/:id/guide` | Generate Master Prompt + PAT token. User copy ke AI coding agent. |
-| 7 | Numa Agent | `done` | - | AI coding agent eksekusi via CLI `numa next/start/context/done`. |
+| 6 | Numa Agent | - | dialog Master Prompt di Board | Tidak ada halaman tersendiri dan `wizardStep` tidak pernah menjadi `guide`/`done` (nilai itu hanya sisa data lama di `STAGE_ORDER` dan default skema). User memilih mode eksekusi (dengan konfirmasi per layer, default; atau otomatis penuh) lalu menyalin Master Prompt dari `GET /api/projects/:id/master-prompt?mode=`. Prompt tidak memuat token. |
+| 7 | Numa Agent | - | - | AI coding agent eksekusi via CLI `numa next/start/context/done`. Login CLI otomatis lewat browser (device code) di pemakaian pertama. Approval hanya di percakapan dengan agent; tidak ada gate atau persetujuan di web. |
 
 ## Arsitektur AI Engine (`apps/api/src/lib/ai/`)
 
@@ -81,8 +81,8 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 | `RoadmapPhase`, `RoadmapFeature`, `RoadmapDependency` | Graph rencana pengembangan. |
 | `Task`, `TaskDependency` | Atomic task: bounded context JSON, acceptance criteria, layer, relasi DAG. |
 | `TreeNode`, `BusinessFlow` | Legacy: tidak lagi digenerate di wizard (tree dihapus, flow hanya via API backend). Tabel dibuang di langkah akhir `docs/JOURNEY_MIGRATION_PLAN.md`. |
-| `Checkpoint` | Gate review antar layer arsitektur (human-in-the-loop). |
-| `AgentToken`, `AgentTokenScope` | PAT token CLI (hash sha256, multi-project scope). |
+| `AgentToken`, `AgentTokenScope` | PAT token CLI (hash sha256, multi-project scope). Dibuat otomatis (semua project, 90 hari) saat CLI login lewat browser, atau manual di halaman profil untuk CI/headless. |
+| `CliAuthRequest` | Permintaan login CLI lewat browser (device code): hash deviceCode, userCode `XXXX-XXXX`, status pending/approved/denied/consumed, TTL 10 menit. Token dibuat tepat sekali saat CLI mengambil hasil persetujuan. |
 | `AgentSession` | Tracking sesi kerja agent. |
 | `AiCallLog` | Observabilitas: model, tokens, latensi, retry, success; `userId`/`orgId` untuk budget per tenant. |
 | `Organization`, `Membership` | Tenant dan peran (viewer < member < admin < owner). `Project.orgId` null = project pribadi. |
@@ -127,7 +127,9 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 - **Bahasa**: semua string UI, komentar publik, komunikasi ke user dalam **Bahasa Indonesia**.
 - **Tanpa emoji** di UI/kode/komunikasi. Pakai `lucide-react` icons.
 - **Tanpa mock fallback** di CLI/API. Error AI harus eksplisit (HTTP 502 + pesan).
-- **PAT**: disimpan sebagai `sha256` di DB. Plaintext dikembalikan SEKALI saat generate.
+- **PAT**: disimpan sebagai `sha256` di DB. Plaintext dikembalikan SEKALI (saat generate di profil, atau saat CLI mengambil hasil persetujuan login). Master Prompt dan dialog web tidak pernah memuat token.
+- **Login CLI**: tanpa `numa login` dan tanpa menyalin token. `lib/cli-auth.ts` + `routes/cli-auth.ts`: CLI `POST /api/cli-auth/start` -> user membuka `/cli-login?code=...` di web dan menyetujui -> CLI `POST /api/cli-auth/poll` menerima token semua project. `NUMA_TOKEN` tetap didukung untuk CI. Endpoint start/approve/deny dibatasi rate limit.
+- **Master Prompt**: satu sumber di `lib/master-prompt.ts` (`buildMasterPrompt`, mode `confirm`|`auto`); dialog web hanya mengambil dari API dan mengingat pilihan mode per project di localStorage.
 - **Isolasi project**: `requireAgent` middleware attach `projectId`. Agent hanya akses task project sendiri.
 - **Akses publik**: tunnel Cloudflare di `https://numa.opendv.xyz` (ingress `/api/*` -> 6655, sisanya -> 3455).
 - **CLI remote**: `npm i -g numa-cli`, set `NUMA_API_URL`.
@@ -147,20 +149,19 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 
 | Command | Fungsi |
 |---------|--------|
-| `login [token]` | Simpan PAT (prompt tersembunyi / `NUMA_TOKEN`), tes koneksi, baca project scope. |
-| `switch [projectId]` | Ganti project aktif tanpa login ulang. |
+| (opsi global) `--api-url <url>` | Simpan URL server API untuk perintah berikutnya. Tidak ada perintah `login`: perintah apa pun yang butuh sesi menjalankan login lewat browser sekali (non-interaktif menunggu ~90 dtk lalu keluar kode 2; menjalankan ulang melanjutkan permintaan yang sama). |
+| `switch [projectId]` | Ganti project aktif; tanpa parameter menampilkan daftar. |
 | `whoami` | Identitas token dan project aktif. |
 | `next` | Ambil task berikutnya (atau resume `IN_PROGRESS`). |
 | `start [id]` | Tandai task `IN_PROGRESS`. |
 | `context [id]` | Cetak Markdown bounded context (file boleh/larang, AC, DoD). |
-| `done [id]` | Tandai selesai + jalankan guard verifikasi file + `validation_commands`. Flag: `--force`, `--dir`. |
+| `done [id]` | Tandai selesai + jalankan guard verifikasi file + `validation_commands`. Mencetak info netral "layer selesai" / "semua task selesai" (berhenti atau lanjut ditentukan mode di Master Prompt). Flag: `--force`, `--dir`. |
 | `prd` | Cetak PRD project dalam format Markdown. |
 | `status` | Diagnostik server, token, task aktif, project, versi skill pack. |
 | `init [--update] [--target]` | Pasang skill pack ke `.agents/skills/` (+ salinan `.claude/skills/`), blok Numa di `AGENTS.md`, `CLAUDE.md` berisi `@AGENTS.md`. Logika di `packages/cli/src/skill-pack.ts`; sumber skill di `packages/cli/skills/`. Ubah isi skill = naikkan versi CLI. |
 | `retry [id]` | Reset task BLOCKED/IN_PROGRESS ke TODO. |
 | `block [id] --reason` | Tandai task BLOCKED dengan alasan. |
-| `checkpoint` | Daftar checkpoint yang menunggu approval user. |
-| `logout` | Hapus token lokal. |
+| `logout` | Hapus sesi login lokal. |
 
 
 <!-- REFIRA:START -->

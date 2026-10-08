@@ -112,7 +112,6 @@ model Project {
   tasks            Task[]
   cycles           ProjectCycle[]
   agentTokenScopes AgentTokenScope[]
-  checkpoints      Checkpoint[]
   chatSession      ChatSession?
   treeNodes        TreeNode[]
   aiCallLogs       AiCallLog[]
@@ -347,21 +346,21 @@ model AgentSession {
   @@index([tokenId])
 }
 
-model Checkpoint {
-  id        String   @id @default(cuid())
-  projectId String
-  type      String   // LAYER_TRANSITION | PRD_APPROVAL | ROADMAP_APPROVAL | APPS_READY_FOR_USE
-  layer     String?
-  status    String   @default("PENDING") // PENDING | APPROVED | REJECTED
-  message   String?
-  metadata  Json     @default("{}")
-  resolvedAt DateTime?
-  createdAt DateTime @default(now())
+// Permintaan login CLI lewat browser (device code). deviceCode hanya dipegang CLI (disimpan sebagai hash);
+// userCode ditampilkan ke user di halaman persetujuan. Token dibuat saat CLI mengambil hasil persetujuan.
+model CliAuthRequest {
+  id             String    @id @default(cuid())
+  deviceCodeHash String    @unique // sha256(deviceCode)
+  userCode       String    @unique // mis. "ABCD-EF23"
+  clientName     String    @default("CLI")
+  status         String    @default("pending") // pending | approved | denied | consumed
+  userId         String?   // user yang menyetujui (tanpa FK; baris singkat umur)
+  expiresAt      DateTime
+  approvedAt     DateTime?
+  lastPolledAt   DateTime?
+  createdAt      DateTime  @default(now())
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@index([projectId])
-  @@index([status])
+  @@index([expiresAt])
 }
 
 // ============================================================

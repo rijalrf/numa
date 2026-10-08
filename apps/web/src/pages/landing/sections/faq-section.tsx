@@ -22,7 +22,7 @@ export function FaqSection() {
           </summary>
           <p>
             Numa menyiapkan konteks, PRD, roadmap, dan task. Coding agent di komputermu yang mengeksekusi task
-            melalui Numa CLI. Kamu tetap meninjau checkpoint dan hasil implementasinya.
+            melalui Numa CLI. Kamu tetap meninjau hasil implementasinya dan bisa memilih konfirmasi di setiap akhir layer.
           </p>
         </details>
         <details>

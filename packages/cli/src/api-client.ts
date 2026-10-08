@@ -1,5 +1,5 @@
 // HTTP client ke numa API (port 6655). TIDAK ADA mock fallback — semua error eksplisit.
-import type { Config } from './config.js';
+import { updateGlobalConfig, type Config } from './config.js';
 
 export class ApiError extends Error {
   status: number;
@@ -13,7 +13,7 @@ export class ApiError extends Error {
 
 async function request<T>(cfg: Config, path: string, init: RequestInit = {}): Promise<T> {
   if (!cfg.token) {
-    throw new ApiError('Belum login. Jalankan: numa login', 401);
+    throw new ApiError('Belum login.', 401);
   }
   const url = `${cfg.apiUrl.replace(/\/$/, '')}${path}`;
 
@@ -42,6 +42,11 @@ async function request<T>(cfg: Config, path: string, init: RequestInit = {}): Pr
     } catch {
       body = text;
     }
+  }
+  if (resp.status === 401 && !process.env.NUMA_TOKEN) {
+    // Token tersimpan kedaluwarsa atau dicabut: hapus agar perintah berikutnya otomatis login ulang.
+    updateGlobalConfig({ token: undefined });
+    throw new ApiError('Sesi login berakhir atau token dicabut. Jalankan ulang perintah; CLI akan meminta login lagi.', 401, body);
   }
   if (!resp.ok) {
     const rawMsg = (body as { error?: string })?.error ?? (typeof body === 'string' ? body : `HTTP ${resp.status}`);
@@ -90,11 +95,16 @@ export type CompleteMeta = {
   forced?: boolean;
   guardReport?: GuardReportPayload;
 };
-export type CheckpointsResp = {
-  checkpoints: Array<{ id: string; type: string; layer: string | null; message: string | null; createdAt: string }>;
-  blockingId: string | null;
+export type StatusResp = {
+  ok: true;
+  taskId: string;
+  status: string;
+  layer?: string;
+  /** true bila task ini yang terakhir di layernya (informasi netral; berhenti atau lanjut ditentukan mode di Master Prompt). */
+  layerCompleted?: boolean;
+  /** true bila seluruh task project sudah DONE (hanya diisi saat layer selesai). */
+  allTasksDone?: boolean;
 };
-export type StatusResp = { ok: true; taskId: string; status: string; checkpointPending?: boolean; layer?: string };
 export type PrdResponse = {
   prd?: { id: string; content: unknown; version: number; generatedAt: string };
   brd?: { id: string; content: unknown; version: number; generatedAt: string };
@@ -151,9 +161,6 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ reason }),
     });
-  },
-  checkpoints(cfg: Config) {
-    return request<CheckpointsResp>(cfg, '/api/agent/checkpoints');
   },
   prd(cfg: Config) {
     return request<PrdResponse>(cfg, '/api/agent/prd');

@@ -24,7 +24,6 @@ import {
   type TaskDetail,
 } from '@/components/kanban/task-detail-dialog';
 import { KanbanColumn } from '@/components/kanban/kanban-column';
-import { CheckpointBanner } from '@/components/kanban/checkpoint-banner';
 import { GenerationProgress } from '@/components/kanban/generation-progress';
 import { CycleBar } from '@/components/cycle/cycle-bar';
 import { CycleDetailDialog } from '@/components/cycle/cycle-detail-dialog';
@@ -200,14 +199,6 @@ export function BoardPage() {
 
   return (
     <div className="space-y-4">
-      {/* Checkpoint menunggu persetujuan; dimuat ulang setiap jumlah task DONE berubah */}
-      {projectId && (
-        <CheckpointBanner
-          projectId={projectId}
-          refreshKey={tasks.filter((t) => t.status === 'DONE').length}
-        />
-      )}
-
       {/* Job melewati batas tunggu klien tetapi masih bisa berjalan di server: bukan kegagalan */}
       {stillProcessing && !error && (
         <AlertBanner variant="info" className="gap-3 p-3">

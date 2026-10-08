@@ -25,7 +25,6 @@ async function main() {
   await prisma.prd.deleteMany();
   await prisma.discoveryAnswer.deleteMany();
   await prisma.discoveryQuestion.deleteMany();
-  await prisma.checkpoint.deleteMany();
   await prisma.agentSession.deleteMany();
   await prisma.agentToken.deleteMany();
   await prisma.stack.deleteMany();

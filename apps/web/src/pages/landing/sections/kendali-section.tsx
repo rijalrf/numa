@@ -26,8 +26,8 @@ export function KendaliSection() {
           </article>
           <article className="control-feature">
             <GitPullRequest />
-            <h3>Checkpoint, bukan tebak-tebakan</h3>
-            <p>Review hasil di setiap pergantian layer. Lanjut setelah kamu setuju.</p>
+            <h3>Konfirmasi per layer</h3>
+            <p>Pilih mode: agent berhenti di setiap pergantian layer untuk kamu tinjau, atau jalan otomatis penuh.</p>
           </article>
           <article className="control-feature">
             <Terminal />

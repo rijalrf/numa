@@ -20,7 +20,7 @@ export type BundledSkill = {
 
 /** Urutan di sini menjadi urutan tampil di AGENTS.md. numa-workflow wajib pertama. */
 export const BUNDLED_SKILLS: BundledSkill[] = [
-  { file: 'numa-workflow.md', name: 'numa-workflow', label: 'Alur Kerja Numa (loop CLI, guard, checkpoint)' },
+  { file: 'numa-workflow.md', name: 'numa-workflow', label: 'Alur Kerja Numa (loop CLI, mode eksekusi, guard)' },
   { file: 'incremental-implementation.md', name: 'numa-incremental', label: 'Implementasi Bertahap' },
   { file: 'test-driven-development.md', name: 'numa-tdd', label: 'Test-Driven Development' },
   { file: 'api-and-interface-design.md', name: 'numa-api-design', label: 'Desain API' },

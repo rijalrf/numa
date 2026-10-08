@@ -33,7 +33,6 @@ export async function buildAccountExport(userId: string) {
         tasks: true,
         cycles: true,
         treeNodes: true,
-        checkpoints: true,
         artifactVersions: true,
       },
     }),

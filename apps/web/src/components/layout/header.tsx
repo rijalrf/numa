@@ -1,10 +1,9 @@
 // Header global: logo & judul halaman di kiri, nama project aktif, toggle tema, dan menu pengguna di kanan.
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/http';
 import { signOut, useSession } from '@/lib/auth-client';
-import { ensureDefaultToken } from '@/lib/ensure-default-token';
 import { useTheme } from '@/components/theme-provider';
 import { useWizardNavContext } from './wizard-nav';
 import { NumaLogo } from '@/components/ui/numa-logo';
@@ -128,13 +127,6 @@ export function Header() {
             : staticPageInfo.subtitle,
       }
     : null;
-
-  // Pastikan token default dibuat pada sesi pertama
-  useEffect(() => {
-    if (data?.user) {
-      ensureDefaultToken();
-    }
-  }, [data?.user]);
 
   // Ambil info paket user untuk badge dan upgrade
   const { data: planData } = useQuery<{

@@ -86,9 +86,13 @@ export async function runDone(id?: string, opts?: DoneOptions): Promise<void> {
 
   const r = await api.done(cfg, taskId, { outputSummary: opts?.summary, forced, guardReport });
   console.log(`Task ${r.taskId} -> ${r.status}`);
-  if (r.checkpointPending) {
-    console.log(`\n!!! CHECKPOINT PENDING !!!`);
-    console.log(`Layer ${r.layer} selesai. Berhenti dan minta approval user sebelum lanjut ke layer berikutnya.`);
+  if (r.allTasksDone) {
+    console.log(`\nSemua task project sudah selesai (layer ${r.layer} adalah yang terakhir).`);
+    console.log('-> Lanjut: jalankan aplikasi seperti di Master Prompt, lalu numa sync.');
+  } else if (r.layerCompleted) {
+    // Informasi netral: mode eksekusi di Master Prompt menentukan berhenti (konfirmasi per layer) atau lanjut (otomatis penuh).
+    console.log(`\nLayer ${r.layer} selesai (tidak ada task tersisa di layer ini).`);
+    console.log('-> Ikuti mode eksekusi di Master Prompt: konfirmasi per layer = berhenti dan minta konfirmasi user; otomatis penuh = lanjut dengan: numa next');
   } else {
     console.log(`-> Lanjut: numa next`);
   }

@@ -10,8 +10,6 @@ import { resolveArchitectureContract, renderArchitectureContract } from '../lib/
 import { listAccessibleProjects } from '../lib/agent-auth.js';
 import { requireAgentSimple } from '../middleware/require-agent-simple.js';
 import { readPrdContent } from '../lib/ai/prd.js';
-import { findBlockingCheckpoint, checkpointBlockedBody } from '../lib/checkpoint-gate.js';
-import { PREVIEW_PORT } from '../lib/config.js';
 import {
   buildRequirementContext,
   buildTaskHaystack,
@@ -40,9 +38,6 @@ agentRouter.get('/api/agent/whoami', requireAgent, (req: AgentRequest, res) => {
 
 agentRouter.get('/api/agent/tasks/next', requireAgent, async (req: AgentRequest, res) => {
   const projectId = req.agent.projectId;
-
-  const blocking = await findBlockingCheckpoint(projectId);
-  if (blocking) return res.status(409).json(checkpointBlockedBody(blocking));
 
   // Prioritas 1: Lanjutkan task yang sedang IN_PROGRESS bila ada
   const inProgress = await prisma.task.findFirst({
@@ -106,9 +101,6 @@ agentRouter.get('/api/agent/tasks/next', requireAgent, async (req: AgentRequest,
 });
 
 agentRouter.post('/api/agent/tasks/:id/start', requireAgent, async (req: AgentRequest, res) => {
-  const blocking = await findBlockingCheckpoint(req.agent.projectId);
-  if (blocking) return res.status(409).json(checkpointBlockedBody(blocking));
-
   const task = await prisma.task.findFirst({
     where: { id: req.params.id, projectId: req.agent.projectId },
     include: {
@@ -214,60 +206,14 @@ agentRouter.post('/api/agent/tasks/:id/complete', requireAgent, async (req: Agen
     });
   }
 
-  // Cek apakah layer sudah habis -> buat checkpoint PENDING bila perlu.
+  // Informasi netral untuk agent: layer ini habis, dan apakah seluruh task project sudah selesai.
+  // Tidak membuat catatan apa pun; berhenti atau lanjut ditentukan oleh mode eksekusi di Master Prompt.
   const remainingInLayer = await prisma.task.count({
     where: { projectId: req.agent.projectId, layer: updated.layer, status: { not: 'DONE' } },
   });
-
-  // Khusus FRONTEND layer DONE: trigger APPS_READY_FOR_USE checkpoint untuk verifikasi user
-  const frontendTasksRemaining = await prisma.task.count({
-    where: { projectId: req.agent.projectId, layer: 'FRONTEND', status: { not: 'DONE' } },
-  });
-  let appsReadyCheckpointCreated = false;
-
-  let checkpointCreated = false;
-  const existingLayerCheckpoint =
-    remainingInLayer === 0
-      ? await prisma.checkpoint.findFirst({
-          where: { projectId: req.agent.projectId, type: 'LAYER_TRANSITION', layer: updated.layer, status: 'PENDING' },
-        })
-      : null;
-  if (remainingInLayer === 0 && !existingLayerCheckpoint) {
-    await prisma.checkpoint.create({
-      data: {
-        projectId: req.agent.projectId,
-        type: 'LAYER_TRANSITION',
-        layer: updated.layer,
-        status: 'PENDING',
-        message: `Layer ${updated.layer} selesai. Menunggu approval untuk lanjut ke layer berikutnya.`,
-      },
-    });
-    checkpointCreated = true;
-  }
-
-  // Jika semua FRONTEND task selesai dan belum ada checkpoint APPS_READY_FOR_USE
-  if (updated.layer === 'FRONTEND' && frontendTasksRemaining === 0 && !appsReadyCheckpointCreated) {
-    const existingAppsReady = await prisma.checkpoint.findFirst({
-      where: {
-        projectId: req.agent.projectId,
-        type: 'APPS_READY_FOR_USE',
-      },
-    });
-
-    if (!existingAppsReady) {
-      await prisma.checkpoint.create({
-        data: {
-          projectId: req.agent.projectId,
-          type: 'APPS_READY_FOR_USE',
-          layer: 'INTEGRATION',
-          status: 'PENDING',
-          message: `Semua fitur selesai dibuat! User perlu verifikasi aplikasi jalan di http://localhost:${PREVIEW_PORT} sebelum finalisasi.`,
-        },
-      });
-      appsReadyCheckpointCreated = true;
-      checkpointCreated = true;
-    }
-  }
+  const remainingTotal = remainingInLayer === 0
+    ? await prisma.task.count({ where: { projectId: req.agent.projectId, status: { not: 'DONE' } } })
+    : null;
 
   // Jika task milik siklus (ProjectCycle) dan status DONE, cek apakah semua task siklus sudah selesai
   if (task.cycleId && updated.status === 'DONE') {
@@ -290,7 +236,8 @@ agentRouter.post('/api/agent/tasks/:id/complete', requireAgent, async (req: Agen
     taskId: updated.id,
     status: updated.status,
     layer: updated.layer,
-    checkpointPending: checkpointCreated,
+    layerCompleted: remainingInLayer === 0,
+    allTasksDone: remainingTotal === 0,
   });
 });
 
@@ -388,17 +335,6 @@ agentRouter.post('/api/agent/tasks/:id/block', requireAgent, async (req: AgentRe
     req,
   });
   res.json({ ok: true, taskId: updated.id, status: updated.status, blockedReason: updated.blockedReason });
-});
-
-// Daftar checkpoint yang menunggu approval. Approval sendiri hanya bisa dilakukan user lewat web.
-agentRouter.get('/api/agent/checkpoints', requireAgent, async (req: AgentRequest, res) => {
-  const checkpoints = await prisma.checkpoint.findMany({
-    where: { projectId: req.agent.projectId, status: 'PENDING' },
-    orderBy: { createdAt: 'asc' },
-    select: { id: true, type: true, layer: true, message: true, createdAt: true },
-  });
-  const blocking = await findBlockingCheckpoint(req.agent.projectId);
-  res.json({ checkpoints, blockingId: blocking?.id ?? null });
 });
 
 agentRouter.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentRequest, res) => {

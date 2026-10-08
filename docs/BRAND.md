@@ -111,7 +111,7 @@ Design token Numa memastikan konsistensi visual antara aplikasi web (`apps/web`)
 
 #### Status Fungsional
 - **Success / Valid**: `#10B981` (Emerald) -- Validasi lulus, task selesai, agent aktif.
-- **Warning / Checkpoint**: `#F59E0B` (Amber) -- Gate review arsitektur, butuh konfirmasi.
+- **Warning / Konfirmasi**: `#F59E0B` (Amber) -- Peringatan yang butuh perhatian atau konfirmasi user.
 - **Destructive / Error**: `#E11D48` (Crimson) -- Validasi gagal, file dilarang, error eksekusi.
 - **Info / Dependency**: `#38BDF8` (Sky) -- Relasi dependensi DAG, tautan referensi.
 
@@ -197,7 +197,7 @@ Numa Brief  ──>  Numa Blueprint  ──>  Numa Forge  ──>  Numa Agent
 3. **Pilar Bukti Teknis**:
    - **Tanpa Halusinasi Arsitektur**: Setiap task memiliki boundary eksplisit (`files_to_create`, `files_to_modify`, `forbidden_files`).
    - **Validasi Siklus DAG**: Ketergantungan antar task diuji secara matematis bebas dari siklus sirkular.
-   - **Kontrol Penuh Developer**: Manusia menyetujui di checkpoint; agent mengeksekusi dengan guard verifikasi otomatis.
+   - **Kontrol Penuh Developer**: Manusia memilih mode eksekusi dan mengonfirmasi di akhir layer (bila dipilih); agent mengeksekusi dengan guard verifikasi otomatis.
 
 ---
 
@@ -210,7 +210,7 @@ Seluruh fitur inti Numa mengadopsi pola nama terpadu dengan awalan **Numa + [Kat
 | **Numa Brief** | Tahap 1 - 2 (Chat & Interview) | Modul wawancara discovery kebutuhan. Menggali arsitektur dan edge case produk dari dialog interaktif. |
 | **Numa Blueprint** | Tahap 3 - 4 (Tech Stack & PRD) | Modul spesifikasi kebutuhan produk (PRD) komprehensif, journey pengguna (utama dan gagal), dan matriks pemilihan teknologi. |
 | **Numa Forge** | Tahap 5 (Board & Tasks) | Mesin peracik atomic tasks dengan bounded context ketat dan papan Kanban eksekusi. |
-| **Numa Agent** | Tahap 6 - 7 (Guide & CLI) | Runner eksekusi otonom berbasis CLI (`numa next/context/done`) yang bekerja di terminal developer. |
+| **Numa Agent** | Tahap 6 - 7 (Master Prompt & CLI) | Runner eksekusi otonom berbasis CLI (`numa next/context/done`) yang bekerja di terminal developer. |
 
 ---
 

@@ -1,6 +1,6 @@
 // Halaman masuk Numa: autentikasi aman via Google OAuth (default light mode).
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { signIn } from '@/lib/auth-client';
 import { ArrowLeft, ShieldCheck, Loader2, AlertCircle } from 'lucide-react';
 import { NumaLogoIcon } from '@/components/ui/numa-logo';
@@ -28,7 +28,15 @@ function GoogleIcon({ className }: { className?: string }) {
   );
 }
 
+/** Tujuan setelah login: hanya jalur internal (diawali satu '/'), selain itu /chat. */
+function safeNextPath(raw: string | null): string {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/login')) return '/chat';
+  return raw;
+}
+
 export function LoginPage() {
+  const [searchParams] = useSearchParams();
+  const nextPath = safeNextPath(searchParams.get('next'));
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -36,7 +44,7 @@ export function LoginPage() {
     setErr(null);
     setLoading(true);
     try {
-      const callbackURL = typeof window !== 'undefined' ? `${window.location.origin}/chat` : '/chat';
+      const callbackURL = typeof window !== 'undefined' ? `${window.location.origin}${nextPath}` : nextPath;
       await signIn.social({ provider: 'google', callbackURL });
       // signIn.social mengalihkan ke halaman persetujuan Google secara otomatis.
     } catch {

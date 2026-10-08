@@ -1,88 +1,14 @@
-// Handler command kecil: login, switch, whoami, next, start, context, prd, logout, status.
-import { loadConfig, loadGlobalConfig, updateGlobalConfig, clearConfig, findWorkspaceRoot, saveWorkspace } from '../config.js';
+// Handler command kecil: switch, whoami, next, start, context, prd, logout, status. Login terjadi otomatis (lihat session.ts).
+import { loadConfig, updateGlobalConfig, clearConfig, findWorkspaceRoot, saveWorkspace } from '../config.js';
 import { api, ApiError, probeHealth } from '../api-client.js';
 import { formatPrdMarkdown } from '../format-prd.js';
-import { readSecret } from '../prompt.js';
-import { requireSession, resolveTaskId } from '../session.js';
+import { ensureLoggedIn, requireSession, resolveTaskId } from '../session.js';
 import { captureTaskState, saveTaskState } from '../task-state.js';
 import { readSkillsVersion } from './init.js';
 import { CLI_VERSION } from '../version.js';
 
-/** Token dari argumen (deprecated), env NUMA_TOKEN, atau prompt tersembunyi. */
-async function resolveLoginToken(arg?: string): Promise<string> {
-  if (arg) {
-    console.error(
-      'Peringatan: token lewat argumen tersimpan di riwayat shell dan daftar proses. ' +
-        'Gunakan NUMA_TOKEN atau prompt interaktif (jalankan "numa login" tanpa argumen).'
-    );
-    return arg.trim();
-  }
-  if (process.env.NUMA_TOKEN) return process.env.NUMA_TOKEN.trim();
-  return readSecret('Tempel token PAT (tidak ditampilkan): ');
-}
-
-export async function runLogin(tokenArg: string | undefined, opts: { apiUrl?: string; url?: string }): Promise<void> {
-  const token = await resolveLoginToken(tokenArg);
-  if (!token) {
-    console.error('Token kosong. Login dibatalkan.');
-    process.exit(1);
-  }
-
-  const targetUrl = opts.url || opts.apiUrl;
-  const previous = loadGlobalConfig();
-  const cfg = updateGlobalConfig({ apiUrl: targetUrl ?? process.env.NUMA_API_URL ?? previous.apiUrl, token });
-
-  const healthy = await probeHealth(cfg);
-  if (!healthy) {
-    console.error(`Tidak bisa menghubungi server di ${cfg.apiUrl}.`);
-    console.error('Pastikan numa API jalan dan URL benar (--api-url).');
-    process.exit(2);
-  }
-
-  console.log('Mengecek akses token...');
-
-  let availableProjects: Array<{ id: string; name: string }> = [];
-  try {
-    const result = await api.listScopes(cfg);
-    availableProjects = (result as any)?.scopes ?? (Array.isArray(result) ? result : []);
-  } catch (err) {
-    // Token ditolak: jangan biarkan token tidak valid tersimpan.
-    updateGlobalConfig({ token: undefined });
-    if (err instanceof ApiError) {
-      console.error(`Login gagal [${err.status}]: ${err.message}`);
-      process.exit(1);
-    }
-    console.error('Unexpected error:', err);
-    process.exit(1);
-  }
-
-  console.log('Login berhasil!');
-  console.log(`Server   : ${cfg.apiUrl}`);
-
-  if (availableProjects.length === 0) {
-    console.log('Token valid, tetapi belum ada project yang dapat diakses.');
-    return;
-  }
-  console.log(`Token valid dengan akses ke ${availableProjects.length} project:`);
-  for (const proj of availableProjects) {
-    console.log(`  - ${proj.name} (${proj.id})`);
-  }
-  if (availableProjects.length === 1) {
-    const only = availableProjects[0];
-    updateGlobalConfig({ projectId: only.id });
-    console.log(`\nProject aktif otomatis: ${only.name} (${only.id})`);
-  } else {
-    console.log('\nGunakan "numa switch <project-id>" untuk memilih project aktif.');
-  }
-}
-
 export async function runSwitch(projectId?: string): Promise<void> {
-  const cfg = loadConfig();
-
-  if (!cfg.token) {
-    console.error('Belum login. Jalankan: numa login');
-    process.exit(1);
-  }
+  const cfg = await ensureLoggedIn();
 
   if (!projectId) {
     try {
@@ -218,7 +144,7 @@ export async function runPrd(): Promise<void> {
 
 export function runLogout(): void {
   clearConfig();
-  console.log('Token dihapus.');
+  console.log('Sesi login dihapus. Perintah berikutnya akan meminta login lagi.');
   if (process.env.NUMA_TOKEN) console.log('Catatan: NUMA_TOKEN di environment masih terpasang.');
 }
 
@@ -227,7 +153,7 @@ export async function runStatus(): Promise<void> {
   const healthy = await probeHealth(cfg);
   console.log(`CLI    : ${CLI_VERSION}`);
   console.log(`Server : ${cfg.apiUrl} -> ${healthy ? 'OK' : 'TIDAK TERHUBUNG'}`);
-  console.log(`Token  : ${cfg.token ? (process.env.NUMA_TOKEN ? 'dari NUMA_TOKEN' : 'tersimpan') : 'kosong'}`);
+  console.log(`Login  : ${cfg.token ? (process.env.NUMA_TOKEN ? 'dari NUMA_TOKEN' : 'tersimpan') : 'belum (otomatis diminta saat perintah berikutnya)'}`);
   if (cfg.activeTaskId) console.log(`Active : ${cfg.activeTaskId}`);
   if (cfg.projectId) {
     const root = findWorkspaceRoot();

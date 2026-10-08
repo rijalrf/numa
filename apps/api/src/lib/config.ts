@@ -25,6 +25,12 @@ export function getPublicApiUrl(): string {
   return `http://localhost:${process.env.PORT ?? 6655}`;
 }
 
+// URL publik web (halaman persetujuan login CLI): entri pertama FE_URL, atau web lokal saat pengembangan.
+export function getPublicWebUrl(): string {
+  const first = splitList(process.env.FE_URL)[0];
+  return (first ?? LOCAL_ORIGINS[0]).replace(/\/$/, '');
+}
+
 // Host yang diizinkan Better Auth (lokal + host dari FE_ORIGINS dan BETTER_AUTH_URL).
 export function getAllowedHosts(): string[] {
   const hosts = new Set<string>(['localhost:6655', 'localhost:3455', '127.0.0.1:6655', '127.0.0.1:3455']);
@@ -48,5 +54,5 @@ export const PREVIEW_PORT = Number(process.env.PREVIEW_PORT ?? 9999);
 // Jalur lewat nginx web berarti 2. Nilai terlalu besar membuat X-Forwarded-For palsu dipercaya.
 export const TRUST_PROXY_HOPS = Number(process.env.TRUST_PROXY_HOPS ?? 1);
 
-/** Batas atas baris untuk endpoint daftar yang bisa tumbuh tanpa batas (proyek, token, checkpoint, organisasi). */
+/** Batas atas baris untuk endpoint daftar yang bisa tumbuh tanpa batas (proyek, token, organisasi). */
 export const LIST_LIMIT = 200;
