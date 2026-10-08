@@ -12,6 +12,7 @@ import {
   Trash2,
   Terminal,
   ShieldCheck,
+  User,
   Loader2,
   Sun,
   Moon,
@@ -94,7 +95,10 @@ export function ProfilePage() {
       {/* Info akun — Form Kolom */}
       <Card className="border-border shadow-xs">
         <CardHeader>
-          <CardTitle className="text-base font-semibold">Informasi Akun</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
+            <User className="h-5 w-5 text-primary" />
+            Informasi Akun
+          </CardTitle>
           <CardDescription>Kelola data profil dan identitas akun Anda.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -176,19 +180,19 @@ export function ProfilePage() {
         </Card>
       )}
 
-      {/* Pengaturan Tampilan (Appearance) */}
+      {/* Pengaturan tampilan */}
       <Card className="border-border shadow-xs">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
             <Palette className="h-5 w-5 text-primary" />
-            Tampilan (Appearance)
+            Tampilan
           </CardTitle>
           <CardDescription>
             Pilih preferensi tema antarmuka aplikasi Numa.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-xl">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <button
               type="button"
               onClick={() => setTheme('light')}
@@ -254,10 +258,12 @@ export function ProfilePage() {
   );
 }
 
-// Ekspor data akun dan penghapusan akun permanen.
+// Unduh salinan data akun dan penghapusan akun permanen.
 function DataAccountCard({ email }: { email: string }) {
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [downloaded, setDownloaded] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const exportData = useMutation({
     mutationFn: async () => {
@@ -270,51 +276,126 @@ function DataAccountCard({ email }: { email: string }) {
       a.click();
       URL.revokeObjectURL(url);
     },
+    onMutate: () => {
+      setError(null);
+      setDownloaded(false);
+    },
+    onSuccess: () => {
+      setDownloaded(true);
+      setTimeout(() => setDownloaded(false), 3000);
+    },
     onError: (e: Error) => setError(e.message),
   });
 
   const deleteAccount = useMutation({
     mutationFn: () => api('/api/user/account', { method: 'DELETE', body: JSON.stringify({ confirmEmail: confirm }) }),
+    onMutate: () => setError(null),
     onSuccess: () => {
       window.location.href = '/login';
     },
     onError: (e: Error) => setError(e.message),
   });
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <ShieldCheck className="h-4 w-4 text-primary" /> Data Akun
-        </CardTitle>
-        <CardDescription>Unduh salinan seluruh data Anda, atau hapus akun secara permanen.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        <Button variant="outline" size="sm" onClick={() => exportData.mutate()} disabled={exportData.isPending}>
-          {exportData.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-          Unduh data saya (JSON)
-        </Button>
+  const emailMatches = Boolean(email) && confirm.trim().toLowerCase() === email.toLowerCase();
 
-        <div className="rounded-md border border-destructive/40 p-4 space-y-3">
-          <p className="text-sm font-medium text-destructive flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" /> Hapus akun
-          </p>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            Seluruh project, PRD, task, dan token milik Anda akan dihapus dan tidak dapat dikembalikan. Ketik email akun Anda untuk
-            mengonfirmasi.
-          </p>
-          <Input value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={email} />
+  return (
+    <Card className="border-border shadow-xs">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
+          <ShieldCheck className="h-5 w-5 text-primary" />
+          Data Akun
+        </CardTitle>
+        <CardDescription>Kelola salinan data dan keberadaan akun Anda.</CardDescription>
+      </CardHeader>
+      <CardContent className="divide-y divide-border/60">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-5">
+          <div className="space-y-0.5">
+            <p className="text-sm font-medium text-foreground">Unduh data saya</p>
+            <p className="text-xs text-muted-foreground">Salinan profil, project, PRD, task, dan riwayat langganan Anda.</p>
+          </div>
           <Button
-            variant="destructive"
+            variant="outline"
             size="sm"
-            disabled={!email || confirm.trim().toLowerCase() !== email.toLowerCase() || deleteAccount.isPending}
-            onClick={() => deleteAccount.mutate()}
+            onClick={() => exportData.mutate()}
+            disabled={exportData.isPending}
+            className="gap-2 text-xs h-9 shrink-0"
           >
-            {deleteAccount.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
-            Hapus akun permanen
+            {exportData.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : downloaded ? (
+              <Check className="h-4 w-4 text-primary" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            {downloaded ? 'Terunduh' : 'Unduh'}
           </Button>
         </div>
-        {error && <p className="text-xs text-destructive">{error}</p>}
+
+        <div className="pt-5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium text-foreground">Hapus akun</p>
+              <p className="text-xs text-muted-foreground">
+                Seluruh project, PRD, task, dan sesi CLI Anda dihapus permanen dan tidak dapat dikembalikan.
+              </p>
+            </div>
+            {!deleting && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDeleting(true)}
+                className="gap-2 text-xs h-9 shrink-0 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Trash2 className="h-4 w-4" />
+                Hapus akun
+              </Button>
+            )}
+          </div>
+
+          {deleting && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 space-y-3">
+              <label htmlFor="confirm-delete" className="flex items-center gap-2 text-xs font-medium text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                Ketik email akun Anda untuk mengonfirmasi
+              </label>
+              <Input
+                id="confirm-delete"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                placeholder={email}
+                autoComplete="off"
+                className="text-xs h-9 bg-background"
+              />
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setDeleting(false);
+                    setConfirm('');
+                    setError(null);
+                  }}
+                  disabled={deleteAccount.isPending}
+                  className="text-xs h-9"
+                >
+                  Batal
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={!emailMatches || deleteAccount.isPending}
+                  onClick={() => deleteAccount.mutate()}
+                  className="gap-2 text-xs h-9"
+                >
+                  {deleteAccount.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  Hapus permanen
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {error && <p className="text-xs text-destructive">{error}</p>}
+        </div>
       </CardContent>
     </Card>
   );
