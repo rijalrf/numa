@@ -16,7 +16,7 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 |---|-------|-------|---------|--------|
 | 1 | Numa Brief | `chat` | `/chat` | Input ide awal. Satu request `POST /api/chat/finalize` membuat project (tanpa panggilan AI); nama aplikasi dihasilkan survey putaran 1. |
 | 2 | Numa Brief | `interview` | `/projects/:id/interview` | AI generate pertanyaan survey per putaran (jumlah putaran sesuai paket). Putaran 1 dimulai dari proses existing (cara kerja sebelum ada aplikasi), lalu fitur, aturan bisnis, dan batasan. User jawab atau pakai saran Numa. Ringkasan survey memuat bagian Proses Saat Ini (As-Is). |
-| 3 | Numa Blueprint | `techstack` | `/projects/:id/techstack` | Rekomendasi AI (default, langsung lanjut) atau pilih manual per kategori. |
+| 3 | Numa Blueprint | `techstack` | `/projects/:id/techstack` | Rekomendasi AI (default) atau pilih Golden Stack manual. Rekomendasi di-prefetch begitu ringkasan survey selesai (bukan paket Free); hasil beserta alasannya ditampilkan untuk dikonfirmasi user sebelum disimpan dan lanjut ke PRD. |
 | 4 | Numa Blueprint | `prd` | `/projects/:id/prd` | AI generate PRD terstruktur (functional requirements, product rules, constraints, edge case). Spec hasil ekstraksi memuat journey pengguna (utama dan gagal) yang ditampilkan di halaman PRD dan menjadi skenario E2E task. |
 | 5 | Numa Forge | `board` | `/projects/:id/board` | AI generate atomic tasks dengan bounded context. Kanban board. |
 | 6 | Numa Agent | `guide` | `/projects/:id/guide` | Generate Master Prompt + PAT token. User copy ke AI coding agent. |
@@ -27,8 +27,8 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 | Module | Fungsi |
 |--------|--------|
 | `ai-service.ts` | Client OpenAI SDK. Auto-retry Zod, logging token/latensi ke `AiCallLog`, model routing (`reasoning` vs `cheap`), `reasoning_effort` opsional lewat `OPENAI_REASONING_EFFORT_CHEAP|REASONING`. |
-| `chat.ts` | `finalizeChatSession` (buat session + project dalam satu transaksi, tanpa AI), `draftProjectName`, rekomendasi techstack, generate flow (legacy, backend saja). |
-| `job.ts` | Async AI job runner: fire-and-forget via `startAiJob`, state machine `running/done/failed`, auto-fail stale job >10 menit. `enqueueAiJobOnce` idempoten untuk `survey_round`/`survey_summary` (partial unique index `AiJob_survey_active_key`: satu job aktif per project+type). |
+| `chat.ts` | `finalizeChatSession` (buat session + project dalam satu transaksi, tanpa AI), `draftProjectName`, `buildTechStackInput` + `recommendTechStack` (tier cheap; input = ringkasan survey + ide), generate flow (legacy, backend saja). |
+| `job.ts` | Async AI job runner: fire-and-forget via `startAiJob`, state machine `running/done/failed`, auto-fail stale job >10 menit. `enqueueAiJobOnce` idempoten untuk `survey_round`/`survey_summary`/`techstack_recommend` (partial unique index `AiJob_idempotent_active_key`: satu job aktif per project+type). |
 | `prd.ts` | Generator PRD terstruktur dari hasil wawancara. |
 | `roadmap.ts` | Generator pembagian fase dan fitur dari PRD. |
 | `tasks.ts` | Generator atomic tasks dari roadmap dengan bounded context (`files_to_create`, `files_to_modify`, `forbidden`, `validation_commands`). |
@@ -40,7 +40,7 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 | `dag-validator.ts` | Validasi DAG task: deteksi siklus, hapus invalid dependency, topological sort. |
 | `schemas.ts` | Kontrak data Zod untuk semua interaksi AI. |
 | `../survey.ts` | Generator pertanyaan survey per putaran dan ringkasan survey (`generateSurveyRound`, `generateSurveySummary`). Tema putaran 1: Proses Saat Ini & Masalah Utama; putaran 1 juga memberi `appName`. Putaran memakai tier `cheap`, ringkasan tetap `reasoning`. |
-| `prompts.ts` | Katalog system prompt bersama dan `PROMPT_VERSIONS` (versi prompt semua tahap, dicatat di `AiCallLog.promptVersion`; naikkan versi saat isi prompt berubah). Versi saat ini: tech-stack@2, prd@2, tasks@3, flow@2, roadmap@1, cycle@1, product-spec@3, security-audit@1, survey-round@4, survey-summary@2. |
+| `prompts.ts` | Katalog system prompt bersama dan `PROMPT_VERSIONS` (versi prompt semua tahap, dicatat di `AiCallLog.promptVersion`; naikkan versi saat isi prompt berubah). Versi saat ini: tech-stack@3, prd@2, tasks@3, flow@2, roadmap@1, cycle@1, product-spec@3, security-audit@1, survey-round@4, survey-summary@2. |
 
 ## Shared Lib (`apps/api/src/lib/`)
 
@@ -49,6 +49,7 @@ Setiap project melewati 7 tahap berurutan di bawah keluarga fitur Numa (lihat pa
 | `stage.ts` | Konstanta `STAGE_ORDER`, helper `isStageLocked`, `furthestStage`. |
 | `markdown-export.ts` | Builder markdown untuk ekspor PRD dan tasks. |
 | `survey-store.ts` | Penyimpanan survey: `resolveTotalRounds` (putaran dikunci di `Project.surveyTotalRounds` saat survey dimulai), `saveRoundAnswers` (upsert atomik, tolak pertanyaan di luar project/putaran), `saveRoundQuestions` (`createMany skipDuplicates`). |
+| `techstack-store.ts` | `saveTechStack`: ganti stack project dan majukan wizard ke `prd` dalam satu transaksi dengan `FOR UPDATE` pada baris Project (aman terhadap request bersamaan). |
 | `task-persist.ts` | `persistGeneratedTasks` — simpan hasil AI ke DB (dipakai oleh routes/tasks dan routes/cycles). |
 | `task-context.ts` | Penyusun konteks per task untuk `numa context`: detail requirement/edge case/journey, filter endpoint dan model data, file nyata dari laporan guard, ringkasan kontrak arsitektur. Fungsi murni. |
 | `access.ts` | RBAC org: `projectWhere`, `getProjectRole`, `hasRole`, `agentProjectWhere`. Wajib dipakai untuk query project (jangan `{ id, userId }`). |

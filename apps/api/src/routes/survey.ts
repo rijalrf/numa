@@ -52,7 +52,21 @@ registerJobHandler<SurveyRoundPayload>('survey_round', async ({ projectId, paylo
   return { round };
 });
 
-registerJobHandler('survey_summary', async ({ projectId }) => {
+// Rekomendasi tech stack di-enqueue begitu ringkasan survey selesai, supaya hasilnya sudah siap saat
+// halaman tech stack dibuka. Paket Free berhenti di survey, jadi tidak diprefetch. Kegagalan di sini
+// tidak boleh menggagalkan job ringkasan: halaman tech stack meminta rekomendasi sendiri bila belum ada.
+async function prefetchTechStackRecommendation(projectId: string, userId: string | null): Promise<void> {
+  if (!userId) return;
+  try {
+    const { plan } = await getUserPlan(userId);
+    if (plan === 'free') return;
+    await enqueueAiJobOnce({ projectId, type: 'techstack_recommend', userId });
+  } catch (err) {
+    logger.warn('Prefetch rekomendasi tech stack dilewati', { scope: 'survey', projectId, error: serializeError(err) });
+  }
+}
+
+registerJobHandler('survey_summary', async ({ projectId, userId }) => {
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { idea: true } });
   if (!project) throw new NonRetryableJobError('Project tidak ditemukan.');
 
@@ -65,6 +79,7 @@ registerJobHandler('survey_summary', async ({ projectId }) => {
     where: { id: projectId },
     data: { name: summary.name, description: summary.summary },
   });
+  await prefetchTechStackRecommendation(projectId, userId);
   return summary;
 });
 

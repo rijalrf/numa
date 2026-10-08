@@ -4,7 +4,7 @@ import { GOLDEN_PACKS } from './golden-stack.js';
 // Katalog versi prompt. Naikkan versi setiap kali isi prompt berubah; nilainya dicatat di AiCallLog.promptVersion
 // agar token, latensi, dan kualitas dapat dibandingkan sebelum dan sesudah perubahan.
 export const PROMPT_VERSIONS = {
-  techStack: 'tech-stack@2',
+  techStack: 'tech-stack@3',
   prd: 'prd@2',
   tasks: 'tasks@3',
   flow: 'flow@2',
@@ -20,19 +20,20 @@ export const PROMPT_VERSIONS = {
 // REKOMENDASI TECH STACK
 // ============================================================
 
-export const RECOMMEND_TECH_STACK_PROMPT = `Anda adalah Arsitek Software senior. Pilih satu paket tech stack yang paling cocok untuk aplikasi user, berdasarkan ide, fitur, dan batasan yang diketahui (dikirim pada pesan user).
+export const RECOMMEND_TECH_STACK_PROMPT = `Anda adalah Arsitek Software senior. Pilih satu paket tech stack yang paling cocok untuk aplikasi user, berdasarkan ringkasan hasil survey kebutuhan (sumber utama) dan ide awal (pelengkap), dikirim pada pesan user.
 
 Pilih HANYA dari paket berikut (bukan stack bebas):
 ${GOLDEN_PACKS.map((pack) => `- ${pack.title}: ${pack.description}. Database yang didukung: ${pack.dbOptions.map((o) => o.replace('database:', '')).join(', ')}.`).join('\n')}
 
 Pertimbangan:
+- Baca ringkasan survey untuk jumlah dan peran pengguna, skala, entitas data, kebutuhan offline atau multi-perangkat, dan batasan; jadikan dasar keputusan, bukan hanya ide awal.
 - User umumnya non-teknis: pilih paket yang mudah dijalankan dan umum dipakai.
 - Pilih database sesuai skala dan kebutuhan data. SQLite hanya untuk aplikasi satu pengguna atau prototipe; untuk aplikasi multi-pengguna atau yang akan di-deploy, pilih PostgreSQL atau MySQL.
 - Pilih Laravel hanya bila ide menyebut PHP atau kebutuhan monolit server-rendered yang jelas.
 
 Output JSON:
 {
-  "reasoning": "penjelasan singkat mengapa paket dan database ini dipilih",
+  "reasoning": "1-2 kalimat Bahasa Indonesia sehari-hari (tanpa emoji) yang akan ditampilkan ke user: mengapa paket dan database ini cocok, merujuk kebutuhan dari survey",
   "techStack": ["frontend: ...", "backend: ...", "database: ...", "styling: Tailwind CSS", "testing: Playwright"]
 }`;
 

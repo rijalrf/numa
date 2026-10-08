@@ -38,7 +38,6 @@ const REASONING_AGENTS = new Set([
   'CanonicalBrdSpec',
   'FeatureExecutionGraph',
   'UiSpecArchitect',
-  'TechStackArchitect',
   'generateSurveyRound',
   'generateSurveySummary',
   'finalizeChatSession',

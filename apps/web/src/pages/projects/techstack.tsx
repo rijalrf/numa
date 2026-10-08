@@ -1,5 +1,5 @@
 // Halaman Pemilihan Teknologi: 4 Golden Pack terstandarisasi atau Rekomendasi AI
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
@@ -10,13 +10,13 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { api } from '@/lib/http';
-import { pollAiJob } from '@/lib/ai-job';
+import { pollAiJob, type AiJobResponse } from '@/lib/ai-job';
 import { isStageLocked } from '@/lib/constants';
 import { useWizardNav } from '@/components/layout/wizard-nav';
 import { ModeCard } from '@/components/wizard/mode-card';
 import { GoldenPackList } from '@/components/wizard/golden-pack-list';
 import { SelectedTechsList } from '@/components/wizard/selected-techs-list';
-import { NumaLoader } from '@/components/ui/numa-loader';
+import { AiRecommendationCard, type RecommendationStatus } from '@/components/wizard/ai-recommendation-card';
 
 export const GOLDEN_PACKS = [
   {
@@ -68,6 +68,17 @@ export const GOLDEN_PACKS = [
   },
 ] as const;
 
+// Polling lebih rapat dari default (3 dtk): job rekomendasi pendek.
+const RECOMMEND_POLL_INTERVAL_MS = 1500;
+const RECOMMEND_POLL_MAX_ATTEMPTS = 240; // 6 menit, sama dengan batas default
+
+type Recommendation = { techStack: string[]; reasoning: string };
+
+/** Nama Golden Pack dari daftar tag hasil rekomendasi (cocokkan tag backend). */
+function packTitleOf(techStack: string[]): string | undefined {
+  return GOLDEN_PACKS.find((p) => p.tags.some((t) => t.startsWith('backend:') && techStack.includes(t)))?.title;
+}
+
 export function TechStackPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
@@ -81,10 +92,79 @@ export function TechStackPage() {
     'laravel': 'database:MySQL + Eloquent',
   });
   const [selected, setSelected] = useState<string[]>([]);
-  const [generatingAi, setGeneratingAi] = useState(false);
+  const [rec, setRec] = useState<Recommendation | null>(null);
+  const [recStatus, setRecStatus] = useState<RecommendationStatus>('loading');
+  // Penjaga StrictMode: satu permintaan rekomendasi otomatis dan satu poller aktif.
+  const autoRequested = useRef(false);
+  const stopPolling = useRef<(() => void) | null>(null);
   const [saving, setSaving] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Pantau job rekomendasi sampai selesai (hasil bisa sudah disiapkan lebih dulu oleh survey).
+  const watchRecommendation = useCallback(() => {
+    if (!projectId) return;
+    setRecStatus('generating');
+    stopPolling.current?.();
+    stopPolling.current = pollAiJob(projectId, 'techstack_recommend', {
+      intervalMs: RECOMMEND_POLL_INTERVAL_MS,
+      maxAttempts: RECOMMEND_POLL_MAX_ATTEMPTS,
+      onDone: (result) => {
+        if (result?.techStack?.length) {
+          setRec({ techStack: result.techStack, reasoning: result.reasoning ?? '' });
+          setRecStatus('ready');
+        } else {
+          setRecStatus('failed');
+          setErrorMessage('AI tidak menghasilkan rekomendasi teknologi. Coba lagi atau pilih paket secara manual.');
+        }
+      },
+      onFailed: (error) => {
+        setRecStatus('failed');
+        setErrorMessage(error || 'AI gagal merekomendasikan teknologi.');
+      },
+      onTimeout: () => {
+        setRecStatus('failed');
+        setErrorMessage('Proses rekomendasi memakan waktu lama. Silakan coba lagi.');
+      },
+    });
+  }, [projectId]);
+
+  const requestRecommendation = useCallback(async () => {
+    if (!projectId) return;
+    setErrorMessage(null);
+    setRecStatus('generating');
+    try {
+      await api(`/api/projects/${projectId}/techstack/recommend`, { method: 'POST' });
+      watchRecommendation();
+    } catch (err) {
+      console.error('Gagal meminta rekomendasi teknologi:', err);
+      setRecStatus('failed');
+      setErrorMessage((err as Error).message || 'Terjadi kesalahan saat meminta rekomendasi AI.');
+    }
+  }, [projectId, watchRecommendation]);
+
+  // Saat halaman terbuka: pakai hasil yang sudah siap, tunggu yang sedang berjalan, atau minta baru.
+  const loadRecommendation = useCallback(async () => {
+    if (!projectId) return;
+    try {
+      const job = await api<AiJobResponse>(`/api/projects/${projectId}/ai-jobs?type=techstack_recommend`);
+      if (job.status === 'done' && job.result?.techStack?.length) {
+        setRec({ techStack: job.result.techStack, reasoning: job.result.reasoning ?? '' });
+        setRecStatus('ready');
+      } else if (job.status === 'queued' || job.status === 'running' || job.status === 'generating') {
+        watchRecommendation();
+      } else if (job.status === 'failed') {
+        setRecStatus('failed');
+        setErrorMessage(job.error || 'AI gagal merekomendasikan teknologi.');
+      } else if (!autoRequested.current) {
+        autoRequested.current = true;
+        await requestRecommendation();
+      }
+    } catch (err) {
+      console.error('Gagal memuat rekomendasi teknologi:', err);
+      setRecStatus('failed');
+    }
+  }, [projectId, watchRecommendation, requestRecommendation]);
 
   // Load status project dan teknologi yang tersimpan
   useEffect(() => {
@@ -98,6 +178,7 @@ export function TechStackPage() {
         const currentStep = json.project?.wizardStep || 'techstack';
         const locked = isStageLocked(currentStep, 'techstack');
         setIsLocked(locked);
+        if (!locked) void loadRecommendation();
 
         const existing = json.project?.stacks || [];
         if (existing.length > 0) {
@@ -109,53 +190,25 @@ export function TechStackPage() {
     };
 
     loadTechStack();
-  }, [projectId]);
+    return () => stopPolling.current?.();
+  }, [projectId, loadRecommendation]);
 
-  // Alur Rekomendasi AI
-  const handleAiGenerateAndProceed = async () => {
-    if (!projectId || generatingAi || isLocked) return;
-    setGeneratingAi(true);
+  // Simpan rekomendasi AI yang sudah dikonfirmasi user, lalu lanjut ke PRD
+  const handleAiProceed = async () => {
+    if (!projectId || saving || isLocked || !rec) return;
+    setSaving(true);
     setErrorMessage(null);
-
     try {
-      await api(`/api/projects/${projectId}/techstack/recommend`, { method: 'POST' });
-
-      // Job berjalan di background — poll sampai hasil rekomendasi tersedia
-      pollAiJob(projectId, 'techstack_recommend', {
-        onDone: async (result) => {
-          const stackList = result?.techStack && result.techStack.length > 0 ? result.techStack : [];
-
-          if (stackList.length === 0) {
-            setErrorMessage('Gagal menghasilkan rekomendasi teknologi dari AI. Silakan pilih paket secara manual.');
-            setGeneratingAi(false);
-            return;
-          }
-
-          try {
-            await api(`/api/projects/${projectId}/techstack`, {
-              method: 'PUT',
-              body: JSON.stringify({ techStack: stackList }),
-            });
-            navigate(`/projects/${projectId}/prd`);
-          } catch (err) {
-            console.error('Gagal menyimpan tech stack:', err);
-            setErrorMessage((err as Error).message || 'Gagal menyimpan pilihan teknologi.');
-            setGeneratingAi(false);
-          }
-        },
-        onFailed: (error) => {
-          setErrorMessage(error || 'AI gagal merekomendasikan teknologi.');
-          setGeneratingAi(false);
-        },
-        onTimeout: () => {
-          setErrorMessage('Proses rekomendasi memakan waktu lama. Silakan coba lagi.');
-          setGeneratingAi(false);
-        },
+      await api(`/api/projects/${projectId}/techstack`, {
+        method: 'PUT',
+        body: JSON.stringify({ techStack: rec.techStack }),
       });
+      navigate(`/projects/${projectId}/prd`);
     } catch (err) {
-      console.error('Error saat generate & simpan teknologi AI:', err);
-      setErrorMessage((err as Error).message || 'Terjadi kesalahan saat memproses rekomendasi AI.');
-      setGeneratingAi(false);
+      console.error('Gagal menyimpan tech stack:', err);
+      setErrorMessage((err as Error).message || 'Gagal menyimpan pilihan teknologi.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -202,10 +255,10 @@ export function TechStackPage() {
     }
   };
 
+  const aiNotReady = selectedMode === 'ai' && recStatus !== 'ready';
+
   useWizardNav(
-    generatingAi
-      ? null
-      : isLocked
+    isLocked
       ? {
           back: {
             label: 'Kembali',
@@ -222,15 +275,16 @@ export function TechStackPage() {
             onClick: handleBackToChat,
           },
           next: {
-            label: generatingAi || saving ? 'Menyimpan...' : 'Lanjut',
+            label: saving ? 'Menyimpan...' : 'Lanjut',
             onClick: () => {
               if (selectedMode === 'ai') {
-                handleAiGenerateAndProceed();
+                handleAiProceed();
               } else {
                 handlePackProceed();
               }
             },
-            loading: generatingAi || saving,
+            disabled: aiNotReady,
+            loading: saving,
           },
         }
   );
@@ -262,20 +316,6 @@ export function TechStackPage() {
             <SelectedTechsList items={selected} />
           </CardContent>
         </Card>
-      </div>
-    );
-  }
-
-  // ============================================================
-  // TAMPILAN LOADING AI REKOMENDASI
-  // ============================================================
-  if (generatingAi) {
-    return (
-      <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center">
-        <NumaLoader
-          label="Merekomendasikan tech stack..."
-          sublabel="AI sedang menganalisis kebutuhan proyek dan mencocokkan teknologi optimal"
-        />
       </div>
     );
   }
@@ -321,6 +361,17 @@ export function TechStackPage() {
           onClick={() => setSelectedMode('pack')}
         />
       </div>
+
+      {/* Hasil rekomendasi AI untuk dikonfirmasi jika mode 'ai' dipilih */}
+      {selectedMode === 'ai' && (
+        <AiRecommendationCard
+          status={recStatus}
+          packTitle={rec ? packTitleOf(rec.techStack) : undefined}
+          techStack={rec?.techStack ?? []}
+          reasoning={rec?.reasoning ?? ''}
+          onRetry={requestRecommendation}
+        />
+      )}
 
       {/* Daftar 4 Golden Pack jika mode 'pack' dipilih */}
       {selectedMode === 'pack' && (

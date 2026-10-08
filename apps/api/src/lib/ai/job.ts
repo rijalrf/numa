@@ -135,7 +135,7 @@ export async function enqueueAiJob(args: EnqueueArgs) {
 
 /**
  * Seperti enqueueAiJob, tetapi idempoten untuk tipe yang dijaga partial unique index
- * "AiJob_survey_active_key" (survey_round, survey_summary): bila sudah ada job aktif untuk project+type,
+ * "AiJob_idempotent_active_key" (survey_round, survey_summary, techstack_recommend): bila sudah ada job aktif untuk project+type,
  * job itu dikembalikan (created=false). Aman terhadap request bersamaan karena penjaganya di level DB.
  */
 export async function enqueueAiJobOnce(args: EnqueueArgs): Promise<{ job: { id: string }; created: boolean }> {

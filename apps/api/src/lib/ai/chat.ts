@@ -66,24 +66,35 @@ function prdTextForPrompt(content: unknown): string {
 // TECH STACK RECOMMENDATION
 // ===============================================
 
+/**
+ * Pesan user untuk rekomendasi tech stack. Ringkasan survey (Project.description) adalah sumber utama;
+ * ide mentah menjadi pelengkap. Bila ringkasan belum ada (masih sama dengan ide), hanya ide yang dikirim.
+ */
+export function buildTechStackInput(project: { name: string; idea: string; description: string | null }): string {
+  const summary = project.description?.trim();
+  const parts = [`Nama aplikasi: ${project.name}`, `Ide awal: ${project.idea}`];
+  if (summary && summary !== project.idea.trim()) {
+    parts.push(`Ringkasan hasil survey kebutuhan:\n${summary}`);
+  }
+  return parts.join('\n\n');
+}
+
 export async function recommendTechStack(projectId: string): Promise<{ techStack: string[]; reasoning: string }> {
-  const [project, prd] = await Promise.all([
-    prisma.project.findUnique({ where: { id: projectId } }),
-    prisma.prd.findUnique({ where: { projectId } }),
-  ]);
-
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { name: true, idea: true, description: true },
+  });
   if (!project) throw new Error('Project tidak ditemukan');
-
-  const prdContent = prd?.content ? JSON.stringify(prd.content) : project.idea;
 
   const result = await generateJson({
     system: RECOMMEND_TECH_STACK_PROMPT,
-    user: `Nama aplikasi: ${project.name}\nIde & fitur: ${prdContent}`,
+    user: buildTechStackInput(project),
     schema: RecommendTechStackSchema,
     maxRetries: 2,
     agentName: 'TechStackArchitect',
     promptVersion: PROMPT_VERSIONS.techStack,
     projectId,
+    tier: 'cheap',
   });
 
   return {
