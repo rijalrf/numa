@@ -1,4 +1,4 @@
-// Board page: papan Kanban task implementasi project dengan kolom User Story & kolom card.
+// Board page: papan Kanban task implementasi project.
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api, downloadFile } from '@/lib/http';
@@ -56,6 +56,7 @@ export function BoardPage() {
     progress,
     stillProcessing,
     cycles,
+    draftCycleId,
     activeCycleId,
     setActiveCycleId,
     initialTaskCounts,
@@ -81,6 +82,14 @@ export function BoardPage() {
       })
       .catch(() => {});
   }, [projectId]);
+
+  // Task siklus baru selesai dirancang: muat ulang riwayat siklus, lalu tampilkan siklus itu di papan.
+  const handleCycleCreated = async (cycleId: string) => {
+    setChangePanelOpen(false);
+    await loadCycles();
+    setActiveCycleId(cycleId);
+    setSuccessMessage('Task untuk perubahan berhasil dirancang. Siklus baru ditampilkan di papan.');
+  };
 
   const handleBackToPrd = async () => {
     if (!projectId) return;
@@ -134,11 +143,11 @@ export function BoardPage() {
           className="gap-1.5 font-medium h-8"
         >
           <GitCommit className="h-3.5 w-3.5" />
-          <span>Minta Perubahan</span>
+          <span>{draftCycleId ? 'Lanjutkan Perubahan' : 'Minta Perubahan'}</span>
         </Button>
       </div>
     ),
-    [downloadingZip, loading, generating, tasks.length, projectId, projectName]
+    [downloadingZip, loading, generating, tasks.length, projectId, projectName, draftCycleId]
   );
 
   useWizardNav(
@@ -444,7 +453,11 @@ export function BoardPage() {
       <ChangeRequestPanel
         projectId={projectId!}
         isOpen={changePanelOpen}
-        onClose={() => setChangePanelOpen(false)}
+        onClose={() => {
+          setChangePanelOpen(false);
+          loadCycles();
+        }}
+        onFinished={handleCycleCreated}
       />
     </div>
   );

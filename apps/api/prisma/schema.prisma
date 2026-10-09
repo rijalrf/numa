@@ -279,7 +279,9 @@ model ProjectCycle {
   tasks   Task[]
 
   @@index([projectId, status])
-  @@index([projectId, number])
+  @@unique([projectId, number])
+  // Catatan: migrasi 20261008080000 juga menjaga partial unique index "ProjectCycle_one_draft_key" di SQL
+  // (satu siklus DRAFT per project). Prisma tidak dapat menyatakannya di schema.
 }
 
 model TaskDependency {
@@ -437,9 +439,9 @@ model AiJob {
 
   @@index([projectId, type, status])
   @@index([status, runAfter])
-  // Catatan: migrasi 20261008040000 menjaga partial unique index "AiJob_idempotent_active_key" di SQL
+  // Catatan: migrasi 20261008070000 menjaga partial unique index "AiJob_idempotent_active_key" di SQL
   // (satu job survey_round/survey_summary/techstack_recommend/prd_generate/prd_spec/tasks_generate/
-  // security_audit aktif per project+type; migrasi terbaru 20261008040000).
+  // security_audit/cycle_analyze/cycle_generate aktif per project+type; migrasi terbaru 20261008070000).
   // Prisma tidak dapat menyatakannya di schema.
 }
 

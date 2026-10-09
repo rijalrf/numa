@@ -12,7 +12,7 @@ Pipeline: **Numa Brief** (Chat & Survey) -> **Numa Blueprint** (Tech Stack & PRD
 
 - **Chat onboarding** (`/chat`) — user menulis ide awal; satu request `POST /api/chat/finalize` membuat project (tanpa panggilan AI) lalu user diarahkan ke survey. Nama aplikasi dihasilkan survey putaran 1.
 - **Survey kebutuhan** (`/projects/:id/survey`) — AI generate pertanyaan discovery, user menjawab sendiri atau memakai rekomendasi AI. Jumlah putaran survey mengikuti paket langganan. Route lama `/interview` tetap diarahkan ke halaman ini.
-- **Change Cycle** (`/projects/:id/board` sidebar) — setelah semua task selesai, user bisa mengajukan permintaan perubahan. Sistem membuat siklus baru (`ProjectCycle`: DRAFT/OPEN/DONE) berisi diff PRD, klarifikasi, dampak, lalu generate task siklus tersebut. Guard: semua task wajib DONE dan tidak boleh ada siklus aktif. Permintaan panjang bisa dipecah menjadi dua bagian (split `a`/`b`).
+- **Change Cycle** (tombol Minta Perubahan di `/projects/:id/board`) — setelah semua task selesai, user bisa mengajukan permintaan perubahan tanpa mengulang wizard. Sistem membuat siklus DRAFT (`ProjectCycle`: DRAFT/OPEN/DONE) dan menganalisis dampaknya terhadap PRD dan task yang sudah selesai. Permintaan yang kabur wajib dijawab lebih dulu (maksimal 2 putaran klarifikasi). Setelah user mengonfirmasi, requirement baru ditambahkan ke PRD (nomor FR dilanjutkan) dan hanya task untuk perubahan itu yang dirancang, bertanda siklus. Guard: semua task wajib DONE, tidak boleh ada siklus aktif, dan hanya satu draf per project. Perubahan besar bisa dipecah menjadi dua bagian (split `a`/`b`); bagian lain tersimpan sebagai draf berikutnya.
 
 ### 2. Numa Blueprint — Tech Stack & Dokumen
 
@@ -250,10 +250,13 @@ URL API tersimpan di `~/.numa/config.json` lewat opsi `--api-url`, jadi perintah
 
 | Method | Path | Auth | Fungsi |
 |---|---|---|---|
-| POST | `/api/projects/:id/change-request` | user | ajukan perubahan (reset ke survey) |
-| GET | `/api/projects/:id/cycles` | user | daftar siklus + dampak |
+| POST | `/api/projects/:id/change-request` | user | ajukan perubahan: buat siklus DRAFT + job analisis dampak (`cycle_analyze`) |
+| GET | `/api/projects/:id/cycles` | user | daftar siklus + dampak, `draftCycleId`, `openCycleId`, status job analisis/generate |
 | GET | `/api/projects/:id/cycles/:cycleId` | user | detail siklus |
-| POST | `/api/projects/:id/cycles/:cycleId/generate` | user | generate task siklus (split a/b) |
+| POST | `/api/projects/:id/cycles/:cycleId/analyze` | user | jalankan (ulang) analisis draf yang belum dianalisis |
+| POST | `/api/projects/:id/cycles/:cycleId/clarify` | user | kirim jawaban klarifikasi lalu analisis ulang (maks 2 putaran) |
+| POST | `/api/projects/:id/cycles/:cycleId/generate` | user | konfirmasi: tambah requirement ke PRD dan rancang task siklus (`split` single/a/b) |
+| DELETE | `/api/projects/:id/cycles/:cycleId` | user | batalkan draf |
 
 ### Token, Login CLI & Observabilitas
 

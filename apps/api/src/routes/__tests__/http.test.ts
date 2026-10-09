@@ -65,6 +65,24 @@ test('endpoint admin usage tanpa sesi dibalas 401 (bukan 404, agar tidak membuka
   }
 });
 
+test('endpoint siklus perubahan tanpa sesi dibalas 401 (bukan 404, jadi rutenya terpasang)', async () => {
+  const base = '/api/projects/p1';
+  assert.equal((await request(app).get(`${base}/cycles`)).status, 401);
+  assert.equal((await request(app).get(`${base}/cycles/c1`)).status, 401);
+  for (const path of [`${base}/change-request`, `${base}/cycles/c1/analyze`, `${base}/cycles/c1/clarify`, `${base}/cycles/c1/generate`]) {
+    const res = await request(app).post(path).send({});
+    assert.equal(res.status, 401, path);
+  }
+  assert.equal((await request(app).delete(`${base}/cycles/c1`)).status, 401);
+});
+
+test('job siklus dikenali sebagai tipe job AI yang valid', async () => {
+  const { isAiJobType } = await import('../../lib/ai/job.js');
+  assert.equal(isAiJobType('cycle_analyze'), true);
+  assert.equal(isAiJobType('cycle_generate'), true);
+  assert.equal(isAiJobType('cycle_unknown'), false);
+});
+
 test('endpoint agent tanpa token dibalas 401', async () => {
   const res = await request(app).get('/api/agent/tasks/next').set('X-Project-ID', 'p1');
   assert.equal(res.status, 401);

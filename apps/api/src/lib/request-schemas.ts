@@ -43,3 +43,29 @@ export const RepoSummaryBodySchema = z.object({
 export const TechStackBodySchema = z.object({
   techStack: z.array(z.string().trim().min(1).max(200)).max(20),
 });
+
+/** Permintaan perubahan (Minta Perubahan). Batas panjang per paket dicek terpisah di route. */
+export const ChangeRequestBodySchema = z.object({
+  request: z.string().trim().min(8, 'Permintaan perubahan minimal 8 karakter').max(4000),
+});
+
+/** Jawaban klarifikasi atas permintaan perubahan yang kabur. */
+export const ClarifyBodySchema = z.object({
+  answers: z
+    .array(
+      z.object({
+        questionId: z.string().min(1).max(100),
+        answer: z.string().trim().min(1, 'Jawaban klarifikasi tidak boleh kosong').max(500),
+      })
+    )
+    .min(1)
+    .max(10),
+});
+
+/** Konfirmasi perancangan task siklus; `split` memilih mengerjakan utuh atau bagian A/B dari usulan pemecahan. */
+export const CycleGenerateBodySchema = z.object({
+  confirm: z.boolean(),
+  split: z.enum(['single', 'a', 'b']).default('single'),
+  title: z.string().trim().min(1).max(120).optional(),
+});
+

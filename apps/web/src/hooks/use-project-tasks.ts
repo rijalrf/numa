@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/http';
 import { pollAiJob } from '@/lib/ai-job';
 import type { TaskDetail } from '@/components/kanban/task-detail-dialog';
-import type { ProjectCycleItem } from '@/components/cycle/cycle-bar';
+import type { CyclesSnapshot, ProjectCycleItem } from '@/lib/cycle';
 
 type Task = TaskDetail;
 
@@ -28,7 +28,9 @@ export function useProjectTasks(projectId: string | undefined) {
   const [progress, setProgress] = useState<GenerationProgress | null>(null);
   const [stillProcessing, setStillProcessing] = useState(false);
 
+  // Draf perubahan belum punya task, jadi tidak masuk pemilih siklus; hanya penandanya yang dipakai Board.
   const [cycles, setCycles] = useState<ProjectCycleItem[]>([]);
+  const [draftCycleId, setDraftCycleId] = useState<string | null>(null);
   const [activeCycleId, setActiveCycleId] = useState<string | null | 'all'>('all');
   const [initialTaskCounts, setInitialTaskCounts] = useState<{ total: number; done: number }>({ total: 0, done: 0 });
 
@@ -117,12 +119,10 @@ export function useProjectTasks(projectId: string | undefined) {
   const loadCycles = useCallback(async () => {
     if (!projectId) return;
     try {
-      const res = await api<{
-        cycles: ProjectCycleItem[];
-        initialTaskCounts: { total: number; done: number };
-      }>(`/api/projects/${projectId}/cycles`);
+      const res = await api<CyclesSnapshot>(`/api/projects/${projectId}/cycles`);
 
-      setCycles(res.cycles || []);
+      setCycles((res.cycles || []).filter((c) => c.status !== 'DRAFT'));
+      setDraftCycleId(res.draftCycleId ?? null);
       if (res.initialTaskCounts) setInitialTaskCounts(res.initialTaskCounts);
     } catch (err) {
       console.error('Gagal memuat riwayat siklus:', err);
@@ -200,6 +200,7 @@ export function useProjectTasks(projectId: string | undefined) {
     progress,
     stillProcessing,
     cycles,
+    draftCycleId,
     activeCycleId,
     setActiveCycleId,
     initialTaskCounts,

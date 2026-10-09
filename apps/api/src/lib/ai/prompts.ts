@@ -6,10 +6,10 @@ import { GOLDEN_PACKS } from './golden-stack.js';
 export const PROMPT_VERSIONS = {
   techStack: 'tech-stack@3',
   prd: 'prd@3',
-  tasks: 'tasks@4',
+  tasks: 'tasks@5',
   flow: 'flow@2',
   roadmap: 'roadmap@2',
-  cycle: 'cycle@1',
+  cycle: 'cycle@2',
   productSpec: 'product-spec@3',
   securityAudit: 'security-audit@2',
   surveyRound: 'survey-round@4',

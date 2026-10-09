@@ -4,25 +4,13 @@ import { X, Loader2, GitCommit, FileCode, CheckCircle2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { api } from '../../lib/http';
+import { CYCLE_SIZE_LABELS as sizeLabels, CYCLE_TYPE_LABELS as typeLabels } from '../../lib/cycle';
 
 interface CycleDetailDialogProps {
   projectId: string;
   cycleId: string | null;
   onClose: () => void;
 }
-
-const typeLabels: Record<string, string> = {
-  FEATURE: 'Fitur Baru',
-  BUGFIX: 'Perbaikan Bug',
-  REFACTOR: 'Refaktor Kode',
-  MIXED: 'Campuran',
-};
-
-const sizeLabels: Record<string, string> = {
-  SMALL: 'Kecil',
-  MEDIUM: 'Menengah',
-  LARGE: 'Besar',
-};
 
 export function CycleDetailDialog({ projectId, cycleId, onClose }: CycleDetailDialogProps) {
   const [cycle, setCycle] = useState<any>(null);

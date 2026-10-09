@@ -1,4 +1,4 @@
-// Real E2E Wizard Flow Test: Idea -> Survey (Free Gate) -> Upgrade -> TechStack -> PRD (+ journey) -> Tasks -> Agent CLI
+// Real E2E Wizard Flow Test: Idea -> Survey (Free Gate) -> Upgrade -> TechStack -> PRD (+ journey) -> Tasks -> Agent CLI -> Change Cycle
 import assert from 'node:assert';
 import { prisma } from '../apps/api/src/lib/prisma.js';
 
@@ -309,6 +309,15 @@ async function runTest() {
   );
   console.log('Skenario E2E dari journey tersuntik ke task INTEGRATION OK.');
 
+  // Mode ringkas: berhenti setelah task terbentuk (dipakai untuk mengukur pemakaian token wizard 1-5).
+  // Audit keamanan berjalan di background; ditunggu agar tokennya ikut terhitung.
+  if (process.env.E2E_STOP_AFTER_TASKS) {
+    await pollJob(authedFetch, projectId, 'security_audit', 'Audit keamanan (background)');
+    console.log(`E2E_PROJECT_ID=${projectId}`);
+    console.log('\n=== E2E WIZARD 1-5 SAMPAI TASK BERHASIL ===');
+    return;
+  }
+
   console.log('\n--- 11. TEST EXPORT PAKET ZIP & WIZARD STEP UNLOCK ---');
   // 11a. Test bahwa paket Starter dilarang download export.zip (harus 403, fitur Pro)
   const zipStarterRes = await authedFetch(`/api/projects/${projectId}/export.zip`);
@@ -438,8 +447,14 @@ async function runTest() {
   }
   console.log('Semua task pembangunan awal telah berstatus DONE.');
 
-  console.log('\n--- 13. TEST CHANGE REQUEST VIA SURVEY ("MINTA PERUBAHAN") ---');
-  // Ajukan permintaan perubahan: survey direset dan wizard kembali ke tahap survey
+  console.log('\n--- 13. TEST CHANGE CYCLE RINGAN ("MINTA PERUBAHAN") ---');
+  const prdBeforeRes = await authedFetch(`/api/projects/${projectId}/prd`);
+  const prdBeforeJson = await prdBeforeRes.json();
+  const prdVersionBefore: number = prdBeforeJson.prd?.version ?? prdBeforeJson.brd?.version;
+  const prdBefore = prdBeforeJson.prd?.content ?? prdBeforeJson.brd?.content;
+  const frBefore = new Set<string>(((prdBefore.requirementIndex ?? []) as Array<{ id: string }>).map((r) => r.id));
+
+  // Ajukan permintaan perubahan: siklus DRAFT dibuat dan dianalisis; survey dan wizard tidak diulang
   const changeReqRes = await authedFetch(`/api/projects/${projectId}/change-request`, {
     method: 'POST',
     body: JSON.stringify({
@@ -448,64 +463,114 @@ async function runTest() {
   });
   assert.strictEqual(changeReqRes.status, 200, 'Change request status harus 200');
   const changeReqJson = await changeReqRes.json();
-  assert.strictEqual(changeReqJson.wizardStep, 'survey', 'wizardStep harus kembali ke survey');
-  console.log('Permintaan perubahan diterima. wizardStep =', changeReqJson.wizardStep);
+  const cycleId: string = changeReqJson.cycleId;
+  assert(cycleId, 'Change request harus mengembalikan cycleId');
+  assert.strictEqual(changeReqJson.status, 'analyzing', 'Change request harus langsung menganalisis');
+  console.log('Permintaan perubahan diterima. Siklus DRAFT:', cycleId);
 
-  // Generate pertanyaan survey baru (async) setelah change request
-  const changeGenRes = await authedFetch(`/api/projects/${projectId}/survey/generate`, { method: 'POST' });
-  assert([200, 201, 202].includes(changeGenRes.status), `POST survey/generate setelah change request harus OK, got ${changeGenRes.status}`);
-  console.log('Survey perubahan generate dimulai, polling...');
-  await pollJob(authedFetch, projectId, 'survey_round', 'Survey perubahan generate');
+  // Hanya satu draf per project
+  const dupReqRes = await authedFetch(`/api/projects/${projectId}/change-request`, {
+    method: 'POST',
+    body: JSON.stringify({ request: 'Permintaan kedua saat draf masih ada' }),
+  });
+  assert.strictEqual(dupReqRes.status, 409, 'Permintaan kedua saat draf ada harus 409');
+  assert.strictEqual((await dupReqRes.json()).code, 'cycle_draft_exists', 'Kode 409 harus cycle_draft_exists');
 
-  // Pertanyaan survey baru harus digenerate ulang
-  const changeSurveyRes = await authedFetch(`/api/projects/${projectId}/survey`);
-  assert.strictEqual(changeSurveyRes.status, 200, 'GET survey status harus 200');
-  const changeSurveyData = await changeSurveyRes.json();
-  assert(
-    Array.isArray(changeSurveyData.questions) && changeSurveyData.questions.length > 0,
-    'Survey perubahan harus memiliki daftar pertanyaan baru'
-  );
-  console.log(`Survey perubahan putaran ${changeSurveyData.round} memuat ${changeSurveyData.questions.length} pertanyaan baru.`);
+  // Konfirmasi sebelum analisis selesai ditolak
+  const earlyGenRes = await authedFetch(`/api/projects/${projectId}/cycles/${cycleId}/generate`, {
+    method: 'POST',
+    body: JSON.stringify({ confirm: true, split: 'single' }),
+  });
+  assert.strictEqual(earlyGenRes.status, 409, 'Generate sebelum analisis selesai harus 409');
 
-  // Jawab seluruh putaran survey hingga tuntas menggunakan Saran Numa
-  let currentSurvey = changeSurveyData;
-  for (let putaranKe = 1; putaranKe <= 10; putaranKe++) {
-    const changeAnswers = currentSurvey.questions
-      .filter((q: any) => q.round === currentSurvey.round)
-      .map((q: any) => ({
-        questionId: q.id,
-        value: q.kind === 'checkbox' ? [q.suggestion] : q.suggestion,
-      }));
-    const changeSubmitRes = await authedFetch(`/api/projects/${projectId}/survey/submit`, {
+  await pollJob(authedFetch, projectId, 'cycle_analyze', 'Analisis dampak perubahan');
+
+  const loadDraft = async () => {
+    const res = await authedFetch(`/api/projects/${projectId}/cycles`);
+    assert.strictEqual(res.status, 200, 'GET cycles status harus 200');
+    const json = await res.json();
+    const draft = (json.cycles as any[]).find((c) => c.id === cycleId);
+    assert(draft, 'Draf siklus harus ada');
+    return { json, draft };
+  };
+
+  // Klarifikasi (bila kabur): jawab dengan saran Numa; maksimal 2 putaran, setelah itu analisis dipaksa CLEAR
+  let { json: cyclesJson, draft } = await loadDraft();
+  assert.strictEqual(cyclesJson.draftCycleId, cycleId, 'draftCycleId harus menunjuk draf');
+  for (let putaran = 1; draft.impact?.clarity === 'VAGUE'; putaran++) {
+    assert(putaran <= 2, 'Klarifikasi tidak boleh melebihi 2 putaran');
+    console.log(`Permintaan kabur, klarifikasi putaran ${putaran}...`);
+    const answers = (draft.impact.clarificationQuestions as any[]).map((q) => ({
+      questionId: q.id,
+      answer: q.suggestion ?? q.options[0],
+    }));
+    const clarifyRes = await authedFetch(`/api/projects/${projectId}/cycles/${cycleId}/clarify`, {
       method: 'POST',
-      body: JSON.stringify({ round: currentSurvey.round, answers: changeAnswers }),
+      body: JSON.stringify({ answers }),
     });
-    assert.strictEqual(changeSubmitRes.status, 200, 'Submit survey status harus 200');
-    const changeSubmitData = await changeSubmitRes.json();
-    if (changeSubmitData.done) {
-      // Poll summary async job
-      if (changeSubmitData.status === 'generating') {
-        await pollJob(authedFetch, projectId, 'survey_summary', 'Survey perubahan summary');
-      }
-      console.log('Survey perubahan selesai. Ringkasan produk diperbarui.');
-      break;
+    assert.strictEqual(clarifyRes.status, 200, 'Clarify status harus 200');
+    await pollJob(authedFetch, projectId, 'cycle_analyze', `Analisis ulang putaran ${putaran}`);
+    ({ json: cyclesJson, draft } = await loadDraft());
+  }
+  assert.strictEqual(draft.impact?.clarity, 'CLEAR', 'Analisis akhir harus CLEAR');
+  assert(typeof draft.impact?.summary === 'string' && draft.impact.summary.length > 0, 'Analisis harus punya ringkasan');
+  console.log(`Analisis selesai: tipe ${draft.impact.type}, skala ${draft.impact.size}, perlu ubah PRD: ${draft.impact.needsPrdChange}.`);
+
+  // Konfirmasi: pecah ditolak bila tidak ada usulan pemecahan; selain itu kerjakan utuh
+  const hasSplit = Boolean(draft.impact.splitProposal?.partA && draft.impact.splitProposal?.partB);
+  if (!hasSplit) {
+    const badSplitRes = await authedFetch(`/api/projects/${projectId}/cycles/${cycleId}/generate`, {
+      method: 'POST',
+      body: JSON.stringify({ confirm: true, split: 'a' }),
+    });
+    assert.strictEqual(badSplitRes.status, 400, 'Split tanpa usulan pemecahan harus 400');
+  }
+  const cycleGenRes = await authedFetch(`/api/projects/${projectId}/cycles/${cycleId}/generate`, {
+    method: 'POST',
+    body: JSON.stringify({ confirm: true, split: 'single' }),
+  });
+  assert.strictEqual(cycleGenRes.status, 200, 'Cycle generate status harus 200');
+  await pollJob(authedFetch, projectId, 'cycle_generate', 'Perancangan task siklus');
+
+  // Siklus OPEN, task bertanda cycleId, survey dan wizard tidak diulang
+  ({ json: cyclesJson, draft } = await loadDraft());
+  assert.strictEqual(draft.status, 'OPEN', 'Siklus harus OPEN setelah task dirancang');
+  assert(draft.taskCounts.total > 0, 'Siklus harus punya task');
+  assert.strictEqual(cyclesJson.openCycleId, cycleId, 'openCycleId harus menunjuk siklus');
+  const cycleTasksRes = await authedFetch(`/api/projects/${projectId}/tasks?cycleId=${cycleId}`);
+  const cycleTasks = (await cycleTasksRes.json()).tasks as any[];
+  assert.strictEqual(cycleTasks.length, draft.taskCounts.total, 'Jumlah task siklus harus sama dengan hitungan siklus');
+  assert(cycleTasks.every((t) => t.cycleId === cycleId), 'Semua task siklus harus bertanda cycleId');
+  console.log(`Siklus #${draft.number} OPEN dengan ${cycleTasks.length} task.`);
+
+  const projectAfterRes = await authedFetch(`/api/projects/${projectId}`);
+  assert.strictEqual((await projectAfterRes.json()).project.wizardStep, 'board', 'wizardStep harus tetap board');
+
+  // PRD: requirement baru dinomori lanjutan FR dan terbaca di indeks (bila analisis mengubah PRD)
+  if (draft.impact.needsPrdChange && draft.impact.newRequirements?.length > 0) {
+    const prdAfterRes = await authedFetch(`/api/projects/${projectId}/prd`);
+    const prdAfterJson = await prdAfterRes.json();
+    const prdAfter = prdAfterJson.prd?.content ?? prdAfterJson.brd?.content;
+    assert((prdAfterJson.prd?.version ?? prdAfterJson.brd?.version) > prdVersionBefore, 'Versi PRD harus naik');
+    assert(prdAfter.markdown.includes('Perubahan Siklus'), 'Markdown PRD harus memuat bagian Perubahan Siklus');
+    const newIds = (draft.impact.newRequirements as Array<{ id: string }>).map((r) => r.id);
+    for (const id of newIds) {
+      assert(/^FR-\d{3,}$/.test(id), `Requirement baru ${id} harus bernomor FR-NNN`);
+      assert(!frBefore.has(id), `Requirement baru ${id} tidak boleh menimpa FR lama`);
+      assert(
+        (prdAfter.requirementIndex as Array<{ id: string }>).some((r) => r.id === id),
+        `Requirement baru ${id} harus ada di requirementIndex`
+      );
     }
-    // Next round questions di-generate async — poll dulu
-    if (changeSubmitData.status === 'generating') {
-      await pollJob(authedFetch, projectId, 'survey_round', `Survey perubahan round ${changeSubmitData.nextRound}`);
-    }
-    const nextSurveyRes = await authedFetch(`/api/projects/${projectId}/survey`);
-    assert.strictEqual(nextSurveyRes.status, 200, 'GET survey putaran lanjutan status harus 200');
-    currentSurvey = await nextSurveyRes.json();
-    console.log(`Lanjut ke survey putaran ${currentSurvey.round}...`);
+    console.log(`PRD diperbarui: ${newIds.join(', ')} masuk indeks requirement.`);
   }
 
-  // Selesaikan survey dan arahkan wizard ke tech stack
-  const changeCompleteRes = await authedFetch(`/api/projects/${projectId}/survey/complete`, { method: 'POST' });
-  assert.strictEqual(changeCompleteRes.status, 200, 'Survey complete status harus 200');
-  const changeCompleteJson = await changeCompleteRes.json();
-  assert.strictEqual(changeCompleteJson.wizardStep, 'techstack', 'wizardStep harus diarahkan ke techstack');
-  console.log('Survey perubahan selesai. wizardStep =', changeCompleteJson.wizardStep);
+  // Siklus aktif menolak permintaan perubahan baru
+  const blockedReqRes = await authedFetch(`/api/projects/${projectId}/change-request`, {
+    method: 'POST',
+    body: JSON.stringify({ request: 'Permintaan baru saat siklus masih berjalan' }),
+  });
+  assert.strictEqual(blockedReqRes.status, 409, 'Permintaan saat siklus OPEN harus 409');
 
   console.log('\n=== SEMUA TEST E2E BERHASIL 100%! ===');
 }

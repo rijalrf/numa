@@ -212,6 +212,7 @@ export function buildTasksPrompt(args: GenerateTasksArgs): { system: string; use
 - Jangan membuat task BOOTSTRAP ulang kecuali perubahan memerlukan re-konfigurasi env/dependensi fundamental. Langsung ke task DATABASE/BACKEND/FRONTEND/INTEGRATION sesuai kebutuhan.
 - 'files_to_modify' WAJIB menargetkan berkas yang sudah ada di codebase (lihat ringkasan workspace).
 - Jika ada berkas penting yang menjadi referensi dan tidak boleh diubah oleh agent, daftarkan di 'files_readonly'.
+- ROADMAP pada pesan user hanya memuat fitur yang terdampak ditambah satu fitur siklus perubahan. Buat task hanya untuk perubahan yang diminta, jangan membangun ulang fitur lain. Requirement baru ada di HASIL ANALISIS DAMPAK CYCLE (newRequirements) dan sudah tercantum di PRD dengan nomor yang sama; petakan task ke nomor itu lewat 'requirement_ids'.
 - Urutan order task mulai dari ${args.cycle.startOrder ?? 1}.\n`
     : '';
 

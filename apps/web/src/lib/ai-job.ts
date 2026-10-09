@@ -12,6 +12,7 @@ export type AiJobResponse = {
 
 export type AiJobType =
   | 'tasks_generate'
+  | 'cycle_analyze'
   | 'cycle_generate'
   | 'roadmap_generate'
   | 'survey_round'

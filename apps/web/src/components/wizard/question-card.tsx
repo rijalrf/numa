@@ -22,7 +22,8 @@ type Props = {
   onSelectSuggestion: (q: SurveyQuestion) => void;
   onOtherClick: (questionId: string) => void;
   onOtherChange: (questionId: string, text: string) => void;
-  onSkipToggle: (questionId: string) => void;
+  /** Kosongkan bila pertanyaan wajib dijawab (tombol Lewati tidak ditampilkan). */
+  onSkipToggle?: (questionId: string) => void;
 };
 
 export function QuestionCard({
@@ -146,17 +147,19 @@ export function QuestionCard({
         </div>
 
         {/* Tombol Lewati di bawah */}
-        <div className="flex justify-end pt-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => onSkipToggle(q.id)}
-            className="text-xs h-7 px-2.5 text-muted-foreground hover:text-foreground"
-          >
-            {isSkipped ? 'Batal Lewati' : 'Lewati'}
-          </Button>
-        </div>
+        {onSkipToggle && (
+          <div className="flex justify-end pt-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => onSkipToggle(q.id)}
+              className="text-xs h-7 px-2.5 text-muted-foreground hover:text-foreground"
+            >
+              {isSkipped ? 'Batal Lewati' : 'Lewati'}
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

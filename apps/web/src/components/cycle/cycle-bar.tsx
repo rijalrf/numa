@@ -14,24 +14,7 @@ import {
   GitBranch,
   ChevronDown,
 } from 'lucide-react';
-
-export interface ProjectCycleItem {
-  id: string;
-  number: number;
-  title: string;
-  request: string;
-  status: 'DRAFT' | 'OPEN' | 'DONE';
-  type: string;
-  size: string;
-  impact?: any;
-  clarify?: any;
-  prdDelta?: any;
-  createdAt: string;
-  taskCounts: {
-    total: number;
-    done: number;
-  };
-}
+import type { ProjectCycleItem } from '@/lib/cycle';
 
 interface CycleBarProps {
   cycles: ProjectCycleItem[];
