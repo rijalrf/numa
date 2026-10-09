@@ -65,6 +65,7 @@ ${MODE_SECTIONS[mode]}
    numa init
    \`\`\`
    Skill terpasang di \`.agents/skills/\` (salinan di \`.claude/skills/\`). BACA \`.agents/skills/numa-workflow/SKILL.md\` lebih dulu: berisi aturan loop, mode eksekusi, guard, \`--force\`, dan kapan harus \`numa block\`.
+   Sebelum task FRONTEND pertama, BACA juga \`.agents/skills/numa-frontend/SKILL.md\` (layout publik dan aplikasi, design token, komponen internal, pemeriksaan tampilan).
 4. Baca PRD sekali sebelum loop task: \`numa prd\`
 
 ## Loop Eksekusi (ulangi sampai tidak ada task tersisa)
@@ -99,7 +100,7 @@ ${input.architectureMarkdown}
 
 ## Aturan Penting
 - **Isolasi project**: agent HANYA boleh membaca task/PRD dari project ini (server menegakkan via token).
-- **Fokus Task**: penuhi Acceptance Criteria dan loloskan Validation Commands. Struktur file adalah panduan arsitektur.
+- **Fokus Task**: penuhi Acceptance Criteria dan loloskan Validation Commands. Daftar file task adalah batas kerja; jangan menambal (halaman redirect, file setara dengan nama lain, endpoint buatan task FRONTEND). Aturan lengkap ada di skill numa-workflow.
 - **Testing**: sebelum panggil \`numa done\`, pastikan kode jalan lancar lokal dan test acceptance criteria terpenuhi.
 - **Jika gagal**: laporkan error apa adanya ke user. JANGAN diam-diam fallback.
 - **Jika macet atau spesifikasi ambigu**: jalankan \`numa block --reason "<alasan>"\` lalu berhenti dan lapor. Setelah user menyelesaikan masalah, gunakan \`numa retry\`.
@@ -113,7 +114,7 @@ ${input.architectureMarkdown}
 - [ ] Endpoint GET list mendukung pagination (?page, ?limit)
 - [ ] Operasi stok/saldo/kuota dalam $transaction atomik (baca dan tulis dalam transaksi yang sama)
 - [ ] DELETE endpoint cek relasi aktif sebelum hapus (tolak 409 jika ada relasi aktif)
-- [ ] Frontend: app shell default sidebar menu (nav kiri + konten utama), lihat skill numa-frontend
+- [ ] Frontend: layout publik tanpa sidebar (beranda, login, daftar) dan layout aplikasi dengan sidebar per peran, guard rute di satu tempat, lihat skill numa-frontend
 - [ ] Frontend: dilarang window.alert(), gunakan AlertBanner atau Toast
 - [ ] Frontend: semua label punya htmlFor yang sesuai dengan id input, tombol ikon punya aria-label
 - [ ] Frontend: loading state pakai skeleton loader, bukan teks polos

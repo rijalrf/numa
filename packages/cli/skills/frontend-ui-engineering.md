@@ -1,6 +1,6 @@
 ---
 name: numa-frontend
-description: Standar desain frontend dan konsistensi UI/UX - app shell sidebar, design token, pola komponen, state, formulir, tabel, aksesibilitas, responsif, dan performa.
+description: Standar desain frontend dan konsistensi UI/UX - layout publik dan layout aplikasi, design token, pola komponen, state, formulir, tabel, aksesibilitas, responsif, dan performa.
 ---
 <!-- Terinspirasi oleh frontend-design (https://github.com/anthropics/claude-code/tree/main/plugins/frontend-design), (c) Anthropic PBC, all rights reserved. Konten ditulis ulang, bukan terjemahan. -->
 
@@ -20,12 +20,19 @@ description: Standar desain frontend dan konsistensi UI/UX - app shell sidebar, 
 - Perangkat Struktur: Garis pemisah, penomoran (01, 02), dan label badge hanya dipakai jika data benar-benar memiliki urutan kronologis atau kategori penting.
 - Animasi Hemat: Gunakan motion hanya untuk merespons interaksi pengguna atau memandu fokus perubahan state. Jangan beri animasi berulang pada setiap card.
 
-## 4. Default App Shell (Layout Aplikasi)
-- Aplikasi hasil generate WAJIB menggunakan **sidebar menu** sebagai layout standar:
-  - Sisi kiri: navigasi sidebar persisten untuk menu modul/fitur.
-  - Sisi kanan: area konten utama.
-  - Sisi atas (header): hanya untuk konteks global (judul halaman aktif, status sistem, akun pengguna).
-- Responsif mobile: sidebar berubah menjadi drawer tersembunyi (toggle via hamburger) atau bottom navigation.
+## 4. Layout: Publik dan Aplikasi
+Aplikasi hasil generate memakai dua layout yang terpisah. Sidebar HANYA ada di layout aplikasi.
+- **Layout publik** (tanpa sidebar): beranda publik, login, daftar, lupa password, dan halaman galat.
+  - Login, daftar, dan lupa password berupa kartu di tengah layar dengan nama aplikasi di atasnya.
+  - Beranda publik memuat identitas aplikasi dan satu jalan masuk (tombol Masuk). Jangan menggandakan tombol Masuk di beberapa tempat pada layar yang sama.
+- **Layout aplikasi** (dengan sidebar): semua halaman yang butuh login.
+  - Sisi kiri: sidebar persisten berisi menu sesuai peran user, nama dan peran user, dan tombol Keluar.
+  - Sisi kanan: area konten utama. Header hanya untuk konteks global (judul halaman aktif, status sistem, akun pengguna).
+  - Responsif mobile: sidebar berubah menjadi drawer tersembunyi (toggle via hamburger) atau bottom navigation.
+- Dilarang menaruh menu tamu (Masuk, Daftar) di dalam sidebar. Layout root hanya memuat provider global; pemilihan layout dilakukan per kelompok rute, bukan di layout root.
+- Halaman yang butuh login dijaga di satu tempat (guard rute), bukan dicek terpisah di tiap halaman. Setelah login, user diarahkan ke halaman awal sesuai perannya.
+- Bila PRD tidak meminta beranda publik, `/` berupa landing sederhana untuk tamu (nama aplikasi dan satu tombol Masuk). User yang sudah login yang membuka `/` diarahkan ke halaman awal sesuai perannya.
+- Path halaman dan menu sidebar diambil dari satu sumber (satu file navigasi atau peta halaman pada `numa context`), tidak ditulis ulang di tiap komponen. Link atau redirect yang mengarah ke path yang tidak ada dibetulkan di sumbernya.
 
 ## 5. Standar UI/UX Implementasi
 - Spacing: Selalu gunakan kelipatan 4px (Tailwind: `gap-1`, `gap-2`, `p-3`, `p-4`, `p-6`, `space-y-4`).
@@ -65,7 +72,7 @@ Sebelum membuat halaman, pastikan fondasi berikut ada. Bila belum, buat sebagai 
 - **Detail**: breadcrumb, header berisi judul dan status (Badge), bagian terpisah dengan heading, aksi sekunder di menu.
 - **Formulir**: label di atas input, teks bantuan di bawah, tanda wajib yang konsisten, validasi saat blur dan saat submit, pesan galat per field dengan `aria-describedby`, fokus berpindah ke field galat pertama, tombol submit menampilkan status proses (disabled plus indikator) agar tidak terkirim ganda, dan peringatan sebelum meninggalkan formulir yang belum disimpan.
 - **Dashboard**: kartu ringkasan (angka utama plus konteks), maksimal satu grafik per pertanyaan bisnis, hindari dekorasi tanpa data.
-- **Autentikasi**: layar login, daftar, dan lupa password memakai satu layout; pesan galat umum yang tidak membuka detail akun.
+- **Autentikasi**: layar login, daftar, dan lupa password memakai layout publik (kartu di tengah layar, tanpa sidebar); pesan galat umum yang tidak membuka detail akun; setelah login diarahkan ke halaman awal sesuai peran.
 - **Halaman galat**: 404, 403, dan galat tak terduga memiliki tampilan sendiri dengan jalan kembali yang jelas.
 
 ## 10. Umpan Balik dan State Lengkap
@@ -91,7 +98,8 @@ Sebelum membuat halaman, pastikan fondasi berikut ada. Bila belum, buat sebagai 
 
 ## 13. Checklist Sebelum `numa done` pada Task FRONTEND
 - [ ] Memakai token dan komponen internal; tidak ada warna atau ukuran mentah dan tidak ada komponen duplikat.
-- [ ] App shell sidebar konsisten; judul halaman, breadcrumb, dan istilah menu seragam.
+- [ ] Layout publik tanpa sidebar dan layout aplikasi dengan sidebar per peran dipakai pada halaman yang tepat; judul halaman, breadcrumb, dan istilah menu seragam.
+- [ ] Semua link, menu, dan redirect mengarah ke path yang benar-benar ada; tidak ada halaman yang hanya berisi redirect untuk menutupi path yang salah.
 - [ ] Empat state (loading skeleton, kosong, galat, sukses) ada pada setiap data yang dimuat.
 - [ ] Formulir: label `htmlFor`, galat per field, status submit, tidak bisa terkirim ganda.
 - [ ] Dapat dipakai dengan keyboard; kontras memadai; ikon-saja punya `aria-label`.

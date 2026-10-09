@@ -232,7 +232,7 @@ LINGKUP FASE INI (WAJIB):
     ? `\n9. WAJIB ada task BOOTSTRAP di awal (order: 1): "Project Initialization & Shared Configuration" yang menyiapkan dependensi utama, struktur folder, .env.example, .env (WAJIB ada contoh variabel konfigurasi & PORT), .gitignore, dan README.md (cara install, setup env, dan jalankan aplikasi).`
     : '';
   const wiringRule = inLayer('INTEGRATION')
-    ? `\n10. WAJIB ada WIRING tasks di transisi antar layer sesuai stack pilihan (koneksi database, API client/service wrapper, dan integrasi antar halaman/komponen).`
+    ? `\n10. WAJIB ada WIRING tasks di transisi antar layer sesuai stack pilihan (koneksi database, dan verifikasi bahwa seluruh halaman memakai API client dari Fondasi UI; API client tidak dibuat ulang di fase ini).`
     : '';
 
   const backendRules = inLayer('BACKEND')
@@ -251,7 +251,7 @@ ATURAN WAJIB LAYER BACKEND (KEAMANAN, ERROR HANDLING, VALIDASI):
 
 PRINSIP ATOMIC & LOW-COST COMPATIBILITY:
 1. Satu task fokus pada 1 tanggung jawab spesifik (Single Responsibility Principle).
-2. Lingkup tanggung jawab yang jelas: field files_to_create, files_to_modify, files_readonly, dan forbidden adalah panduan arsitektur (rekomendasi, non-blocking). Jangan memaksakan struktur monorepo Node jika stack yang dipilih adalah framework lain (seperti Laravel, Django, Go, dll).
+2. Lingkup tanggung jawab yang jelas: field files_to_create, files_to_modify, files_readonly, dan forbidden adalah batas kerja agent. Agent hanya boleh membuat dan mengubah file pada daftar itu, dan satu file hanya boleh dibuat (files_to_create) oleh satu task; task lain yang membutuhkannya mencantumkannya di files_to_modify atau files_readonly. Jangan memaksakan struktur monorepo Node jika stack yang dipilih adalah framework lain (seperti Laravel, Django, Go, dll).
 3. Berikan 'implementation_steps' yang ringkas, instruktif, dan to-the-point (1-3 butir langkah inti arsitektural). JANGAN menulis ulang dump kode lengkap agar respon cepat dan efisien. AI coding agent akan mengimplementasikan detail kode berdasarkan Acceptance Criteria dan API Contracts.
 4. SINKRONISASI REQUIREMENT PRD KE TASK (WAJIB):
    Setiap task WAJIB memetakan minimal 1 ID kebutuhan ('requirement_ids', misal FR-001, PR-001, BR-001) yang tercantum di PRD. Jika task berupa BOOTSTRAP umum yang menopang seluruh fondasi aplikasi, cantumkan array kosong [] atau ID setup terkait. DILARANG menggunakan atau menghasilkan User Story atau format Gherkin.
@@ -260,7 +260,8 @@ PRINSIP ATOMIC & LOW-COST COMPATIBILITY:
 7. Setiap task layer BACKEND yang membuat API endpoint WAJIB mendeklarasikan 'apiContracts' lengkap dengan method, path, requestBody, dan responseBody type signature.
 8. KONSISTENSI & PARITY API KE UI (SANGAT KRUSIAL):
    - Setiap endpoint MUTASI (POST, PUT, PATCH, DELETE) yang ada di SPESIFIKASI ENDPOINT API atau task BACKEND WAJIB memiliki antarmuka pemanggil di frontend (form, modal, dialog, atau tombol aksi interaktif). Dilarang menyisakan endpoint backend tanpa antarmuka pemanggil di frontend.
-   - Setiap task FRONTEND yang memanggil endpoint mutasi WAJIB mendeklarasikan field 'consumesApis' dengan array [{ method, path, description }].
+   - Setiap task FRONTEND yang memanggil endpoint API (semua method, termasuk GET) WAJIB mendeklarasikan field 'consumesApis' dengan array [{ method, path, description }].
+   - Task FRONTEND DILARANG membuat endpoint API. Endpoint dibuat hanya oleh task BACKEND; bila halaman butuh endpoint yang belum ada di spesifikasi, tulis di out_of_scope bahwa endpoint itu dibuat task BACKEND, jangan dibuat di task FRONTEND.
 ${bootstrapRule}${wiringRule}${backendRules}
 ${phaseScopeRules}${cycleSystemRules}`;
 
@@ -328,7 +329,8 @@ ${fence('RINGKASAN WORKSPACE REPO (numa sync)', args.cycle.repoSummary)}`
 
   const frontendRules = inLayer('FRONTEND')
     ? `Aturan khusus FRONTEND (Design System Contract & UI/UX Specs):
-- Default app shell: sidebar menu (nav kiri + konten utama); header hanya untuk info global. Ikuti panduan skill .agents/skills/numa-frontend/SKILL.md (design token, komponen internal, pola halaman, aksesibilitas).
+- Dua layout: layout publik (beranda publik, login, daftar, lupa password, halaman galat; TANPA sidebar, login/daftar/lupa password berupa kartu di tengah layar) dan layout aplikasi (semua halaman setelah login; sidebar dengan menu sesuai peran, nama dan peran user, tombol Keluar). Tidak ada menu tamu (Masuk/Daftar) di sidebar dan tombol Masuk tidak digandakan. Guard rute di satu tempat, dan setelah login user diarahkan ke halaman awal sesuai peran. Path halaman dan menu diambil dari satu file navigasi, bukan ditulis ulang per komponen. Ikuti panduan skill .agents/skills/numa-frontend/SKILL.md (design token, komponen internal, pola halaman, aksesibilitas).
+- Task FRONTEND pertama pada fase ini adalah Fondasi UI: layout publik dan aplikasi, guard rute, navigasi, design token, komponen internal, dan API client satu-satunya. Task halaman lain WAJIB depends_on task Fondasi UI dan memakai file-file itu, tidak membuat versi sendiri.
 - Terapkan Design System Contract: mobile-first, clean layout, semantic HTML, dan konsistensi visual.
 - Spacing terstandarisasi: gunakan kelipatan 4px (Tailwind: gap-1, gap-2, p-3, p-4, p-6, space-y-4).
 - Tangani state interaksi secara lengkap pada acceptance criteria: idle, loading (spinner/skeleton), error, dan success.
@@ -352,7 +354,7 @@ ${fence('RINGKASAN WORKSPACE REPO (numa sync)', args.cycle.repoSummary)}`
   const integrationRules = inLayer('INTEGRATION')
     ? `Wajib pada layer INTEGRATION include minimal task integrasi ini:
 1. Wire Database to Backend API - pastikan koneksi database/ORM terhubung dan migrasi/skema berjalan.
-2. Wire Frontend to Backend API - buat API client wrapper dan hubungkan seluruh antarmuka ke API.
+2. Wire Frontend to Backend API - verifikasi seluruh halaman memakai API client dari Fondasi UI (jangan membuat API client baru) dan hubungkan seluruh antarmuka ke API sesungguhnya.
 3. Test Automation & Critical User Journey Verification - setup konfigurasi testing sesuai stack (${args.stack?.testing ?? 'automated test suite'}) dan tulis test untuk SETIAP skenario E2E pada bagian SKENARIO E2E DARI BUSINESS FLOW (bila ada), jika tidak ada gunakan alur kritis dari PRD.
 
 `
@@ -444,7 +446,7 @@ Aturan lingkup task (Stack-Aware & Fleksibel):
   * Laravel/PHP: app/, routes/, database/migrations/, resources/, dsb.
   * Django/Python: root project, app modules, tests/, dsb.
   * Go: cmd/, internal/, pkg/, dsb.
-- Field file (files_to_create, files_to_modify, files_readonly, forbidden) bersifat rekomendasi/panduan arsitektural. Fokus utama keberhasilan task adalah Acceptance Criteria dan Validation Commands. Dilarang memaksakan path atau ekstensi .ts jika tech stack backend/frontend yang dipilih bukan Node/TypeScript.
+- Field file (files_to_create, files_to_modify, files_readonly, forbidden) adalah batas kerja agent: file di luar daftar tidak boleh dibuat atau diubah. Keberhasilan task diukur dari Acceptance Criteria dan Validation Commands. Dilarang memaksakan path atau ekstensi .ts jika tech stack backend/frontend yang dipilih bukan Node/TypeScript.
 
 ${taskIdRules}
 

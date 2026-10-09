@@ -80,8 +80,8 @@ ATURAN STRUKTUR LAYER:
 1. Fase 1 WAJIB berlayer 'BOOTSTRAP': inisialisasi project, konfigurasi dependensi dan build sesuai stack, struktur folder, variabel lingkungan (.env), .gitignore (wajib exclude dependensi, .env, berkas database lokal, hasil build), .env.example, README.md (cara install & jalankan), dan kontrak tipe bersama bila relevan.
 2. Fase DATABASE: perancangan skema data, migrasi, dan seed data awal sesuai ORM/stack. Bergantung pada BOOTSTRAP.
 3. Fase BACKEND: implementasi controller/route API sesuai spesifikasi. Bergantung pada fitur DATABASE terkait.
-4. Fase FRONTEND: implementasi halaman UI, komponen, dan konsumsi API backend. Bergantung pada fitur BACKEND terkait.
-5. Fase TERAKHIR WAJIB berlayer 'INTEGRATION': mencakup WIRING (menghubungkan FE ke API BE sesungguhnya, BE ke DB) dan smoke test lokal (aplikasi bisa dijalankan end-to-end tanpa error).`;
+4. Fase FRONTEND: implementasi halaman UI, komponen, dan konsumsi API backend. Fitur pertama fase FRONTEND adalah "Fondasi UI" (layout publik dan aplikasi, guard rute, navigasi, design token, komponen internal, API client); fitur halaman lain bergantung padanya. Bergantung pada fitur BACKEND terkait.
+5. Fase TERAKHIR WAJIB berlayer 'INTEGRATION': mencakup WIRING (memverifikasi FE memakai API BE sesungguhnya lewat API client dari Fondasi UI, BE ke DB; API client tidak dibuat di fase ini) dan smoke test lokal (aplikasi bisa dijalankan end-to-end tanpa error).`;
 
   const user = `${buildRoadmapInput(prd, opts.stack)}
 
@@ -109,7 +109,7 @@ PRINSIP EXECUTION GRAPH:
 1. Fase BOOTSTRAP WAJIB menjadi fase pertama (order: 1) tanpa dependensi (dependsOn: []).
 2. Fitur layer DATABASE bergantung pada fitur BOOTSTRAP.
 3. Fitur layer BACKEND umumnya bergantung (dependsOn) pada fitur DATABASE terkait.
-4. Fitur layer FRONTEND umumnya bergantung pada fitur BACKEND terkait.
+4. Fitur layer FRONTEND umumnya bergantung pada fitur BACKEND terkait; fitur "Fondasi UI" (slug mis. "ui-foundation") menjadi fitur pertama fase FRONTEND dan fitur halaman lain dependsOn ke fitur itu.
 5. Fitur INTEGRATION bergantung pada fitur FRONTEND & BACKEND inti.
 6. INTEGRATION WAJIB mencakup: task wiring integrasi nyata (bukan hanya test setup), dan smoke test: aplikasi dapat dijalankan dengan perintah standar stack terpilih dan halaman utama dapat diakses.
 7. Jangan membuat siklus ketergantungan (circular dependency).
