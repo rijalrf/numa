@@ -3,6 +3,7 @@
 //   2. Workspace:   .numa/workspace.json { projectId, apiUrl } (dicari naik dari cwd)
 //   3. Global:      ~/.numa/config.json { apiUrl, token?, activeTaskId?, projectId? }
 // Token TIDAK pernah ditulis ke workspace (aman untuk di-commit).
+import { ensureNumaGitignore } from './numa-gitignore.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -83,10 +84,7 @@ export function saveWorkspace(root: string, ws: WorkspaceConfig): string {
   const merged = { ...(readJson<WorkspaceConfig>(file) ?? {}), ...ws };
   fs.writeFileSync(file, JSON.stringify(merged, null, 2) + '\n', 'utf-8');
   // Berkas runtime lokal tidak boleh ikut ter-commit; workspace.json aman (tanpa rahasia).
-  const ignore = path.join(dir, '.gitignore');
-  if (!fs.existsSync(ignore)) {
-    fs.writeFileSync(ignore, 'state.json\nfailure-context.json\n', 'utf-8');
-  }
+  ensureNumaGitignore(dir);
   return file;
 }
 

@@ -1,6 +1,7 @@
 // State lokal task aktif di workspace: .numa/state.json (diabaikan git).
 // Menyimpan baseline saat `numa start` agar guard hanya menilai perubahan sejak task dimulai.
 import fs from 'node:fs';
+import { ensureNumaGitignore } from './numa-gitignore.js';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { findWorkspaceRoot } from './config.js';
@@ -65,8 +66,7 @@ export function saveTaskState(workDir: string, state: TaskState): void {
   const file = stateFile(workDir);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(state, null, 2), 'utf-8');
-  const ignore = path.join(path.dirname(file), '.gitignore');
-  if (!fs.existsSync(ignore)) fs.writeFileSync(ignore, 'state.json\nfailure-context.json\n', 'utf-8');
+  ensureNumaGitignore(path.dirname(file));
 }
 
 export function loadTaskState(workDir: string, taskId: string): TaskState | null {

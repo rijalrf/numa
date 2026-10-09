@@ -79,6 +79,7 @@ export type ContextResp = {
     files_to_create?: string[];
     validation_commands?: string[];
     advisory_commands?: string[];
+    uiCheck?: { extensions: string[]; roots: string[]; exempt: string[] } | null;
   };
 };
 export type GuardReportPayload = {

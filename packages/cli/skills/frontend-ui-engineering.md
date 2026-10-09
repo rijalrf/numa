@@ -6,19 +6,24 @@ description: Standar desain frontend dan konsistensi UI/UX - layout publik dan l
 
 # Standar Desain Frontend & Rekayasa Antarmuka Numa
 
-## 1. Peran & Pola Pikir
-- Posisikan diri sebagai design lead: berikan produk identitas visual mandiri, bukan template pasaran.
-- Hindari estetika klise AI generic: jangan gunakan preset styling seragam tanpa dasar kebutuhan spesifik.
+## 1. Alur Dua Langkah (wajib)
+**Langkah rencana** (sebelum menulis kode antarmuka):
+- Baca Arah Desain dan Peta Halaman pada `numa context`. Bila Arah Desain kosong, pakai token netral dari Fondasi UI dan jangan mengarang palet baru.
+- Tulis rencana singkat: token warna (primary, aksen, netral), pasangan font, kepadatan, dan konsep layout (wireframe ASCII beberapa baris untuk layout aplikasi dan satu halaman utama).
+
+**Langkah eksekusi**:
+- Bangun Fondasi UI lebih dulu (bagian 8), lalu susun setiap halaman dari komponen dan token itu.
+- Setelah halaman jalan, periksa tampilannya lewat screenshot (bagian 14).
 
 ## 2. Desain Berdasarkan Subjek
-- Pahami konteks bisnis, target pengguna, dan alur kerja utama produk sebelum menentukan palette atau layout.
-- Sesuaikan nuansa visual dengan domain produk (misal: perkakas finansial butuh kerapatan data tinggi; aplikasi operasional lapangan butuh target sentuh besar dan kontras tinggi).
+- Sesuaikan nuansa dengan domain dan pengguna produk: perkakas data padat butuh kerapatan tinggi; aplikasi lapangan butuh target sentuh besar dan kontras tinggi; layanan publik butuh kesan tenang dan tepercaya.
+- Identitas visual datang dari Arah Desain PRD, bukan dari preset template.
 
 ## 3. Prinsip Visual & Tipografi
-- Hero & Tampilan Pembuka: Buka halaman dengan elemen paling representatif dari domain aplikasi.
-- Tipografi: Maksimal 1–2 keluarga font yang saling melengkapi dengan hirarki skala yang terdefinisi. Batasi panjang baris baca di bawah 80 karakter.
-- Perangkat Struktur: Garis pemisah, penomoran (01, 02), dan label badge hanya dipakai jika data benar-benar memiliki urutan kronologis atau kategori penting.
-- Animasi Hemat: Gunakan motion hanya untuk merespons interaksi pengguna atau memandu fokus perubahan state. Jangan beri animasi berulang pada setiap card.
+- Maksimal 1-2 keluarga font dengan hirarki skala yang terdefinisi; batasi panjang baris baca di bawah 80 karakter.
+- Garis pemisah, penomoran, dan label badge hanya dipakai bila data memang berurutan atau berkategori.
+- Motion hanya untuk merespons interaksi atau memandu fokus; tidak ada animasi berulang pada setiap kartu.
+- Biarkan satu elemen menjadi pusat perhatian visual per layar; sisanya tenang dan teratur.
 
 ## 4. Layout: Publik dan Aplikasi
 Aplikasi hasil generate memakai dua layout yang terpisah. Sidebar HANYA ada di layout aplikasi.
@@ -51,6 +56,7 @@ Aplikasi hasil generate memakai dua layout yang terpisah. Sidebar HANYA ada di l
 - Kartu SaaS seragam dengan rounded-corners identik di semua level komponen.
 - Eyebrow text huruf kapital semua (ALL CAPS) di atas setiap judul heading.
 - Penomoran dekoratif acak pada kartu non-sekuensial.
+- Tampilan bawaan template: font sistem (Arial, Helvetica), palet warna Tailwind mentah (`slate`, `sky`, `rose`, dan sebagainya), serta kartu putih seragam di tengah latar abu-abu tanpa alasan domain.
 
 ## 7. Proses & Disiplin Eksekusi
 - Rencana: Rumuskan palet warna token, jenis font, dan struktur layout sebelum menulis kode antarmuka.
@@ -58,14 +64,17 @@ Aplikasi hasil generate memakai dua layout yang terpisah. Sidebar HANYA ada di l
 - Restraint: Biarkan satu fitur menjadi pusat perhatian visual, buat sisa antarmuka tenang dan teratur.
 - Copywriting: Gunakan bahasa pengguna yang aktif, lugas, dan instruktif pada tombol aksi (misal: "Simpan perubahan", "Buat invoice baru").
 
-## 8. Design System dan Konsistensi (wajib, dibuat sebelum halaman pertama)
-Sebelum membuat halaman, pastikan fondasi berikut ada. Bila belum, buat sebagai bagian task FRONTEND pertama, lalu pakai ulang di semua task berikutnya. Jangan membuat gaya lokal per halaman.
-- **Design token** di satu tempat (CSS variables atau konfigurasi Tailwind): warna (primary, surface, border, teks, success, warning, danger, info), radius, bayangan, tipografi, spacing. Dilarang memakai nilai warna hex atau ukuran piksel mentah di komponen.
-- **Mode terang dan gelap** bila produk dipakai lama (dashboard, back-office): token memiliki varian dan pilihan pengguna diingat.
-- **Pustaka komponen internal** (mis. `components/ui`): Button, Input, Select, Textarea, Checkbox, Switch, Modal/Dialog, Drawer, Dropdown, Tabs, Badge, Card, Table, Pagination, Toast, AlertBanner, Skeleton, EmptyState, Breadcrumb. Halaman menyusun komponen ini, tidak membuat ulang tombol atau input sendiri.
-- **Satu pustaka ikon** (mis. `lucide-react`). Ukuran ikon seragam (16, 20, 24). Dilarang emoji di UI, kode, dan teks.
-- **Varian terbatas dan bermakna**: Button primary, secondary, ghost, destructive. Satu aksi primer per layar. Aksi destruktif memakai warna danger dan dialog konfirmasi yang menyebut nama objek yang dihapus.
-- **Penamaan dan copy konsisten**: satu istilah per konsep di seluruh UI (jangan campur "Hapus", "Delete", "Buang"). Bahasa antarmuka mengikuti PRD (default Bahasa Indonesia). Judul halaman, label menu, dan breadcrumb memakai istilah yang sama.
+## 8. Fondasi UI (wajib, dikerjakan sebelum halaman pertama)
+Fondasi dibuat satu kali oleh task Fondasi UI; task halaman memakainya dan tidak membuat versi sendiri. Aturan yang diperiksa:
+- Token desain ada di satu tempat (CSS variable atau konfigurasi Tailwind): warna (primary, surface, border, teks, success, warning, danger, info), radius, bayangan, tipografi, spacing. Nilainya mengikuti Arah Desain.
+- Komponen tidak memakai warna palet bawaan Tailwind (`bg-sky-500`), nilai warna arbitrer (`bg-[#0ea5e9]`), atau hex mentah. Pelanggaran ini ditolak otomatis oleh `numa done`.
+- Font dimuat lewat mekanisme font framework (bukan font sistem) sesuai Arah Desain.
+- Pustaka komponen internal (`components/ui` atau padanannya) memuat minimal: Button, Input, Select, Textarea, Modal, Card, Badge, Table, Skeleton, EmptyState, AlertBanner, Toast. Halaman menyusun komponen ini, bukan menulis ulang tombol atau input.
+- Layout publik dan layout aplikasi, guard rute, file navigasi, dan API client satu-satunya ada (bagian 4).
+- Satu pustaka ikon dengan ukuran seragam; tanpa emoji di UI, kode, dan teks.
+- Varian tombol terbatas dan bermakna (primary, secondary, ghost, destructive); satu aksi primer per layar; aksi destruktif memakai warna danger dan dialog konfirmasi yang menyebut nama objek.
+- Satu istilah per konsep di seluruh UI; bahasa antarmuka mengikuti PRD (default Bahasa Indonesia).
+- Mode terang dan gelap hanya bila produk dipakai lama (dashboard, back-office).
 
 ## 9. Pola Halaman Standar
 - **Daftar (list)**: judul halaman dan aksi utama di kanan atas, kolom pencarian dan filter di atas tabel, tabel dengan sort pada kolom yang relevan, pagination, aksi baris lewat menu atau ikon ber-`aria-label`, dan empty state dengan ajakan aksi. Tabel di mobile berubah menjadi kartu atau dapat digulir horizontal di dalam wadahnya.
@@ -105,3 +114,12 @@ Sebelum membuat halaman, pastikan fondasi berikut ada. Bila belum, buat sebagai 
 - [ ] Dapat dipakai dengan keyboard; kontras memadai; ikon-saja punya `aria-label`.
 - [ ] Tampilan benar di mobile, tablet, dan desktop; tidak ada gulir horizontal.
 - [ ] Semua teks UI Bahasa Indonesia (atau bahasa pada PRD), tanpa emoji, tanpa `alert()`.
+- [ ] Tidak ada kelas warna palet bawaan Tailwind, warna arbitrer, atau hex mentah di halaman (diperiksa otomatis oleh `numa done`).
+- [ ] Screenshot di lebar 390 px dan 1280 px sudah diambil dan diperiksa (bagian 14).
+
+## 14. Pemeriksaan Tampilan (screenshot)
+Setiap task halaman FRONTEND ditutup dengan memeriksa tampilan nyata, bukan hanya kode.
+1. Jalankan aplikasi dan buka halaman task ini.
+2. Ambil screenshot dengan Playwright (tersedia di semua golden stack) di lebar 390 px dan 1280 px. Simpan di `.numa/screenshots/` (folder ini tidak masuk git).
+3. Lihat hasilnya (baca gambar bila agent Anda mampu) dan periksa: token dan komponen internal terpakai, layout publik atau aplikasi sesuai Peta Halaman, tidak ada gulir horizontal, state kosong dan galat terlihat wajar.
+4. Perbaiki yang tidak lolos sebelum `numa done`. Bila agent Anda tidak bisa melihat gambar, periksa dengan cara lain (mis. uji lebar viewport lewat Playwright) dan tulis keterbatasannya di `--summary`.

@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import { checkCommand } from './command-policy.js';
 import { confirm } from './prompt.js';
 import { changedSinceStart, type TaskState } from './task-state.js';
+import { checkUiStyles, formatUiViolations, type UiCheckConfig } from './ui-check.js';
 import { CLI_VERSION } from './version.js';
 
 export type GuardSpec = {
@@ -16,9 +17,11 @@ export type GuardSpec = {
   files_to_modify?: string[];
   validation_commands?: string[];
   advisory_commands?: string[];
+  /** Konfigurasi pemeriksaan gaya (task FRONTEND). Kosong/null = tidak diperiksa. */
+  uiCheck?: UiCheckConfig | null;
 };
 
-export type FailureType = 'FORBIDDEN_FILES' | 'TEST_FAILURE' | 'COMMAND_FAILURE' | 'RUNTIME_ERROR';
+export type FailureType = 'FORBIDDEN_FILES' | 'TEST_FAILURE' | 'COMMAND_FAILURE' | 'RUNTIME_ERROR' | 'STYLE_VIOLATION';
 
 export type GuardCommandResult = { command: string; ok: boolean; skipped?: boolean };
 
@@ -194,6 +197,26 @@ export async function runGuard(spec: GuardSpec, cwd: string, taskId?: string, op
       const more = report.outOfScopeFiles.length > 20 ? `\n... dan ${report.outOfScopeFiles.length - 20} file lain` : '';
       console.log(`Peringatan (tidak memblokir): ${report.outOfScopeFiles.length} file berubah di luar lingkup task:\n${shown}${more}\n`);
     }
+  }
+
+  // Pemeriksaan gaya: hanya task FRONTEND yang menerima konfigurasi dari server, dan hanya file yang berubah di task ini.
+  if (spec.uiCheck && spec.layer === 'FRONTEND') {
+    const violations = checkUiStyles(changed, cwd, spec.uiCheck);
+    if (violations.length > 0) {
+      const failure: FailureContext = {
+        task_id: taskId ?? 'UNKNOWN',
+        status: 'FAILED',
+        failure_type: 'STYLE_VIOLATION',
+        error: `Gaya UI melanggar token desain:\n${formatUiViolations(violations, 10)}`,
+        affected_files: [...new Set(violations.map((v) => v.file))],
+        next_action: 'Ganti kelas warna mentah dengan token desain dan komponen internal (components/ui), lalu jalankan numa done lagi.',
+      };
+      throw new GuardError(
+        `Pemeriksaan gaya UI GAGAL: ${violations.length} pelanggaran.\n${formatUiViolations(violations)}\n\nGanti dengan token desain dan komponen internal dari Fondasi UI (jangan warna palet bawaan, warna arbitrer, atau hex mentah).`,
+        failure
+      );
+    }
+    console.log('Pemeriksaan gaya UI lolos.');
   }
 
   if (changed.length > 0 && !spec.validation_commands?.length) {

@@ -1,6 +1,6 @@
 {
   "name": "numa-cli",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "CLI agent loop untuk AI coding agent - autonomous task execution via bounded context isolation",
   "keywords": [
     "cli",
