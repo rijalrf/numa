@@ -3,6 +3,7 @@
 // memiliki task consumer di FRONTEND/INTEGRATION.
 
 import type { TaskGen } from './tasks.js';
+import { endpointKey, normalizeEndpointPath as normalizePath } from './endpoint-path.js';
 
 export interface EndpointRef {
   method: string;
@@ -13,16 +14,6 @@ export interface EndpointRef {
 export interface ApiCoverageResult {
   uncovered: EndpointRef[];
   warnings: string[];
-}
-
-function normalizePath(rawPath: string): string {
-  return rawPath
-    .trim()
-    .toLowerCase()
-    .replace(/\/+/g, '/')
-    .replace(/\/$/, '')
-    // Samakan variasi parameter: :workspaceId, :id, :taskId -> :param
-    .replace(/:[a-zA-Z0-9_]+/g, ':param');
 }
 
 const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -121,4 +112,33 @@ export function validateApiCoverage(
   }
 
   return { uncovered, warnings };
+}
+
+/**
+ * Arah sebaliknya: endpoint yang dipanggil UI (consumesApis task FRONTEND, semua method) tetapi tidak ada di spec
+ * maupun di apiContracts task BACKEND. Hasilnya peringatan; tidak mengubah task.
+ */
+export function findUiApiWithoutBackend(
+  tasks: TaskGen[],
+  specEndpoints: Array<{ method: string; path: string }> = [],
+): Array<{ method: string; path: string; taskId?: string; title: string }> {
+  const known = new Set<string>();
+  for (const ep of specEndpoints) known.add(endpointKey(ep.method, ep.path));
+  for (const t of tasks) {
+    if (t.layer !== 'BACKEND') continue;
+    for (const c of t.apiContracts ?? []) known.add(endpointKey(c.method, c.path));
+  }
+
+  const missing: Array<{ method: string; path: string; taskId?: string; title: string }> = [];
+  const seen = new Set<string>();
+  for (const t of tasks) {
+    if (t.layer !== 'FRONTEND') continue;
+    for (const c of t.consumesApis ?? []) {
+      const key = endpointKey(c.method, c.path);
+      if (known.has(key) || seen.has(`${t.taskId}|${key}`)) continue;
+      seen.add(`${t.taskId}|${key}`);
+      missing.push({ method: c.method.toUpperCase(), path: c.path, taskId: t.taskId, title: t.title });
+    }
+  }
+  return missing;
 }

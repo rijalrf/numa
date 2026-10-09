@@ -20,6 +20,8 @@ import { buildJourneyScenarios, renderJourneyScenarios } from '../lib/ai/journey
 import { ensureProductSpec } from '../lib/prd-spec.js';
 import { runTaskQualityGate } from '../lib/task-quality.js';
 import { resolveStackContract } from '../lib/ai/stack-contract.js';
+import { findPageApiMissing } from '../lib/ai/page-map.js';
+import { resolveUiCheck } from '../lib/ai/ui-shell-contract.js';
 import { persistGeneratedTasks } from '../lib/task-persist.js';
 import { enqueueAiJobOnce, getLatestJob, isAiJobType, registerJobHandler, reportJobProgress, toClientStatus, cancelAiJob, NonRetryableJobError, rejectJobLimit } from '../lib/ai/job.js';
 
@@ -66,6 +68,22 @@ registerJobHandler<{ isFirstGeneration?: boolean }>('tasks_generate', async ({ j
     for (const w of checkSpecConsistency(prdDoc.spec)) {
       preFindings.push({ code: 'SPEC_INCONSISTENT', severity: 'info', message: w });
     }
+    if (prdDoc.spec.pages.length === 0) {
+      preFindings.push({
+        code: 'PAGES_MISSING',
+        severity: 'warning',
+        message: 'Spec PRD belum memiliki peta halaman. Path halaman dan navigasi tidak punya kontrak bersama; generate ulang PRD agar peta halaman disusun.',
+      });
+    }
+  }
+  const pageEndpointsMissing = findPageApiMissing(prdDoc.spec);
+  for (const m of pageEndpointsMissing) {
+    preFindings.push({
+      code: 'PAGE_API_MISSING',
+      severity: 'warning',
+      message: `Halaman ${m.page} membutuhkan ${m.method} ${m.path}, tetapi endpoint itu tidak ada di spec. Endpoint dikirim ke fase BACKEND sebagai endpoint tambahan.`,
+      refs: [`${m.method} ${m.path}`],
+    });
   }
   const stackContract = resolveStackContract(currentProject.stacks || []);
 
@@ -119,6 +137,9 @@ registerJobHandler<{ isFirstGeneration?: boolean }>('tasks_generate', async ({ j
       prd: prdDoc as any,
       projectId,
       stack: stackContract,
+      pages: prdDoc.spec?.pages,
+      design: prdDoc.spec?.design,
+      pageEndpointsMissing,
       e2eScenarios,
       tier: TASK_GENERATION_TIER,
     },
@@ -127,7 +148,7 @@ registerJobHandler<{ isFirstGeneration?: boolean }>('tasks_generate', async ({ j
 
   assertActive();
   await progress('validate', 'Memvalidasi task');
-  const gate = await runTaskQualityGate({ generated, prd: prdDoc, flow, journeys });
+  const gate = await runTaskQualityGate({ generated, prd: prdDoc, flow, journeys, stack: stackContract, design: prdDoc.spec?.design });
   const validTasks = gate.tasks;
   const findings = [...preFindings, ...gate.findings];
 
@@ -154,7 +175,7 @@ registerJobHandler<{ isFirstGeneration?: boolean }>('tasks_generate', async ({ j
       const startOrder = preserved.reduce((max, t) => Math.max(max, t.order), 0) + 1;
 
       await tx.task.deleteMany({ where: { projectId, status: { not: 'DONE' } } });
-      await persistGeneratedTasks(tx, projectId, fresh, featureIdMap, null, startOrder);
+      await persistGeneratedTasks(tx, projectId, fresh, featureIdMap, null, startOrder, { uiCheck: resolveUiCheck(stackContract) });
       await tx.project.update({
         where: { id: projectId },
         data: {

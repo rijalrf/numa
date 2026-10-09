@@ -107,9 +107,10 @@ Prioritas dari tertinggi: environment (`NUMA_API_URL`, `NUMA_PROJECT_ID`), lalu 
   1. Mengambil guard spec dari `GET /api/agent/tasks/:id/context`.
   2. **File terlarang**: file yang berubah sejak baseline (worktree, file baru, dan commit setelah baseline) dicocokkan dengan `forbidden`. Pelanggaran menghentikan `done` dan mencatat kegagalan (task menjadi `BLOCKED`).
   3. **File di luar lingkup**: file di luar `files_to_create` + `files_to_modify` hanya diperingatkan.
-  4. **validation_commands**: dijalankan di workspace, tunduk pada kebijakan keamanan di bawah.
-  5. Mengirim `POST /api/agent/tasks/:id/complete` beserta `guardReport` (file berubah, file di luar lingkup, hasil perintah, versi CLI). Server menyimpannya di `aiContext.completion`.
-  6. Server membalas `layerCompleted` (task terakhir di layernya) dan `allTasksDone`. CLI mencetak info netral; berhenti atau lanjut ditentukan mode eksekusi di Master Prompt (konfirmasi per layer atau otomatis penuh). Tidak ada gate atau persetujuan di web.
+  4. **Pemeriksaan gaya UI** (hanya task FRONTEND yang datanya memuat `uiCheck`, yaitu task yang dibuat dengan `tasks@6` ke atas pada stack Tailwind): file yang berubah pada task ini dipindai. Kelas warna palet bawaan Tailwind (`bg-sky-500`), nilai warna arbitrer (`bg-[#0ea5e9]`), dan hex mentah ditolak; folder `components/ui` dan file token dikecualikan. Pelanggaran menghentikan `done` dengan pesan berisi file, baris, dan kelas yang ditolak (jenis kegagalan `STYLE_VIOLATION`). Task tanpa `uiCheck` tidak diperiksa.
+  5. **validation_commands**: dijalankan di workspace, tunduk pada kebijakan keamanan di bawah.
+  6. Mengirim `POST /api/agent/tasks/:id/complete` beserta `guardReport` (file berubah, file di luar lingkup, hasil perintah, versi CLI). Server menyimpannya di `aiContext.completion`.
+  7. Server membalas `layerCompleted` (task terakhir di layernya) dan `allTasksDone`. CLI mencetak info netral; berhenti atau lanjut ditentukan mode eksekusi di Master Prompt (konfirmasi per layer atau otomatis penuh). Tidak ada gate atau persetujuan di web.
 - **`--force`**: melewati guard, tetapi `forced: true` dicatat di server sebagai jejak audit.
 
 #### Kebijakan validation_commands

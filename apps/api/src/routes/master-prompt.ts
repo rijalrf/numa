@@ -6,6 +6,7 @@ import { requireUser, type AuthedRequest } from '../middleware/require-user.js';
 import { getPublicApiUrl, PREVIEW_PORT } from '../lib/config.js';
 import { resolveStackContract } from '../lib/ai/stack-contract.js';
 import { resolveArchitectureContract, renderArchitectureContract } from '../lib/ai/architecture-contract.js';
+import { renderUiShellContract, resolveUiShellContract } from '../lib/ai/ui-shell-contract.js';
 import { buildMasterPrompt, DEFAULT_EXECUTION_MODE, isExecutionMode } from '../lib/master-prompt.js';
 
 export const masterPromptRouter = Router();
@@ -29,7 +30,7 @@ masterPromptRouter.get('/api/projects/:id/master-prompt', requireUser, async (re
     projectId: project.id,
     idea: project.idea,
     hasPrd: Boolean(project.prd),
-    architectureMarkdown: renderArchitectureContract(resolveArchitectureContract(stackContract)),
+    architectureMarkdown: `${renderArchitectureContract(resolveArchitectureContract(stackContract))}\n\n${renderUiShellContract(resolveUiShellContract(stackContract))}`,
     apiUrl: getPublicApiUrl(),
     previewPort: PREVIEW_PORT,
     mode,

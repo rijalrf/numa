@@ -26,6 +26,8 @@ import {
   type ImpactResult,
 } from '../lib/ai/cycle.js';
 import { generateTasksFromRoadmap } from '../lib/ai/tasks.js';
+import { findPageApiMissing } from '../lib/ai/page-map.js';
+import { resolveUiCheck } from '../lib/ai/ui-shell-contract.js';
 import { resolveStackContract } from '../lib/ai/stack-contract.js';
 import { persistGeneratedTasks } from '../lib/task-persist.js';
 import {
@@ -250,6 +252,9 @@ registerJobHandler<CycleGeneratePayload>('cycle_generate', async ({ projectId, u
     prd: prdDoc,
     projectId,
     stack: stackContract,
+    pages: prdDoc?.spec?.pages,
+    design: prdDoc?.spec?.design,
+    pageEndpointsMissing: findPageApiMissing(prdDoc?.spec),
     cycle: {
       request: effectiveRequest,
       impact,
@@ -261,8 +266,18 @@ registerJobHandler<CycleGeneratePayload>('cycle_generate', async ({ projectId, u
 
   // Quality gate hanya menilai yang diubah siklus ini: requirement dan endpoint baru, bukan seluruh PRD.
   const basePrdForGate = prdDoc ?? { markdown: '', requirementIndex: [] };
+  // File dari task selesai dianggap sudah ada: task siklus yang membuatnya diubah menjadi modifikasi.
+  const doneForFiles = await prisma.task.findMany({ where: { projectId, status: 'DONE' }, select: { aiContext: true } });
+  const existingFiles = doneForFiles.flatMap((t) => {
+    const c = (t.aiContext ?? {}) as { files_to_create?: string[]; completion?: { guardReport?: { changedFiles?: string[] } | null } };
+    return [...(c.files_to_create ?? []), ...(c.completion?.guardReport?.changedFiles ?? [])];
+  });
   const gate = await runTaskQualityGate({
     generated,
+    stack: stackContract,
+    design: prdDoc?.spec?.design,
+    cycle: true,
+    existingFiles,
     prd: {
       ...basePrdForGate,
       requirementIndex: basePrdForGate.requirementIndex.filter((r) => newRequirementIds.has(r.id)),
@@ -321,7 +336,7 @@ registerJobHandler<CycleGeneratePayload>('cycle_generate', async ({ projectId, u
         orderBy: { order: 'desc' },
         select: { order: true },
       });
-      await persistGeneratedTasks(tx, projectId, validTasks, featureIdMap, cycleId, (last?.order ?? 0) + 1);
+      await persistGeneratedTasks(tx, projectId, validTasks, featureIdMap, cycleId, (last?.order ?? 0) + 1, { uiCheck: resolveUiCheck(stackContract) });
 
       if (deferredRequest) {
         const max = await tx.projectCycle.aggregate({ where: { projectId }, _max: { number: true } });

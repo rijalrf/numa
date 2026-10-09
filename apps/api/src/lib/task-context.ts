@@ -1,7 +1,9 @@
 // Penyusun konteks per task untuk `numa context`. Fungsi murni (tanpa database) agar mudah diuji.
 // Prinsip: agent hanya menerima konteks yang relevan dengan task-nya (requirement, endpoint, model data),
 // berikut kondisi repo yang nyata (file hasil task selesai) dan ringkasan kontrak arsitektur.
-import type { ProductSpec } from './ai/product-spec.js';
+import type { ProductSpec, SpecDesign, SpecPage } from './ai/product-spec.js';
+import { listPagePaths, PAGE_MAP_RULES, renderDesignDirection, renderPageMap } from './ai/page-map.js';
+import { summarizeUiShell, type UiShellContract } from './ai/ui-shell-contract.js';
 import type { ArchitectureContract } from './ai/architecture-contract.js';
 
 export type RequirementDetail = { id: string; text: string };
@@ -285,4 +287,92 @@ export function summarizeArchitecture(contract: ArchitectureContract): string[] 
     ...contract.forbidden.map((f) => `Larangan: ${f}`),
     ...contract.errorHandling.slice(0, 1).map((e) => `Error: ${e}`),
   ];
+}
+
+// === Langkah kerja standar dan konteks FRONTEND ===
+
+type StandardStepOpts = { foundation?: boolean };
+
+/**
+ * Langkah kerja standar per layer yang disuntik deterministik ke `numa context` (bukan ditulis AI), supaya agent
+ * selalu menerima urutan kerja dan panduan saat buntu yang sama. `implementation_steps` task tetap pendek dan khusus task.
+ */
+export function buildStandardSteps(layer: string, opts: StandardStepOpts = {}): string[] {
+  const common = ['Jalankan Perintah Verifikasi Mandiri di bawah sampai lulus, lalu `numa done` dengan `--summary` yang jujur.'];
+  switch (layer) {
+    case 'FRONTEND':
+      if (opts.foundation) {
+        return [
+          'Baca Arah Desain dan Peta Halaman pada konteks ini. Tulis rencana singkat (token warna, tipografi, konsep layout) sebelum menulis kode.',
+          'Bangun token desain dan font, pustaka komponen internal, layout publik dan layout aplikasi, guard rute, file navigasi (dari Peta Halaman), dan API client satu-satunya.',
+          'Jalankan aplikasi, ambil screenshot layout di lebar 390 px dan 1280 px (simpan di `.numa/screenshots/`) dan periksa: token terpakai, tidak ada gulir horizontal.',
+          ...common,
+        ];
+      }
+      return [
+        'Baca Peta Halaman dan Arah Desain pada konteks ini. Ambil path dan menu dari file navigasi; jangan menulisnya ulang.',
+        'Susun halaman dari layout, komponen `components/ui`, token desain, dan API client milik Fondasi UI. Jangan membuat versi sendiri.',
+        'Bila endpoint yang dibutuhkan tidak ada, jalankan `numa block --reason` (task FRONTEND dilarang membuat endpoint).',
+        'Jalankan aplikasi, ambil screenshot halaman di lebar 390 px dan 1280 px (simpan di `.numa/screenshots/`) dan periksa: komponen dan token terpakai, layout sesuai Peta Halaman, tidak ada gulir horizontal, state kosong dan galat wajar.',
+        ...common,
+      ];
+    case 'BACKEND':
+      return [
+        'Baca Ringkasan Kontrak Arsitektur dan Kontrak Model Data pada konteks ini; ikuti pemisahan lapisan.',
+        'Buat hanya file pada Batas File Task. File bersama milik task lain dimodifikasi, bukan dibuat ulang.',
+        'Validasi input, tangani error terstruktur, dan lindungi endpoint sesuai Kriteria Penerimaan (termasuk yang berawalan "Keamanan:").',
+        ...common,
+      ];
+    case 'DATABASE':
+      return [
+        'Baca Kontrak Model Data pada konteks ini dan ikuti nama entitas, kolom, dan relasi persis.',
+        'Buat skema dan migrasi hanya pada Batas File Task, lalu jalankan migrasi di lokal.',
+        ...common,
+      ];
+    case 'INTEGRATION':
+      return [
+        'Baca Alur Pengguna Terkait pada konteks ini; setiap skenario menjadi satu test end-to-end.',
+        'Verifikasi halaman memakai API client dari Fondasi UI dan memanggil endpoint sungguhan; perbaiki ketidakcocokan di sumbernya, jangan menambal.',
+        ...common,
+      ];
+    default:
+      return [
+        'Baca Ringkasan Kontrak Arsitektur dan Batas File Task pada konteks ini; kerjakan hanya file pada daftar itu.',
+        ...common,
+      ];
+  }
+}
+
+export type FrontendContextInput = {
+  contract: UiShellContract;
+  /** Seluruh peta halaman spec (untuk daftar path navigasi). */
+  pages: SpecPage[];
+  /** Halaman yang cocok dengan task ini. */
+  relevantPages: SpecPage[];
+  design?: SpecDesign;
+  foundation: boolean;
+};
+
+/** Baris markdown konteks task FRONTEND: pengingat skill, arah desain, halaman terkait, daftar path, dan kontrak UI shell. */
+export function buildFrontendContext(input: FrontendContextInput): string[] {
+  const lines: string[] = [
+    '#### Panduan Frontend',
+    '- Baca skill `numa-frontend` (`.agents/skills/numa-frontend/SKILL.md`) sebelum mengerjakan task FRONTEND ini.',
+  ];
+
+  if (input.design) {
+    lines.push('', '#### Arah Desain', ...renderDesignDirection(input.design).split('\n').map((l) => `- ${l}`));
+  } else {
+    lines.push('', '#### Arah Desain', '- Belum ada Arah Desain pada PRD project ini. Pakai token dan komponen dari Fondasi UI; jangan mengarang palet baru.');
+  }
+
+  if (input.relevantPages.length > 0) {
+    lines.push('', '#### Halaman Terkait Task Ini', renderPageMap(input.relevantPages));
+  }
+  if (input.pages.length > 0) {
+    lines.push('', '#### Peta Halaman (semua path, untuk navigasi)', ...listPagePaths(input.pages).map((l) => `- ${l}`), `- ${PAGE_MAP_RULES}`);
+  }
+
+  lines.push('', '#### Ringkasan Kontrak UI Shell', ...summarizeUiShell(input.contract).map((l) => `- ${l}`));
+  return lines;
 }

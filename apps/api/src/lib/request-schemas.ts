@@ -24,7 +24,7 @@ export const CompleteTaskBodySchema = z
 
 export const FailTaskBodySchema = z
   .object({
-    failure_type: z.enum(['FORBIDDEN_FILES', 'TEST_FAILURE', 'COMMAND_FAILURE', 'RUNTIME_ERROR']).optional(),
+    failure_type: z.enum(['FORBIDDEN_FILES', 'TEST_FAILURE', 'COMMAND_FAILURE', 'RUNTIME_ERROR', 'STYLE_VIOLATION']).optional(),
     command: z.string().max(1000).optional(),
     error: z.string().max(10_000).optional(),
     next_action: z.string().max(2000).optional(),

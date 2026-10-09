@@ -199,6 +199,13 @@ ATURAN STRUKTUR DOKUMEN PRD (WAJIB LENGKAP):
 10. ## 9. Skenario Edge Cases & Penanganan Kesalahan (nomor: EC-001, EC-002, dst. Skenario kegagalan dan ekspektasi penanganan)
 11. ## 10. Di Luar Lingkup (Out of Scope) (hal yang secara tegas DILARANG dibuat untuk versi MVP)
 12. ## 11. Metrik Keberhasilan (Success Metrics) (indikator performa dan adopsi terukur)
+13. ## 12. Arah Desain (UI/UX) (bahan desain bagi tim frontend, WAJIB disesuaikan dengan domain dan pengguna produk ini, bukan template generik). Tulis sebagai daftar berlabel berikut:
+    - **Nuansa**: 2-4 kata sifat yang mencerminkan domain dan kesan yang ingin dirasakan pengguna (contoh: klinis, tenang, tepercaya).
+    - **Palet**: warna primary, aksen (opsional), dan netral dalam nilai hex, beserta alasan pemilihannya terhadap domain.
+    - **Tipografi**: nama font judul dan font isi (mis. dari Google Fonts).
+    - **Kepadatan**: compact (tabel dan data banyak, back-office) atau comfortable (lega, publik).
+    - **Sudut**: none, small, medium, atau large.
+    - **Dihindari**: klise tampilan yang tidak cocok untuk domain ini.
 
 DILARANG KERAS:
 - DILARANG menggunakan format User Story ("Sebagai... saya ingin... supaya...").

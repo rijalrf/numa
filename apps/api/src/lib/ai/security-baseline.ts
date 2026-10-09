@@ -12,10 +12,12 @@ const CRITERIA = {
   validation: `${PREFIX} request body endpoint mutasi divalidasi dengan skema sebelum diproses; input tidak valid dibalas HTTP 400 berformat JSON terstruktur.`,
   relationIntegrity: `${PREFIX} endpoint DELETE menolak penghapusan record yang masih berelasi aktif dengan HTTP 409.`,
   auth: `${PREFIX} endpoint terproteksi memverifikasi autentikasi sebelum memproses dan hanya membaca atau mengubah data milik pengguna yang berhak (cegah IDOR).`,
+  publicGet: `${PREFIX} endpoint publik hanya mengembalikan field yang dibutuhkan tampilan publik; email, nomor telepon, password hash, dan token tidak boleh dikembalikan.`,
   rateLimit: `${PREFIX} endpoint login/registrasi dibatasi rate limiting terhadap percobaan berulang.`,
   frontend: `${PREFIX} token dan secret tidak ditulis di kode sumber maupun log; input pengguna dirender sebagai teks, bukan HTML mentah.`,
 } as const;
 
+const SYSTEM_PATH = /\/(health|ready|ping)\b/i;
 const PUBLIC_PATH = /\/(login|register|signin|signup|sign-in|sign-up|health|ready|ping|public)\b/i;
 const CREDENTIAL_PATH = /\/(login|register|signin|signup|sign-in|sign-up|auth)\b/i;
 const MUTATION = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -46,6 +48,7 @@ function baselineFor(task: TaskGen, authByEndpoint: Map<string, boolean>): strin
       if (contracts.some((c) => ['POST', 'PUT', 'PATCH'].includes(c.method))) out.push(CRITERIA.validation);
       if (contracts.some((c) => c.method === 'DELETE')) out.push(CRITERIA.relationIntegrity);
       if (contracts.some((c) => isProtected(c.method, c.path, authByEndpoint))) out.push(CRITERIA.auth);
+      if (contracts.some((c) => c.method === 'GET' && !SYSTEM_PATH.test(c.path) && !isProtected(c.method, c.path, authByEndpoint))) out.push(CRITERIA.publicGet);
       if (contracts.some((c) => c.method === 'POST' && CREDENTIAL_PATH.test(c.path))) out.push(CRITERIA.rateLimit);
       break;
     }

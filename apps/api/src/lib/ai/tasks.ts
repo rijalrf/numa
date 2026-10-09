@@ -4,6 +4,9 @@ import { z } from 'zod';
 import { generateJson } from './ai-service.js';
 import { PROMPT_VERSIONS } from './prompts.js';
 import type { RoadmapData } from './roadmap.js';
+import type { SpecDesign, SpecPage } from './product-spec.js';
+import { PAGE_MAP_RULES, renderDesignDirection, renderMissingPageEndpoints, renderPageMap, type MissingPageEndpoint } from './page-map.js';
+import { renderUiShellContract, resolveUiShellContract } from './ui-shell-contract.js';
 import { describeOtherPhases, mapWithConcurrency, mergePhaseTasks, phasePrefix, type PhaseResult } from './task-merge.js';
 import type { StackContract } from './stack-contract.js';
 import { resolveArchitectureContract, renderArchitectureContract } from './architecture-contract.js';
@@ -195,6 +198,12 @@ export type GenerateTasksArgs = {
   projectId: string;
   feedback?: string;
   stack?: StackContract;
+  /** Peta halaman dari spec PRD: kontrak bersama yang dikirim ke semua fase. */
+  pages?: SpecPage[];
+  /** Arah desain dari spec PRD: bahan Fondasi UI, dikirim ke semua fase. */
+  design?: SpecDesign;
+  /** Endpoint yang dibutuhkan halaman tapi tidak ada di spec; dikirim ke fase BACKEND. */
+  pageEndpointsMissing?: MissingPageEndpoint[];
   cycle?: {
     request: string;
     impact: unknown;
@@ -313,6 +322,20 @@ ${phaseScopeRules}${cycleSystemRules}`;
     ? fence('KONTRAK ARSITEKTUR WAJIB (MENANG ATAS KEBIASAAN UMUM)', renderArchitectureContract(resolveArchitectureContract(args.stack)))
     : '';
 
+  const uiShellText = args.stack
+    ? fence('KONTRAK UI SHELL DAN FILE BERSAMA (KONTRAK BERSAMA SEMUA FASE)', renderUiShellContract(resolveUiShellContract(args.stack)))
+    : '';
+  const pageMapText = args.pages?.length
+    ? fence('PETA HALAMAN DAN NAVIGASI (KONTRAK BERSAMA SEMUA FASE)', `${renderPageMap(args.pages)}\n\n${PAGE_MAP_RULES}`)
+    : '';
+  const designText = args.design
+    ? fence('ARAH DESAIN PRODUK (BAHAN FONDASI UI, KONTRAK BERSAMA SEMUA FASE)', renderDesignDirection(args.design))
+    : '';
+  const missingEndpointsText =
+    args.pageEndpointsMissing?.length && inLayer('BACKEND')
+      ? fence('ENDPOINT TAMBAHAN YANG DIBUTUHKAN HALAMAN (BUAT DI TASK BACKEND, TIDAK ADA DI SPEC)', renderMissingPageEndpoints(args.pageEndpointsMissing))
+      : '';
+
   const cycleText = args.cycle
     ? `${fence('PERMINTAAN PERUBAHAN CYCLE', args.cycle.request)}
 ${fence('HASIL ANALISIS DAMPAK CYCLE', args.cycle.impact)}
@@ -339,6 +362,8 @@ ${fence('RINGKASAN WORKSPACE REPO (numa sync)', args.cycle.repoSummary)}`
 - DILARANG menggunakan window.alert() atau alert() untuk menampilkan error/notifikasi. WAJIB gunakan AlertBanner atau Toast.
 - Setiap <label> WAJIB memiliki atribut htmlFor yang menunjuk ke id elemen input terkait. Setiap tombol ikon (tanpa teks visible) WAJIB punya aria-label.
 - Loading state WAJIB menggunakan skeleton loader (animated placeholder), BUKAN teks "Loading..." polos.
+- KRITERIA VISUAL: setiap task halaman WAJIB punya minimal satu acceptance criterion tampilan yang terukur, misalnya "Halaman memakai komponen Table dan Badge dari components/ui" atau "Tombol aksi memakai komponen Button varian primary". 'implementation_steps' boleh memuat catatan komposisi tampilan (komponen apa disusun menjadi apa).
+- Warna dan gaya berasal dari design token dan komponen internal. Dilarang memakai kelas warna palet bawaan Tailwind (mis. bg-sky-500, text-slate-900), nilai warna arbitrer (bg-[#0ea5e9]), atau hex mentah di halaman.
 
 `
     : '';
@@ -367,6 +392,10 @@ ${JSON.stringify(args.roadmap)}
 ${otherPhasesText}
 ${stackContractText}
 ${archContractText}
+${uiShellText}
+${pageMapText}
+${designText}
+${missingEndpointsText}
 ${cycleText}
 ${markdownPrdText}
 ${reqIndexText}

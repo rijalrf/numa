@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { generateJson } from './ai-service.js';
 import { SurveyQuestionItemSchema } from '../survey.js';
 import { readPrdContent, type PrdDoc } from './prd.js';
-import { SpecEntitySchema, SpecEndpointSchema, SpecJourneySchema, type ProductSpec } from './product-spec.js';
+import { SpecEntitySchema, SpecEndpointSchema, SpecJourneySchema, SpecPageSchema, type ProductSpec } from './product-spec.js';
+import { mergePages } from './page-map.js';
 import { PROMPT_VERSIONS } from './prompts.js';
 
 /** Jumlah maksimal putaran jawaban klarifikasi; setelah itu analisis dipaksa CLEAR. */
@@ -14,6 +15,7 @@ export const SpecDeltaSchema = z.object({
   entities: z.array(SpecEntitySchema).default([]),
   endpoints: z.array(SpecEndpointSchema).default([]),
   journeys: z.array(SpecJourneySchema).default([]),
+  pages: z.array(SpecPageSchema).default([]),
 });
 
 export type SpecDelta = z.infer<typeof SpecDeltaSchema>;
@@ -126,6 +128,7 @@ export function buildCyclePrdContext(prd: PrdDoc | null | undefined): unknown {
     entities: spec.entities.map((e) => ({ name: e.name, fields: e.fields.map((f) => f.name) })),
     endpoints: spec.endpoints.map((e) => `${e.method} ${e.path}`),
     journeys: spec.journeys.map((j) => j.name),
+    pages: spec.pages.map((p) => `${p.path} (${p.access === 'public' ? 'publik' : `login: ${p.roles.join(', ') || 'semua'}`})`),
   };
 }
 
@@ -207,7 +210,7 @@ ${clarityRule}
    - impactedTree: nama simpul fitur aplikasi yang tersentuh.
    - impactedFeatureIds: label fitur roadmap (F1, F2, dst, dari bagian FITUR ROADMAP) yang kodenya perlu diubah oleh perubahan ini. Kosongkan [] bila perubahan hanya menambah fitur baru yang tidak menyentuh fitur lama. Jangan mengarang label.
 5. Delta Spesifikasi (specDelta), hanya bila needsPrdChange true:
-   - Isi HANYA entitas, endpoint, dan journey yang BARU atau BERUBAH akibat perubahan ini, dengan bentuk { entities: [{ name, description?, fields: [{ name, type, required? }], relations: [] }], endpoints: [{ method, path, description, requestBody?, responseBody?, authRequired?, requirementIds: [] }], journeys: [{ name, steps: [], requirementIds: [], kind: 'main' | 'failure', branchFrom?: { journey, stepIndex } }] }.
+   - Isi HANYA entitas, endpoint, dan journey yang BARU atau BERUBAH akibat perubahan ini, dengan bentuk { entities: [{ name, description?, fields: [{ name, type, required? }], relations: [] }], endpoints: [{ method, path, description, requestBody?, responseBody?, authRequired?, requirementIds: [] }], journeys: [{ name, steps: [], requirementIds: [], kind: 'main' | 'failure', branchFrom?: { journey, stepIndex } }], pages: [{ path, title, access: 'public' | 'auth', roles: [], homeFor: [], purpose, endpoints: [{ method, path }], requirementIds: [] }] }. Halaman baru wajib mengikuti pola path halaman yang sudah ada di RINGKASAN PRD EKSISTING (bagian pages) dan memakai layout yang sesuai (public tanpa sidebar, auth dengan sidebar). Isi pages hanya untuk halaman yang benar-benar baru.
    - Entitas yang sudah ada dan hanya ditambah kolom: tulis nama entitas yang sama dengan kolom tambahannya saja. Endpoint yang berubah: tulis ulang lengkap dengan method dan path yang sama.
    - requirementIds boleh berisi penanda NEW-n atau ID requirement/edge case yang sudah ada di PRD.
    - Jangan menyalin isi spec lama. Bila tidak ada perubahan entitas, endpoint, atau journey, hilangkan specDelta.
@@ -306,6 +309,7 @@ export function remapSpecDeltaIds(delta: SpecDelta, idMap: Map<string, string>):
     entities: delta.entities,
     endpoints: delta.endpoints.map((e) => ({ ...e, requirementIds: remapIds(e.requirementIds, idMap) })),
     journeys: delta.journeys.map((j) => ({ ...j, requirementIds: remapIds(j.requirementIds, idMap) })),
+    pages: delta.pages.map((p) => ({ ...p, requirementIds: remapIds(p.requirementIds, idMap) })),
   };
 }
 
@@ -348,7 +352,7 @@ export function mergeSpecDelta(spec: ProductSpec, delta: SpecDelta): ProductSpec
   const mainNames = new Set(journeys.filter((j) => j.kind === 'main').map((j) => j.name.toLowerCase()));
   const validJourneys = journeys.filter((j) => j.kind !== 'failure' || (j.branchFrom && mainNames.has(j.branchFrom.journey.toLowerCase())));
 
-  return { ...spec, entities, endpoints, journeys: validJourneys };
+  return { ...spec, entities, endpoints, journeys: validJourneys, pages: mergePages(spec.pages, delta.pages) };
 }
 
 const oneLine = (text: string) => text.replace(/\s+/g, ' ').trim();
@@ -375,6 +379,14 @@ export function renderSpecDeltaMarkdown(delta: SpecDelta): string[] {
         .filter(Boolean)
         .join('; ');
       lines.push(`- \`${ep.method} ${ep.path}\`: ${oneLine(ep.description)}${body ? ` (${body})` : ''}${reqs}`);
+    }
+  }
+  if (delta.pages.length > 0) {
+    lines.push('', 'Halaman Tambahan:');
+    for (const p of delta.pages) {
+      const reqs = p.requirementIds.length > 0 ? ` [${p.requirementIds.join(', ')}]` : '';
+      const access = p.access === 'public' ? 'publik' : `login: ${p.roles.join(', ') || 'semua peran'}`;
+      lines.push(`- \`${p.path}\` ${p.title ? `"${p.title}" ` : ''}(${access})${p.purpose ? `: ${oneLine(p.purpose)}` : ''}${reqs}`);
     }
   }
   if (delta.journeys.length > 0) {

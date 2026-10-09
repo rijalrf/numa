@@ -54,3 +54,15 @@ test('kriteria tidak digandakan bila dijalankan dua kali, task tanpa tambahan ti
   assert.equal(twice.touched, 0);
   assert.equal(sec(twice.tasks[0]).length, 1);
 });
+
+test('BACKEND dengan GET publik mendapat kriteria tanpa data pribadi; GET terproteksi dan health tidak', () => {
+  const publicGet = task('BACKEND', { apiContracts: [{ method: 'GET', path: '/api/doctors' }] });
+  const endpoints = [{ method: 'GET', path: '/api/doctors', authRequired: false, requirementIds: [], description: '' }] as any;
+  assert.match(sec(applySecurityBaseline([publicGet], endpoints).tasks[0]).join('\n'), /endpoint publik hanya mengembalikan field/);
+
+  const protectedGet = task('BACKEND', { apiContracts: [{ method: 'GET', path: '/api/doctors' }] });
+  assert.doesNotMatch(sec(applySecurityBaseline([protectedGet]).tasks[0]).join('\n'), /endpoint publik/);
+
+  const health = task('BACKEND', { apiContracts: [{ method: 'GET', path: '/health' }] });
+  assert.doesNotMatch(sec(applySecurityBaseline([health]).tasks[0]).join('\n'), /endpoint publik/);
+});

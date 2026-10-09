@@ -10,6 +10,8 @@ import {
   mergePrdDelta,
   mergeSpecDelta,
   nextFunctionalRequirementNumber,
+  remapSpecDeltaIds,
+  renderSpecDeltaMarkdown,
   summarizeCompletedTasks,
   type ImpactResult,
 } from '../cycle.js';
@@ -39,8 +41,8 @@ const baseContent = {
 };
 
 test('versi prompt siklus dan task sudah dinaikkan', () => {
-  assert.equal(PROMPT_VERSIONS.cycle, 'cycle@2');
-  assert.equal(PROMPT_VERSIONS.tasks, 'tasks@5');
+  assert.equal(PROMPT_VERSIONS.cycle, 'cycle@3');
+  assert.equal(PROMPT_VERSIONS.tasks, 'tasks@6');
 });
 
 test('nextFunctionalRequirementNumber melanjutkan dari FR terbesar', () => {
@@ -215,4 +217,15 @@ test('buildCyclePrdContext memakai ringkasan spec, dan markdown hanya bila spec 
   const noSpec = buildCyclePrdContext({ markdown: 'x'.repeat(20000), requirementIndex: [] }) as { markdown: string };
   assert.equal(noSpec.markdown.length, 8000);
   assert.equal(buildCyclePrdContext(null), null);
+});
+
+test('mergeSpecDelta: halaman baru digabung ke peta halaman tanpa path ganda dan requirementIds ikut dipetakan', () => {
+  const specWithPages = ProductSpecSchema.parse({ pages: [{ path: '/login', access: 'public' }] });
+  const delta = SpecDeltaSchema.parse({
+    pages: [{ path: '/LOGIN/' }, { path: '/admin/reports', access: 'auth', roles: ['Admin'], requirementIds: ['NEW-1'] }],
+  });
+  const merged = mergeSpecDelta(specWithPages, delta);
+  assert.deepEqual(merged.pages.map((p) => p.path), ['/login', '/admin/reports']);
+  assert.deepEqual(remapSpecDeltaIds(delta, new Map([['NEW-1', 'FR-031']])).pages[1].requirementIds, ['FR-031']);
+  assert.match(renderSpecDeltaMarkdown(delta).join('\n'), /Halaman Tambahan:/);
 });

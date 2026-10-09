@@ -2,7 +2,7 @@
 
 Tanggal: 2026-10-09. Cakupan: `apps/api` (generator spec PRD, roadmap, task per fase, quality gate, konteks task, Master Prompt, Change Cycle), CLI (`packages/cli`: skill pack dan pemeriksaan gaya di `numa done`), dokumen.
 
-Status: **rencana lengkap, semua keputusan sudah dijawab (bagian 5), belum ada perubahan kode.**
+Status: **seluruh enam tahap sudah di kode (2026-10-09).** Semua keputusan sudah dijawab (bagian 5). Hasil verifikasi lokal ada di bagian 7; ringkasan perubahan di `docs/LAPORAN_PERUBAHAN.md` bagian 26.
 
 ## 1. Latar belakang
 
@@ -271,3 +271,25 @@ Semua deterministik, tanpa AI, dan hasilnya dicatat di laporan validasi.
 ## 6. Yang perlu diputuskan
 
 Tidak ada. Semua keputusan sudah dijawab (bagian 5).
+
+## 7. Hasil verifikasi lokal (2026-10-09)
+
+Dijalankan `scripts/test-e2e-wizard.ts` dengan `E2E_STOP_AFTER_TASKS=1` (AI nyata lewat gateway lokal), ide kasir warung kelontong, stack tersimpan React + Express + Tailwind (kontrak `react-spa`). Sesudahnya `numa context` task diambil lewat token agent sementara.
+
+| Pemeriksaan (bagian 4, Tahap 6 nomor 5) | Hasil |
+|---|---|
+| Spec memuat `pages`: login `public`, satu halaman awal per peran | Sebagian. `/login` `public` dan lima halaman terbentuk, tetapi hanya `/pos` yang punya `homeFor`; persona hanya satu (Pemilik Warung), jadi tidak ada peran yang tanpa halaman awal. |
+| Spec memuat `design` sesuai domain | Ya. Bagian "Arah Desain" ada di PRD (nuansa cepat, utilitarian, kontras; primary `#1E3A8A`; kepadatan padat; sudut small) dan tersalin ke `spec.design`. |
+| Fitur pertama fase FRONTEND adalah Fondasi UI dan task-nya membuat layout, guard, navigasi, API client | Ya. Task #10 "Fondasi UI, Shell Navigasi, Design Tokens, API Client & Halaman Login" membuat `providers.tsx`, `api-client.ts`, `navigation.ts`, `PublicLayout.tsx`, `AppLayout.tsx`, `RequireAuth.tsx`, `router.tsx`, `AppSidebar.tsx`, `components/ui`, dan halaman login. |
+| Tidak ada path yang dibuat lebih dari satu task | Ya (daftar kosong; `FILE_CREATE_DUPLICATE` tidak muncul). |
+| Tidak ada task FRONTEND yang membuat file endpoint | Ya. |
+| Semua task FRONTEND lain bergantung pada Fondasi UI dan memuat kriteria komponen | Ya. Task #11, #12, #13 `depends_on` #10 dan memuat kriteria berawalan "Desain:" serta definition of done screenshot. |
+| Task FRONTEND membawa `uiCheck`; BACKEND tidak | Ya (4 task FRONTEND; layer lain `null`). |
+| `numa context` FRONTEND memuat arah desain, halaman terkait, peta halaman, kontrak UI shell, langkah standar | Ya. |
+| `GET /api/agent/architecture-contract` memuat kontrak UI shell | Ya. |
+| Laporan validasi | `DESIGN_BASELINE_APPLIED` (4 task), `SEC_BASELINE_APPLIED`, dua `FILE_NAME_SIMILAR` (false positive: modal berbeda; aturan kata "modal" dan "dialog" dicabut sesudahnya). |
+| `numa done` menolak `text-slate-900` di task FRONTEND | Hanya lewat tes otomatis (`packages/cli/src/__tests__/ui-check.test.ts`, termasuk guard dengan repo git sementara). Belum dijalankan dengan CLI sungguhan terhadap server. |
+| Agent dijalankan sampai selesai pada satu project dan tampilan dicek di browser (desktop dan mobile) | **Belum dilakukan.** Butuh agent coding mengerjakan 18 task dan UI dilihat langsung. Temuan nomor 6 (tampilan generik) baru bisa dinilai dari langkah ini. |
+
+Biaya satu run (12 panggilan AI, 218,7 rb token): tasks@6 5 panggilan 107,2 rb, product-spec@4 38,1 rb (1 retry Zod, sekitar 19 rb per percobaan), prd@4 17,4 rb, audit keamanan 36,5 rb. Pada run nyata sebelumnya (`docs/LAPORAN_PERUBAHAN.md` bagian 7d: 14 panggilan, 140,6 rb token, product-spec@3 sekitar 13,9 rb per percobaan) totalnya lebih kecil. Kenaikan datang dari PRD yang lebih panjang (bagian Arah Desain), spec yang memuat `pages` dan `design`, dan kontrak bersama yang dikirim ke setiap fase. Run berbeda ide dan stack, jadi angka ini perkiraan, bukan perbandingan yang terkontrol.
+

@@ -10,8 +10,13 @@ import { resolveArchitectureContract, renderArchitectureContract } from '../lib/
 import { listAccessibleProjects } from '../lib/agent-auth.js';
 import { requireAgentSimple } from '../middleware/require-agent-simple.js';
 import { readPrdContent } from '../lib/ai/prd.js';
+import { isFoundationTask } from '../lib/ai/design-baseline.js';
+import { selectRelevantPages } from '../lib/ai/page-map.js';
+import { renderUiShellContract, resolveUiShellContract } from '../lib/ai/ui-shell-contract.js';
 import {
+  buildFrontendContext,
   buildRequirementContext,
+  buildStandardSteps,
   buildTaskHaystack,
   selectEndpoints,
   selectEntities,
@@ -364,6 +369,7 @@ agentRouter.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentR
     definition_of_done?: string[];
     out_of_scope?: string[];
     consumesApis?: ContextEndpoint[];
+    uiCheck?: { extensions: string[]; roots: string[]; exempt: string[] } | null;
   };
 
   const prdDoc = readPrdContent(task.project.prd?.content);
@@ -547,6 +553,27 @@ agentRouter.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentR
   const arch = resolveArchitectureContract(resolveStackContract(stacks));
   mdParts.push(`#### Ringkasan Kontrak Arsitektur`, ...summarizeArchitecture(arch).map((l) => `- ${l}`), ``);
 
+  // Konteks FRONTEND: arah desain, halaman terkait, dan kontrak UI shell. Langkah kerja standar berlaku untuk semua layer.
+  const isFoundation = isFoundationTask({ layer: task.layer as 'FRONTEND', title: task.title, featureId: '' });
+  if (task.layer === 'FRONTEND') {
+    mdParts.push(
+      ...buildFrontendContext({
+        contract: resolveUiShellContract(resolveStackContract(stacks)),
+        pages: prdDoc.spec?.pages ?? [],
+        relevantPages: selectRelevantPages(prdDoc.spec?.pages ?? [], ctx.requirement_ids ?? [], haystack),
+        design: prdDoc.spec?.design,
+        foundation: isFoundation,
+      }),
+      ``
+    );
+  }
+  mdParts.push(
+    `#### Langkah Kerja Standar (${task.layer}${isFoundation ? ', Fondasi UI' : ''})`,
+    ...buildStandardSteps(task.layer, { foundation: isFoundation }).map((s, i) => `${i + 1}. ${s}`),
+    `- Bila buntu: endpoint tidak ada -> \`numa block --reason\`; path atau file milik task lain salah -> laporkan di \`--summary\`, jangan ditambal. Prioritas aturan: kontrak bersama, lalu Kriteria Penerimaan, lalu skill.`,
+    ``
+  );
+
   // Failure Context jika task pernah gagal sebelumnya (Bab 38)
   const lastFailure = (ctx as any).lastFailure;
   if (lastFailure) {
@@ -568,9 +595,9 @@ agentRouter.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentR
 
   if (hasBoundedFiles) {
     mdParts.push(
-      `#### Panduan Struktur File (Rekomendasi Arsitektural)`,
-      `- Rekomendasi file dibuat: ${(ctx.files_to_create ?? []).join(', ') || '_tidak ada_'}`,
-      `- Rekomendasi file dimodifikasi: ${(ctx.files_to_modify ?? []).join(', ') || '_tidak ada_'}`,
+      `#### Batas File Task (hanya file ini yang boleh dibuat atau diubah)`,
+      `- File yang dibuat: ${(ctx.files_to_create ?? []).join(', ') || '_tidak ada_'}`,
+      `- File yang dimodifikasi: ${(ctx.files_to_modify ?? []).join(', ') || '_tidak ada_'}`,
       `- File READ-ONLY (referensi): ${(ctx.files_readonly ?? []).join(', ') || '_tidak ada_'}`,
       `- File yang dibatasi (forbidden): ${(ctx.forbidden ?? []).join(', ') || '_tidak ada_'}`,
       ``
@@ -631,6 +658,7 @@ agentRouter.get('/api/agent/tasks/:id/context', requireAgent, async (req: AgentR
       files_to_modify: ctx.files_to_modify ?? [],
       validation_commands: ctx.validation_commands ?? [],
       advisory_commands: ctx.advisory_commands ?? [],
+      uiCheck: task.layer === 'FRONTEND' ? ctx.uiCheck ?? null : null,
     },
   });
 });
@@ -657,7 +685,7 @@ agentRouter.get('/api/agent/architecture-contract', requireAgent, async (req: Ag
   });
   const stackContract = resolveStackContract(stacks);
   const archContract = resolveArchitectureContract(stackContract);
-  const markdown = renderArchitectureContract(archContract);
+  const markdown = `${renderArchitectureContract(archContract)}\n\n${renderUiShellContract(resolveUiShellContract(stackContract))}`;
 
   res.json({
     contractKey: archContract.key,

@@ -145,3 +145,45 @@ test('summarizeArchitecture ringkas: lapisan, larangan, dan format error', () =>
   assert.ok(lines.some((l) => l.startsWith('Larangan:')));
   assert.ok(lines.length < 8);
 });
+
+import { buildFrontendContext, buildStandardSteps } from '../task-context.js';
+import { UI_SHELL_CONTRACTS } from '../ai/ui-shell-contract.js';
+import { ProductSpecSchema } from '../ai/product-spec.js';
+
+test('buildStandardSteps: langkah per layer, Fondasi UI berbeda dari halaman, selalu berakhir di verifikasi dan numa done', () => {
+  const page = buildStandardSteps('FRONTEND').join('\n');
+  assert.match(page, /Peta Halaman/);
+  assert.match(page, /numa block/);
+  assert.match(page, /390 px dan 1280 px/);
+  const foundation = buildStandardSteps('FRONTEND', { foundation: true }).join('\n');
+  assert.match(foundation, /rencana singkat/);
+  assert.match(foundation, /API client satu-satunya/);
+  for (const layer of ['BOOTSTRAP', 'DATABASE', 'BACKEND', 'FRONTEND', 'INTEGRATION']) {
+    const steps = buildStandardSteps(layer);
+    assert.match(steps[steps.length - 1], /numa done/);
+  }
+});
+
+test('buildFrontendContext: pengingat skill, arah desain, halaman terkait, daftar path, dan ringkasan kontrak UI shell', () => {
+  const spec = ProductSpecSchema.parse({
+    pages: [{ path: '/login', title: 'Masuk', access: 'public' }, { path: '/patient/appointments', title: 'Janji', roles: ['Pasien'] }],
+    design: { tone: 'klinis, tenang' },
+  });
+  const text = buildFrontendContext({
+    contract: UI_SHELL_CONTRACTS.nextjs,
+    pages: spec.pages,
+    relevantPages: [spec.pages[1]],
+    design: spec.design,
+    foundation: false,
+  }).join('\n');
+  assert.match(text, /skill `numa-frontend`/);
+  assert.match(text, /Nuansa: klinis, tenang/);
+  assert.match(text, /Halaman Terkait Task Ini/);
+  assert.match(text, /\/patient\/appointments "Janji"/);
+  assert.match(text, /\/login \(publik\)/);
+  assert.match(text, /File bersama: src\/middleware\.ts/);
+
+  const noDesign = buildFrontendContext({ contract: UI_SHELL_CONTRACTS.generic, pages: [], relevantPages: [], foundation: false }).join('\n');
+  assert.match(noDesign, /Belum ada Arah Desain/);
+  assert.doesNotMatch(noDesign, /Peta Halaman \(semua path/);
+});
